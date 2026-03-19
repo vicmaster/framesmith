@@ -181,22 +181,22 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 ## Phases
 
 ### Phase 1 — MVP (v0.1)
-- [ ] Project scaffolding (TypeScript, ESM, npm package)
-- [ ] Scene graph data model + CRUD operations
-- [ ] HTML/CSS renderer (frame, text, rectangle, ellipse, image)
-- [ ] Puppeteer integration for screenshots
-- [ ] MCP server with `batch_design()` and `screenshot()` tools
-- [ ] Basic design tokens/variables
-- [ ] `read_nodes()` and `snapshot_layout()` tools
+- [x] Project scaffolding (TypeScript, ESM, npm package)
+- [x] Scene graph data model + CRUD operations
+- [x] HTML/CSS renderer (frame, text, rectangle, ellipse, image)
+- [x] Puppeteer integration for screenshots
+- [x] MCP server with `batch_design()` and `screenshot()` tools
+- [x] Basic design tokens/variables
+- [x] `read_nodes()` and `snapshot_layout()` tools
 - [ ] README with installation + usage examples
 
 ### Phase 2 — Components & Polish (v0.2)
 - [ ] Reusable components (define once, instance many times with overrides)
 - [ ] Icon support (Lucide icon set bundled)
-- [ ] Multiple canvases (parallel design sessions)
+- [x] Multiple canvases (parallel design sessions)
 - [ ] Export to PNG/PDF
 - [ ] Style guide presets (dark mode, light mode, material, etc.)
-- [ ] `canvas_list()` and `get_variables()` / `set_variables()` tools
+- [x] `canvas_list()` and `get_variables()` / `set_variables()` tools
 
 ### Phase 3 — Advanced (v0.3)
 - [ ] Gradients (linear, radial)
