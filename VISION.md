@@ -188,7 +188,7 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] MCP server with `batch_design()` and `screenshot()` tools
 - [x] Basic design tokens/variables
 - [x] `read_nodes()` and `snapshot_layout()` tools
-- [ ] README with installation + usage examples
+- [x] README with installation + usage examples
 
 ### Phase 2 — Components & Polish (v0.2)
 - [ ] Reusable components (define once, instance many times with overrides)

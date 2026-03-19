@@ -127,7 +127,62 @@ Read and write design tokens (colors, spacing, radius, typography). Use `$tokenN
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm" }`
 
-## Example Flow
+## Usage Example
+
+Here's a complete session building a login card:
+
+**1. Create a canvas and set design tokens**
+
+```
+canvas_create({ name: "Login" })
+→ { canvasId: "abc123" }
+
+set_variables({
+  canvasId: "abc123",
+  variables: {
+    colors: { bg: "#0a0a0a", surface: "#1a1a2e", accent: "#e94560", text: "#ffffff" },
+    spacing: { sm: 8, md: 16, lg: 24, xl: 32 },
+    radius: { md: 8, lg: 16 }
+  }
+})
+```
+
+**2. Build the layout with `batch_design`**
+
+```
+batch_design({
+  canvasId: "abc123",
+  operations: `
+    page=I("document", { type: "frame", width: 1440, height: 900, fill: "$bg", layout: "vertical", alignItems: "center", justifyContent: "center" })
+    card=I(page, { type: "frame", width: 400, fill: "$surface", cornerRadius: "$lg", padding: [32, 32, 32, 32], layout: "vertical", gap: 24 })
+    I(card, { type: "text", content: "Sign In", fontSize: 28, fontWeight: 700, color: "$text" })
+    I(card, { type: "frame", width: "100%", height: 44, fill: "#ffffff10", cornerRadius: "$md", padding: [0, 16, 0, 16], layout: "horizontal", alignItems: "center" })
+    I(card, { type: "frame", width: "100%", height: 44, fill: "#ffffff10", cornerRadius: "$md", padding: [0, 16, 0, 16], layout: "horizontal", alignItems: "center" })
+    btn=I(card, { type: "frame", width: "100%", height: 44, fill: "$accent", cornerRadius: "$md", layout: "horizontal", alignItems: "center", justifyContent: "center" })
+    I(btn, { type: "text", content: "Continue", fontSize: 16, fontWeight: 600, color: "$text" })
+  `
+})
+```
+
+**3. Take a screenshot to see the result**
+
+```
+screenshot({ canvasId: "abc123" })
+→ returns base64 PNG image
+```
+
+**4. Iterate — update the button color and verify**
+
+```
+batch_design({
+  canvasId: "abc123",
+  operations: `U("btn-id", { fill: "#3b82f6" })`
+})
+
+screenshot({ canvasId: "abc123" })
+```
+
+## Workflow
 
 1. `canvas_create` → get canvas ID
 2. `set_variables` → define design tokens
