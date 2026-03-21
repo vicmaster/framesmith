@@ -1,5 +1,5 @@
-import type { SceneNode } from './types.js';
-import { insertNode, updateNode, deleteNode, copyNode, moveNode, replaceNode } from './scene-graph.js';
+import type { Canvas, SceneNode } from './types.js';
+import { insertNode, updateNode, deleteNode, copyNode, moveNode, replaceNode, findNode } from './scene-graph.js';
 
 interface OperationResult {
   ok: boolean;
@@ -7,7 +7,7 @@ interface OperationResult {
   error?: string;
 }
 
-export function parseAndExecute(root: SceneNode, operationsStr: string): OperationResult[] {
+export function parseAndExecute(root: SceneNode, operationsStr: string, canvas?: Canvas): OperationResult[] {
   const lines = operationsStr.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
   const bindings = new Map<string, string>();
   bindings.set('document', root.id);
@@ -16,7 +16,7 @@ export function parseAndExecute(root: SceneNode, operationsStr: string): Operati
 
   for (const line of lines) {
     try {
-      const result = executeLine(root, line, bindings);
+      const result = executeLine(root, line, bindings, canvas);
       results.push(result);
     } catch (err) {
       results.push({ ok: false, error: (err as Error).message });
@@ -81,7 +81,12 @@ function parseJsonArg(str: string): Record<string, unknown> {
         const normalized = jsonStr.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
         // Handle single quotes
         const withDoubleQuotes = normalized.replace(/'/g, '"');
-        return JSON.parse(withDoubleQuotes);
+        // Handle bare-word values (not number, boolean, null, string, object, array)
+        const withQuotedValues = withDoubleQuotes.replace(/:\s*([a-zA-Z_]\w*)(\s*[,}])/g, (match, val, after) => {
+          if (['true', 'false', 'null'].includes(val)) return match;
+          return `: "${val}"${after}`;
+        });
+        return JSON.parse(withQuotedValues);
       }
     }
   }
@@ -121,7 +126,7 @@ function splitArgs(argsStr: string): string[] {
   return result;
 }
 
-function executeLine(root: SceneNode, line: string, bindings: Map<string, string>): OperationResult {
+function executeLine(root: SceneNode, line: string, bindings: Map<string, string>, canvas?: Canvas): OperationResult {
   // Check for binding: varName=OP(...)
   let bindingName: string | undefined;
   const bindingMatch = line.match(/^(\w+)\s*=\s*([A-Z])\s*\(/);
@@ -143,7 +148,15 @@ function executeLine(root: SceneNode, line: string, bindings: Map<string, string
       const parentId = resolveId(args[0], bindings);
       const props = args.length > 1 ? parseJsonArg(args.slice(1).join(',')) : {};
       if (!props.type) props.type = 'frame';
+      // Resolve componentId binding for instances
+      if (props.type === 'instance' && props.componentId && typeof props.componentId === 'string') {
+        props.componentId = bindings.get(props.componentId as string) ?? props.componentId;
+      }
       const node = insertNode(root, parentId, props as Partial<SceneNode> & { type: SceneNode['type'] });
+      // Register component in canvas registry
+      if (node.type === 'component' && canvas) {
+        canvas.components[node.id] = node;
+      }
       if (bindingName) bindings.set(bindingName, node.id);
       return { ok: true, nodeId: node.id };
     }

@@ -1,7 +1,8 @@
-import type { SceneNode } from './types.js';
+import type { Canvas, SceneNode } from './types.js';
+import { getIconSvg } from './icons.js';
 
-export function renderToHtml(root: SceneNode, width = 1440, height = 900): string {
-  const body = renderNode(root);
+export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
+  const body = renderNode(root, canvas);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -18,7 +19,13 @@ ${body}
 </html>`;
 }
 
-function renderNode(node: SceneNode): string {
+function renderNode(node: SceneNode, canvas?: Canvas): string {
+  // Resolve instances: clone the component tree and apply overrides
+  if (node.type === 'instance' && node.componentId && canvas) {
+    const resolved = resolveInstance(node, canvas);
+    if (resolved) return renderNode(resolved, canvas);
+  }
+
   const styles = buildStyles(node);
   const styleAttr = styles ? ` style="${styles}"` : '';
   const dataAttr = ` data-node-id="${node.id}"`;
@@ -32,18 +39,59 @@ function renderNode(node: SceneNode): string {
     return `<div${dataAttr}${styleAttr}><img src="${escapeHtml(node.src ?? '')}" style="${imgStyles}" /></div>`;
   }
 
+  if (node.type === 'icon') {
+    const svg = getIconSvg(node.icon ?? '', node.iconSize ?? 24, node.iconColor);
+    const iconHtml = svg ?? `<!-- unknown icon: ${escapeHtml(node.icon ?? '')} -->`;
+    return `<div${dataAttr}${styleAttr}>${iconHtml}</div>`;
+  }
+
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
-    return `<div${dataAttr} style="${ellipseStyles}">${renderChildren(node)}</div>`;
+    return `<div${dataAttr} style="${ellipseStyles}">${renderChildren(node, canvas)}</div>`;
   }
 
-  return `<div${dataAttr}${styleAttr}>${renderChildren(node)}</div>`;
+  return `<div${dataAttr}${styleAttr}>${renderChildren(node, canvas)}</div>`;
 }
 
-function renderChildren(node: SceneNode): string {
+function resolveInstance(instance: SceneNode, canvas: Canvas): SceneNode | null {
+  const component = canvas.components[instance.componentId!];
+  if (!component) return null;
+
+  // Deep clone the component tree
+  const clone = structuredClone(component);
+  // Give the clone the instance's ID so it's targetable
+  clone.id = instance.id;
+
+  // Apply instance-level style overrides to the root
+  const { type: _, id: _id, componentId: _cid, overrides: _ov, children: _ch, ...rootOverrides } = instance;
+  Object.assign(clone, rootOverrides);
+
+  // Apply named child overrides
+  if (instance.overrides) {
+    applyOverrides(clone, instance.overrides);
+  }
+
+  return clone;
+}
+
+function applyOverrides(node: SceneNode, overrides: Record<string, Partial<SceneNode>>): void {
+  // Match overrides by node name
+  if (node.name && overrides[node.name]) {
+    const { type: _, id: _id, children: _ch, ...props } = overrides[node.name];
+    Object.assign(node, props);
+  }
+
+  if (node.children) {
+    for (const child of node.children) {
+      applyOverrides(child, overrides);
+    }
+  }
+}
+
+function renderChildren(node: SceneNode, canvas?: Canvas): string {
   if (!node.children?.length) return '';
-  return node.children.map(renderNode).join('\n');
+  return node.children.map((child) => renderNode(child, canvas)).join('\n');
 }
 
 function buildStyles(node: SceneNode): string {
@@ -58,7 +106,9 @@ function buildStyles(node: SceneNode): string {
     s.push('display: flex', 'flex-direction: row');
   } else if (node.layout === 'vertical') {
     s.push('display: flex', 'flex-direction: column');
-  } else if (node.type === 'document' || node.type === 'frame') {
+  } else if (node.type === 'icon') {
+    s.push('display: inline-flex', 'align-items: center', 'justify-content: center');
+  } else if (node.type === 'document' || node.type === 'frame' || node.type === 'component') {
     // Default to flex column for containers without explicit layout
     if (node.children?.length) {
       s.push('display: flex', 'flex-direction: column');

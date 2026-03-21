@@ -18,6 +18,7 @@ export function createCanvas(name?: string): Canvas {
       fill: '#FFFFFF',
     },
     variables: {},
+    components: {},
     createdAt: new Date().toISOString(),
   };
   store.set(id, canvas);
@@ -72,7 +73,7 @@ export function insertNode(root: SceneNode, parentId: string, data: Partial<Scen
     ...data,
     id: nanoid(10),
   };
-  if (['frame', 'document'].includes(node.type) && !node.children) {
+  if (['frame', 'document', 'component'].includes(node.type) && !node.children) {
     node.children = [];
   }
   parent.children.push(node);
@@ -144,7 +145,7 @@ export function replaceNode(root: SceneNode, nodeId: string, newData: Partial<Sc
     id: nanoid(10),
     type: newData.type ?? result.node.type,
   };
-  if (['frame', 'document'].includes(newNode.type) && !newNode.children) {
+  if (['frame', 'document', 'component'].includes(newNode.type) && !newNode.children) {
     newNode.children = [];
   }
   result.parent.children![result.index] = newNode;

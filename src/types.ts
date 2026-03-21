@@ -1,4 +1,4 @@
-export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'document';
+export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document';
 
 export interface SceneNode {
   id: string;
@@ -45,6 +45,15 @@ export interface SceneNode {
   // Image
   src?: string;
   objectFit?: 'cover' | 'contain' | 'fill' | 'none';
+
+  // Icon
+  icon?: string;
+  iconSize?: number;
+  iconColor?: string;
+
+  // Component / Instance
+  componentId?: string;
+  overrides?: Record<string, Partial<SceneNode>>;
 }
 
 export interface DesignVariables {
@@ -59,5 +68,6 @@ export interface Canvas {
   name: string;
   root: SceneNode;
   variables: DesignVariables;
+  components: Record<string, SceneNode>;
   createdAt: string;
 }

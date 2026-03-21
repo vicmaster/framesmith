@@ -7,7 +7,8 @@ import { createCanvas, getCanvas, listCanvases, findNode } from './scene-graph.j
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
-import { takeScreenshot, computeLayout, shutdown } from './screenshot.js';
+import { takeScreenshot, computeLayout, exportToFile, shutdown } from './screenshot.js';
+import { listPresets, getPreset } from './presets.js';
 import type { SceneNode } from './types.js';
 
 const server = new McpServer({
@@ -60,8 +61,8 @@ server.tool(
 Use "document" to reference the root node. Bind results to reuse IDs: header=I("document", {...})
 Concatenate bindings: U(header+"/childId", {...})
 
-Node types: frame, text, rectangle, ellipse, image
-Properties: fill, stroke, strokeWidth, cornerRadius, width, height, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, overflow, wrap, position, x, y`,
+Node types: frame, text, rectangle, ellipse, image, icon, component, instance
+Properties: fill, stroke, strokeWidth, cornerRadius, width, height, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, overflow, wrap, position, x, y, icon, iconSize, iconColor, componentId, overrides`,
   {
     canvasId: z.string().describe('Canvas ID'),
     operations: z.string().describe('Operations to execute, one per line'),
@@ -70,7 +71,7 @@ Properties: fill, stroke, strokeWidth, cornerRadius, width, height, layout ("hor
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const results = parseAndExecute(canvas.root, operations);
+    const results = parseAndExecute(canvas.root, operations, canvas);
     return {
       content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
     };
@@ -95,7 +96,7 @@ server.tool(
     const resolved = resolveVariables(canvas.root, canvas.variables);
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
-    const html = renderToHtml(resolved, w, h);
+    const html = renderToHtml(resolved, w, h, canvas);
     const base64 = await takeScreenshot(html, { width: w, height: h, scale, nodeId });
 
     return {
@@ -154,7 +155,7 @@ server.tool(
     const resolved = resolveVariables(canvas.root, canvas.variables);
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-    const html = renderToHtml(resolved, w, h);
+    const html = renderToHtml(resolved, w, h, canvas);
     const layout = await computeLayout(html, nodeId, maxDepth);
 
     return { content: [{ type: 'text', text: JSON.stringify(layout, null, 2) }] };
@@ -196,6 +197,74 @@ server.tool(
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = setVariables(canvas, variables);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// --- export ---
+server.tool(
+  'export',
+  'Export a canvas or specific nodes to files (PNG, JPEG, WebP, PDF). Writes files to the specified output directory.',
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    format: z.enum(['png', 'jpeg', 'webp', 'pdf']).describe('Export format'),
+    outputPath: z.string().describe('Directory path to save exported files'),
+    nodeIds: z.array(z.string()).optional().describe('Specific node IDs to export (exports each separately). Defaults to full canvas.'),
+    width: z.number().optional().describe('Viewport width in pixels (default 1440)'),
+    height: z.number().optional().describe('Viewport height in pixels (default 900)'),
+    scale: z.number().optional().describe('Device scale factor (default 2 for retina)'),
+  },
+  async ({ canvasId, format, outputPath, nodeIds, width, height, scale }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    const resolved = resolveVariables(canvas.root, canvas.variables);
+    const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
+    const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
+    const html = renderToHtml(resolved, w, h, canvas);
+
+    const exportedFiles: string[] = [];
+
+    if (nodeIds?.length) {
+      for (const nodeId of nodeIds) {
+        const filePath = await exportToFile(html, { width: w, height: h, scale, format, outputPath, nodeId, fileName: nodeId });
+        exportedFiles.push(filePath);
+      }
+    } else {
+      const filePath = await exportToFile(html, { width: w, height: h, scale, format, outputPath, fileName: canvas.name.replace(/\s+/g, '-').toLowerCase() });
+      exportedFiles.push(filePath);
+    }
+
+    return { content: [{ type: 'text', text: JSON.stringify({ exported: exportedFiles }, null, 2) }] };
+  }
+);
+
+// --- list_presets ---
+server.tool(
+  'list_presets',
+  'List available style guide presets (e.g. dark, light, material, minimal).',
+  {},
+  async () => {
+    return { content: [{ type: 'text', text: JSON.stringify(listPresets(), null, 2) }] };
+  }
+);
+
+// --- apply_preset ---
+server.tool(
+  'apply_preset',
+  'Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables.',
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    preset: z.string().describe('Preset name (dark, light, material, minimal)'),
+  },
+  async ({ canvasId, preset }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    const p = getPreset(preset);
+    if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see available presets.` }], isError: true };
+
+    const result = setVariables(canvas, p.variables);
+    return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result }, null, 2) }] };
   }
 );
 

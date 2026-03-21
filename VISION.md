@@ -18,7 +18,7 @@ An MCP server that gives any AI assistant a visual canvas. Send JSON operations,
 ```
 ┌─────────────────────────────────────────────┐
 │  MCP Client (Claude Code, Cursor, etc.)     │
-│  Sends: batch_design(), screenshot(), etc.  │
+│  Sends: batch_design(), screenshot(), etc.   │
 └────────────────┬────────────────────────────┘
                  │ MCP (stdio or http)
 ┌────────────────▼────────────────────────────┐
@@ -32,7 +32,7 @@ An MCP server that gives any AI assistant a visual canvas. Send JSON operations,
 │         │                                    │
 │  ┌──────▼───────────────────────────────┐   │
 │  │ HTML/CSS Renderer                     │   │
-│  │ Tailwind CSS + Flexbox               │   │
+│  │ Inline CSS + Flexbox                 │   │
 │  │ Renders scene graph → HTML document   │   │
 │  └──────┬───────────────────────────────┘   │
 │         │                                    │
@@ -70,7 +70,7 @@ A JSON tree of nodes. Each node has a type, properties, and optional children.
 ```
 
 ### Key design decision: HTML/CSS as the rendering engine
-Instead of building a custom canvas renderer, we render the scene graph to HTML elements styled with Tailwind CSS. This gives us:
+Instead of building a custom canvas renderer, we render the scene graph to HTML elements with inline CSS. This gives us:
 - Flexbox layout for free (no custom layout engine)
 - Text rendering and wrapping for free
 - CSS gradients, shadows, borders, opacity — all free
@@ -129,7 +129,13 @@ Read design tokens/variables defined in the canvas.
 Set design tokens (colors, spacing, typography scales).
 
 ### `export(canvasId, nodeIds?, format, outputPath)`
-Export nodes to files (PNG, JPEG, WebP, PDF, SVG).
+Export nodes to files (PNG, JPEG, WebP, PDF).
+
+### `list_presets()`
+List available style guide presets with descriptions.
+
+### `apply_preset(canvasId, preset)`
+Apply a style guide preset (dark, light, material, minimal) to a canvas.
 
 ---
 
@@ -171,7 +177,8 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 | Runtime | Node.js 20+ |
 | MCP SDK | `@anthropic-ai/sdk` or `@modelcontextprotocol/sdk` |
 | Transport | stdio (default) + HTTP/SSE (optional) |
-| Rendering | Puppeteer + Tailwind CSS v4 |
+| Rendering | Puppeteer + inline CSS (Flexbox) |
+| Icons | Lucide (1,900+ icons via lucide-static) |
 | Schema | TypeScript types + JSON Schema for validation |
 | Package | `@canvas-mcp/server` on npm |
 | License | MIT |
@@ -191,11 +198,11 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] README with installation + usage examples
 
 ### Phase 2 — Components & Polish (v0.2)
-- [ ] Reusable components (define once, instance many times with overrides)
-- [ ] Icon support (Lucide icon set bundled)
+- [x] Reusable components (define once, instance many times with overrides)
+- [x] Icon support (Lucide icon set bundled)
 - [x] Multiple canvases (parallel design sessions)
-- [ ] Export to PNG/PDF
-- [ ] Style guide presets (dark mode, light mode, material, etc.)
+- [x] Export to PNG/PDF
+- [x] Style guide presets (dark mode, light mode, material, etc.)
 - [x] `canvas_list()` and `get_variables()` / `set_variables()` tools
 
 ### Phase 3 — Advanced (v0.3)
@@ -247,6 +254,10 @@ claude mcp add canvas-mcp npx @canvas-mcp/server
 | Self-hosted | Yes | No |
 | Custom rendering | HTML/CSS (extensible) | Custom engine |
 | File format | Open JSON | Encrypted .pen |
+| Icons | 1,900+ Lucide icons | Built-in icon set |
+| Components | Define & instance with overrides | Yes |
+| Export | PNG, JPEG, WebP, PDF | PNG, PDF |
+| Style presets | dark, light, material, minimal | Unknown |
 | Vector paths | Limited (CSS shapes) | Full SVG paths |
 | Interactive editor | Not in v1 (AI-only) | Yes |
 | Price | Free | Paid |

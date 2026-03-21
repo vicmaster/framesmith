@@ -77,9 +77,9 @@ M("nodeId", "newParentId", 0)
 R("nodeId", { type: "text", content: "Replaced" })
 ```
 
-**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`
+**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `component`, `instance`
 
-**Properties:** `fill`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `overflow`, `wrap`, `position`, `x`, `y`
+**Properties:** `fill`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
 
 ### `screenshot`
 
@@ -126,6 +126,58 @@ Read and write design tokens (colors, spacing, radius, typography). Use `$tokenN
 ```
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm" }`
+
+### `export`
+
+Export a canvas or specific nodes to files on disk.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `format` | string | `"png"`, `"jpeg"`, `"webp"`, or `"pdf"` |
+| `outputPath` | string | Directory to save files |
+| `nodeIds` | string[]? | Specific nodes to export (default: full canvas) |
+| `width` | number? | Viewport width (default 1440) |
+| `height` | number? | Viewport height (default 900) |
+| `scale` | number? | Device scale (default 2) |
+
+### `list_presets`
+
+List available style guide presets. No params. Returns preset names and descriptions.
+
+### `apply_preset`
+
+Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `preset` | string | Preset name: `"dark"`, `"light"`, `"material"`, `"minimal"` |
+
+## Icons
+
+1,900+ icons from [Lucide](https://lucide.dev) are available via the `icon` node type:
+
+```
+I("parent", { type: "icon", icon: "search", iconSize: 24, iconColor: "#888" })
+I("parent", { type: "icon", icon: "heart", iconSize: 32, iconColor: "#ef4444" })
+```
+
+Icons render as inline SVGs with configurable size and color.
+
+## Components
+
+Define reusable components and create instances with overrides:
+
+```
+# Define a component (a frame subtree that gets registered)
+card=I("document", { type: "component", name: "Card", width: 300, fill: "#1a1a1a", cornerRadius: 12, layout: "vertical", padding: 16, gap: 8 })
+I(card, { type: "text", name: "title", content: "Default Title", fontSize: 20, color: "#fff" })
+I(card, { type: "text", name: "subtitle", content: "Default subtitle", fontSize: 14, color: "#888" })
+
+# Create instances with overrides (matched by child name)
+I("document", { type: "instance", componentId: card, overrides: { title: { content: "My Card" }, subtitle: { content: "Custom text" } } })
+```
 
 ## Usage Example
 
@@ -185,10 +237,11 @@ screenshot({ canvasId: "abc123" })
 ## Workflow
 
 1. `canvas_create` → get canvas ID
-2. `set_variables` → define design tokens
-3. `batch_design` → build the UI with frames, text, shapes
+2. `apply_preset` or `set_variables` → set up design tokens
+3. `batch_design` → build the UI with frames, text, icons, components
 4. `screenshot` → see the result as PNG
 5. Iterate: `batch_design` to refine → `screenshot` to verify
+6. `export` → save final designs to PNG/PDF files
 
 ## License
 

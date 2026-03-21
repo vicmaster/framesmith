@@ -1,3 +1,5 @@
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer';
 
 let browser: Browser | null = null;
@@ -105,6 +107,58 @@ export async function computeLayout(html: string, rootNodeId?: string, maxDepth 
     );
 
     return layouts as LayoutRect[];
+  } finally {
+    await page.close();
+  }
+}
+
+export interface ExportOptions {
+  width?: number;
+  height?: number;
+  scale?: number;
+  format: 'png' | 'jpeg' | 'webp' | 'pdf';
+  outputPath: string;
+  nodeId?: string;
+  fileName?: string;
+}
+
+export async function exportToFile(html: string, options: ExportOptions): Promise<string> {
+  const { width = 1440, height = 900, scale = 2, format, outputPath, nodeId, fileName } = options;
+  const b = await getBrowser();
+  const page = await b.newPage();
+
+  try {
+    await page.setViewport({ width, height, deviceScaleFactor: scale });
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+
+    const dir = resolve(outputPath);
+    await mkdir(dir, { recursive: true });
+
+    const baseName = fileName ?? (nodeId ?? 'canvas');
+    const filePath = join(dir, `${baseName}.${format}`);
+
+    if (format === 'pdf') {
+      const pdfBuffer = await page.pdf({
+        width: `${width}px`,
+        height: `${height}px`,
+        printBackground: true,
+      });
+      await writeFile(filePath, pdfBuffer);
+    } else {
+      let screenshotBuffer: Uint8Array;
+
+      if (nodeId) {
+        const element = await page.$(`[data-node-id="${nodeId}"]`);
+        if (!element) throw new Error(`Node "${nodeId}" not found in rendered HTML`);
+        screenshotBuffer = await element.screenshot({ type: format });
+      } else {
+        screenshotBuffer = await page.screenshot({ type: format, fullPage: false });
+      }
+
+      await writeFile(filePath, screenshotBuffer);
+    }
+
+    return filePath;
   } finally {
     await page.close();
   }
