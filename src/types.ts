@@ -23,12 +23,23 @@ export interface SceneNode {
 
   // Visual
   fill?: string;
+  gradient?: {
+    type: 'linear' | 'radial';
+    angle?: number;
+    stops: Array<{ color: string; position?: number }>;
+  };
   stroke?: string;
   strokeWidth?: number;
   cornerRadius?: number | [number, number, number, number];
   opacity?: number;
   overflow?: 'visible' | 'hidden' | 'auto';
   shadow?: string;
+  shadows?: Array<{
+    x: number; y: number; blur: number; spread?: number;
+    color: string; inset?: boolean;
+  }>;
+  blur?: number;
+  backdropBlur?: number;
 
   // Text
   content?: string;

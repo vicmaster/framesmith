@@ -137,6 +137,12 @@ List available style guide presets with descriptions.
 ### `apply_preset(canvasId, preset)`
 Apply a style guide preset (dark, light, material, minimal) to a canvas.
 
+### `screenshot_responsive(canvasId, breakpoints?, scale?)`
+Render a canvas at multiple viewport sizes (mobile, tablet, desktop). Returns one screenshot per breakpoint.
+
+### `canvas_diff(canvasId1, canvasId2, width?, height?, scale?)`
+Compare two canvases visually. Returns a diff image highlighting changed regions in red, plus a change percentage.
+
 ---
 
 ## Design Tokens / Variables
@@ -206,14 +212,14 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] `canvas_list()` and `get_variables()` / `set_variables()` tools
 
 ### Phase 3 — Advanced (v0.3)
-- [ ] Gradients (linear, radial)
-- [ ] Shadows and blur effects
-- [ ] Image generation integration (placeholder images via AI)
-- [ ] Responsive breakpoints (render same design at different widths)
-- [ ] Diff mode (visual diff between two canvases)
-- [ ] HTTP transport for remote access
+- [x] Gradients (linear, radial)
+- [x] Shadows and blur effects
+- [x] Responsive breakpoints (render same design at different widths)
+- [x] Diff mode (visual diff between two canvases)
 
 ### Phase 4 — Ecosystem (v1.0)
+- [ ] Image generation integration (placeholder images via AI)
+- [ ] HTTP transport for remote access
 - [ ] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] VS Code extension (preview pane)
 - [ ] Import from Figma (partial)

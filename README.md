@@ -79,7 +79,7 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `component`, `instance`
 
-**Properties:** `fill`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
 
 ### `screenshot`
 
@@ -153,6 +153,59 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID |
 | `preset` | string | Preset name: `"dark"`, `"light"`, `"material"`, `"minimal"` |
+
+### `screenshot_responsive`
+
+Render a canvas at multiple viewport sizes. Defaults to mobile (390x844), tablet (768x1024), and desktop (1440x900).
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `breakpoints` | array? | `[{label, width, height}]` — custom breakpoints |
+| `scale` | number? | Device scale (default 2) |
+
+### `canvas_diff`
+
+Compare two canvases visually. Returns a diff image with changed regions highlighted in red.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId1` | string | First canvas ID |
+| `canvasId2` | string | Second canvas ID |
+| `width` | number? | Viewport width (default 1440) |
+| `height` | number? | Viewport height (default 900) |
+| `scale` | number? | Device scale (default 1) |
+
+## Gradients
+
+Nodes support linear and radial gradients via the `gradient` property:
+
+```
+# Linear gradient (angle in degrees)
+I("parent", { type: "frame", width: 400, height: 200, gradient: { type: "linear", angle: 135, stops: [{color: "#667eea", position: 0}, {color: "#764ba2", position: 100}] } })
+
+# Radial gradient
+I("parent", { type: "frame", width: 200, height: 200, gradient: { type: "radial", stops: [{color: "#fff", position: 0}, {color: "#000", position: 100}] } })
+```
+
+When `gradient` is set, it takes precedence over `fill`. Both can coexist (`fill` as fallback).
+
+## Shadows & Blur
+
+Structured shadows, blur filters, and backdrop blur:
+
+```
+# Structured shadow (supports multiple shadows)
+I("parent", { type: "frame", fill: "#fff", shadows: [{x: 0, y: 4, blur: 12, spread: 0, color: "rgba(0,0,0,0.15)"}] })
+
+# Blur filter
+I("parent", { type: "frame", fill: "#3b82f6", blur: 4 })
+
+# Backdrop blur (frosted glass effect)
+I("parent", { type: "frame", fill: "rgba(255,255,255,0.5)", backdropBlur: 8 })
+```
+
+The legacy `shadow` string property still works for simple cases.
 
 ## Icons
 
@@ -238,10 +291,12 @@ screenshot({ canvasId: "abc123" })
 
 1. `canvas_create` → get canvas ID
 2. `apply_preset` or `set_variables` → set up design tokens
-3. `batch_design` → build the UI with frames, text, icons, components
+3. `batch_design` → build the UI with frames, text, icons, components, gradients
 4. `screenshot` → see the result as PNG
-5. Iterate: `batch_design` to refine → `screenshot` to verify
-6. `export` → save final designs to PNG/PDF files
+5. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
+6. Iterate: `batch_design` to refine → `screenshot` to verify
+7. `canvas_diff` → compare before/after changes visually
+8. `export` → save final designs to PNG/PDF files
 
 ## License
 

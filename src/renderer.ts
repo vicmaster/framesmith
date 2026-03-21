@@ -139,7 +139,17 @@ function buildStyles(node: SceneNode): string {
   if (node.y !== undefined) s.push(`top: ${node.y}px`);
 
   // Visual
-  if (node.fill) s.push(`background-color: ${node.fill}`);
+  if (node.gradient) {
+    const g = node.gradient;
+    const stops = g.stops.map((st) => st.position !== undefined ? `${st.color} ${st.position}%` : st.color).join(', ');
+    if (g.type === 'linear') {
+      s.push(`background: linear-gradient(${g.angle ?? 180}deg, ${stops})`);
+    } else {
+      s.push(`background: radial-gradient(${stops})`);
+    }
+  } else if (node.fill) {
+    s.push(`background-color: ${node.fill}`);
+  }
   if (node.stroke) s.push(`border: ${node.strokeWidth ?? 1}px solid ${node.stroke}`);
   if (node.cornerRadius !== undefined) {
     if (typeof node.cornerRadius === 'number') {
@@ -150,7 +160,16 @@ function buildStyles(node: SceneNode): string {
   }
   if (node.opacity !== undefined) s.push(`opacity: ${node.opacity}`);
   if (node.overflow) s.push(`overflow: ${node.overflow}`);
-  if (node.shadow) s.push(`box-shadow: ${node.shadow}`);
+  if (node.shadows?.length) {
+    const shadowStr = node.shadows.map((sh) =>
+      `${sh.inset ? 'inset ' : ''}${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread ?? 0}px ${sh.color}`
+    ).join(', ');
+    s.push(`box-shadow: ${shadowStr}`);
+  } else if (node.shadow) {
+    s.push(`box-shadow: ${node.shadow}`);
+  }
+  if (node.blur) s.push(`filter: blur(${node.blur}px)`);
+  if (node.backdropBlur) s.push(`backdrop-filter: blur(${node.backdropBlur}px)`);
 
   // Text
   if (node.fontSize) s.push(`font-size: ${node.fontSize}px`);
