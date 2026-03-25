@@ -20,9 +20,15 @@ export function createCanvas(name?: string): Canvas {
     variables: {},
     components: {},
     createdAt: new Date().toISOString(),
+    lastModified: new Date().toISOString(),
   };
   store.set(id, canvas);
   return canvas;
+}
+
+export function touchCanvas(canvasId: string): void {
+  const canvas = store.get(canvasId);
+  if (canvas) canvas.lastModified = new Date().toISOString();
 }
 
 export function getCanvas(id: string): Canvas | undefined {

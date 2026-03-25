@@ -287,14 +287,24 @@ batch_design({
 screenshot({ canvasId: "abc123" })
 ```
 
+## Web Viewer
+
+The server includes a built-in web viewer that starts automatically on port **3001** (or the next available port if 3001 is in use — supports multiple sessions).
+
+- **Gallery** (`/`) — Browse all canvases as clickable cards with thumbnails
+- **Canvas detail** (`/canvas/:id`) — Full rendered design in an iframe with responsive viewport buttons (Mobile / Tablet / Desktop), fit-to-screen toggle, and JSON inspector
+- **Live auto-refresh** — The viewer polls for changes every 2 seconds. As you `batch_design` via your MCP client, the browser updates automatically
+- **Raw HTML** (`/canvas/:id/html`) — The rendered HTML for embedding or inspection
+- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — Programmatic access
+
 ## Workflow
 
 1. `canvas_create` → get canvas ID
-2. `apply_preset` or `set_variables` → set up design tokens
-3. `batch_design` → build the UI with frames, text, icons, components, gradients
-4. `screenshot` → see the result as PNG
-5. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
-6. Iterate: `batch_design` to refine → `screenshot` to verify
+2. Open the viewer URL (returned by `canvas_create`) in your browser for live preview
+3. `apply_preset` or `set_variables` → set up design tokens
+4. `batch_design` → build the UI with frames, text, icons, components, gradients
+5. Watch the viewer auto-refresh as you design
+6. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
 7. `canvas_diff` → compare before/after changes visually
 8. `export` → save final designs to PNG/PDF files
 

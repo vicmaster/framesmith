@@ -3,12 +3,13 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas } from './scene-graph.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset } from './presets.js';
+import { startViewer, getViewerUrl } from './viewer.js';
 import type { SceneNode } from './types.js';
 
 const server = new McpServer({
@@ -19,15 +20,22 @@ const server = new McpServer({
 // --- canvas_create ---
 server.tool(
   'canvas_create',
-  'Create a new design canvas. Returns the canvas ID and root node ID.',
+  'Create a new design canvas. Returns the canvas ID, root node ID, and viewer URL. Always share the viewer URL with the user so they can see the design live in their browser.',
   { name: z.string().optional().describe('Name for the canvas') },
   async ({ name }) => {
     const canvas = createCanvas(name);
+    const viewerUrl = getViewerUrl();
     return {
       content: [
         {
           type: 'text',
-          text: JSON.stringify({ canvasId: canvas.id, rootId: canvas.root.id, name: canvas.name }, null, 2),
+          text: JSON.stringify({
+            canvasId: canvas.id,
+            rootId: canvas.root.id,
+            name: canvas.name,
+            viewerUrl: viewerUrl ? `${viewerUrl}/canvas/${canvas.id}` : null,
+            galleryUrl: viewerUrl,
+          }, null, 2),
         },
       ],
     };
@@ -72,8 +80,13 @@ Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, la
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const results = parseAndExecute(canvas.root, operations, canvas);
+    touchCanvas(canvasId);
+    const viewerUrl = getViewerUrl();
     return {
-      content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
+      content: [
+        { type: 'text', text: JSON.stringify(results, null, 2) },
+        ...(viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
+      ],
     };
   }
 );
@@ -196,6 +209,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = setVariables(canvas, variables);
+    touchCanvas(canvasId);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   }
 );
@@ -354,7 +368,34 @@ server.tool(
     if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see available presets.` }], isError: true };
 
     const result = setVariables(canvas, p.variables);
+    touchCanvas(canvasId);
     return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result }, null, 2) }] };
+  }
+);
+
+// --- viewer_url ---
+server.tool(
+  'viewer_url',
+  'Get the URL of the web-based canvas viewer. The viewer runs automatically and shows a gallery of all canvases with live auto-refresh. Share this URL with the user so they can open it in their browser.',
+  {},
+  async () => {
+    const url = getViewerUrl();
+    if (!url) return { content: [{ type: 'text', text: 'Viewer is not running' }], isError: true };
+
+    const canvases = listCanvases();
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          url,
+          gallery: url,
+          canvases: canvases.map((c) => ({
+            name: c.name,
+            viewer: `${url}/canvas/${c.id}`,
+          })),
+        }, null, 2),
+      }],
+    };
   }
 );
 
@@ -376,6 +417,13 @@ function trimDepth(node: SceneNode, maxDepth: number, currentDepth = 0): SceneNo
 
 // --- Start ---
 async function main() {
+  const viewerPort = parseInt(process.env.CANVAS_VIEWER_PORT ?? '0', 10);
+  try {
+    await startViewer(viewerPort);
+  } catch (err) {
+    process.stderr.write(`Warning: Could not start viewer: ${(err as Error).message}\n`);
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 

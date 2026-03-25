@@ -81,4 +81,5 @@ export interface Canvas {
   variables: DesignVariables;
   components: Record<string, SceneNode>;
   createdAt: string;
+  lastModified: string;
 }

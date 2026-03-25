@@ -218,9 +218,9 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] Diff mode (visual diff between two canvases)
 
 ### Phase 4 — Ecosystem (v1.0)
+- [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
-- [ ] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] VS Code extension (preview pane)
 - [ ] Import from Figma (partial)
 - [ ] Community style guide marketplace
