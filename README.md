@@ -154,6 +154,18 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 | `canvasId` | string | Canvas ID |
 | `preset` | string | Preset name: `"dark"`, `"light"`, `"material"`, `"minimal"` |
 
+### `import_design_md`
+
+Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a design system preset. Parses the Google Stitch format and extracts colors, typography, spacing, and border radius. After importing, use `apply_preset` to apply it to any canvas.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `content` | string? | Raw DESIGN.md content (provide this OR `filePath`) |
+| `filePath` | string? | Absolute path to a DESIGN.md file |
+| `name` | string? | Override the preset name |
+
+Compatible with the 55+ design systems in [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) (Stripe, Notion, Figma, Vercel, Linear, etc.).
+
 ### `screenshot_responsive`
 
 Render a canvas at multiple viewport sizes. Defaults to mobile (390x844), tablet (768x1024), and desktop (1440x900).

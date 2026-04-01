@@ -148,3 +148,7 @@ export function listPresets(): { name: string; description: string }[] {
 export function getPreset(name: string): Preset | undefined {
   return presetMap.get(name);
 }
+
+export function registerPreset(preset: Preset): void {
+  presetMap.set(preset.name, preset);
+}

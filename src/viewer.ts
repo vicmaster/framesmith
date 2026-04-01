@@ -62,14 +62,16 @@ export async function startViewer(port: number): Promise<number> {
         return;
       }
 
-      // Canvas raw HTML (for iframe)
+      // Canvas raw HTML (for iframe) — supports ?w=WIDTH&h=HEIGHT overrides
       const htmlMatch = path.match(/^\/canvas\/([^/]+)\/html$/);
       if (htmlMatch) {
         const canvas = getCanvas(htmlMatch[1]);
         if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
         const resolved = resolveVariables(canvas.root, canvas.variables);
-        const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
-        const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+        const defaultW = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+        const defaultH = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+        const w = url.searchParams.has('w') ? parseInt(url.searchParams.get('w')!, 10) : defaultW;
+        const h = url.searchParams.has('h') ? parseInt(url.searchParams.get('h')!, 10) : defaultH;
         const html = renderToHtml(resolved, w, h, canvas);
         res.setHeader('Content-Type', 'text/html');
         res.end(html);
@@ -237,8 +239,8 @@ function renderDetailPage(canvas: Canvas, port: number): string {
   .toolbar .btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
   .status { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
   .status.stale { background: #555; }
-  .viewport { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; background: #0a0a0a; }
-  .viewport iframe { border: none; background: #fff; transition: width 0.3s, height 0.3s; }
+  .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: auto; background: #0a0a0a; padding: 24px 0; }
+  .viewport iframe { border: none; background: #fff; transition: width 0.3s, height 0.3s; transform-origin: top center; }
   .viewport.fit iframe { width: 100% !important; height: 100% !important; }
   .json-panel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 480px; background: #111; border-left: 1px solid #222; overflow: auto; z-index: 10; }
   .json-panel.open { display: block; }
@@ -286,13 +288,26 @@ function renderDetailPage(canvas: Canvas, port: number): string {
       }
     }, 2000);
 
+    const canvasW = ${w};
+    const canvasH = ${h};
+
     function setViewport(w, h) {
       const frame = document.getElementById('frame');
       const vp = document.getElementById('viewport');
       vp.classList.remove('fit');
       document.getElementById('btn-fit').classList.remove('active');
+
+      // Reload iframe at the new viewport size so content reflows
       frame.width = w;
       frame.height = h;
+      frame.style.transform = '';
+      frame.style.maxWidth = '';
+      frame.style.maxHeight = '';
+      frame.style.width = '';
+      frame.style.height = '';
+      frame.style.overflow = '';
+      frame.src = '/canvas/' + canvasId + '/html?w=' + w + '&h=' + h + '&t=' + Date.now();
+
       // Update active button
       document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
       if (w === 390) { document.getElementById('bp-mobile').classList.add('active'); currentBp = 'mobile'; }

@@ -9,8 +9,9 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { width: ${width}px; height: ${height}px; overflow: hidden; }
-  img { display: block; }
+  body { width: ${width}px; min-height: ${height}px; overflow-x: hidden; }
+  img { display: block; max-width: 100%; }
+  p { overflow-wrap: break-word; word-wrap: break-word; }
 </style>
 </head>
 <body>
@@ -98,7 +99,11 @@ function buildStyles(node: SceneNode): string {
   const s: string[] = [];
 
   // Dimensions
-  if (node.width !== undefined) s.push(`width: ${cssLength(node.width)}`);
+  if (node.width !== undefined) {
+    s.push(`width: ${cssLength(node.width)}`);
+    // Allow elements to shrink to fit smaller viewports
+    if (typeof node.width === 'number') s.push('max-width: 100%');
+  }
   if (node.height !== undefined) s.push(`height: ${cssLength(node.height)}`);
 
   // Layout

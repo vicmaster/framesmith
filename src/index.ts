@@ -8,8 +8,10 @@ import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
-import { listPresets, getPreset } from './presets.js';
+import { listPresets, getPreset, registerPreset } from './presets.js';
+import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl } from './viewer.js';
+import { evaluateCanvas } from './evaluate.js';
 import type { SceneNode } from './types.js';
 
 const server = new McpServer({
@@ -370,6 +372,75 @@ server.tool(
     const result = setVariables(canvas, p.variables);
     touchCanvas(canvasId);
     return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result }, null, 2) }] };
+  }
+);
+
+// --- import_design_md ---
+server.tool(
+  'import_design_md',
+  `Import a DESIGN.md file as a design system preset. Parses the Google Stitch / awesome-design-md format and extracts colors, typography, spacing, and border radius into a reusable preset. After importing, use apply_preset to apply it to any canvas. Accepts either a file path or raw DESIGN.md content.`,
+  {
+    content: z.string().optional().describe('Raw DESIGN.md content. Provide this OR filePath.'),
+    filePath: z.string().optional().describe('Absolute path to a DESIGN.md file. Provide this OR content.'),
+    name: z.string().optional().describe('Override the preset name (default: extracted from DESIGN.md header)'),
+  },
+  async ({ content, filePath, name }) => {
+    let markdown: string;
+
+    if (content) {
+      markdown = content;
+    } else if (filePath) {
+      try {
+        const { readFile } = await import('node:fs/promises');
+        markdown = await readFile(filePath, 'utf-8');
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Error: Could not read file "${filePath}": ${(err as Error).message}` }], isError: true };
+      }
+    } else {
+      return { content: [{ type: 'text', text: 'Error: Provide either "content" or "filePath"' }], isError: true };
+    }
+
+    const preset = parseDesignMd(markdown, name);
+    registerPreset(preset);
+
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          imported: preset.name,
+          description: preset.description,
+          tokens: {
+            colors: Object.keys(preset.variables.colors || {}),
+            typography: Object.keys(preset.variables.typography || {}),
+            spacing: Object.keys(preset.variables.spacing || {}),
+            radius: Object.keys(preset.variables.radius || {}),
+          },
+          usage: `Use apply_preset with preset="${preset.name}" to apply this design system to a canvas.`,
+        }, null, 2),
+      }],
+    };
+  }
+);
+
+// --- canvas_evaluate ---
+server.tool(
+  'canvas_evaluate',
+  `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores (spacing, color, typography, structure, consistency), and actionable issues referencing specific node IDs. Use 'fast' mode for instant JSON-only analysis, or 'detailed' for Puppeteer-based layout checks. Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds.`,
+  {
+    canvasId: z.string().describe('Canvas ID to evaluate'),
+    mode: z.enum(['fast', 'detailed']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = includes Puppeteer layout checks'),
+    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency']))
+      .optional()
+      .describe('Specific categories to evaluate (default: all)'),
+  },
+  async ({ canvasId, mode, categories }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    const result = await evaluateCanvas(canvas, { mode, categories });
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+    };
   }
 );
 

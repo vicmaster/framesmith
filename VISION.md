@@ -217,7 +217,22 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] Responsive breakpoints (render same design at different widths)
 - [x] Diff mode (visual diff between two canvases)
 
-### Phase 4 — Ecosystem (v1.0)
+### Phase 4 — Design Systems & Viewer (v0.4)
+- [x] DESIGN.md import (`import_design_md` tool) — parse Google Stitch / awesome-design-md format into presets
+- [x] Dynamic preset registration — imported design systems become `apply_preset`-able
+- [x] Viewer: content no longer cut off by toolbar header
+- [x] Viewer: responsive breakpoints reload HTML at target width (content reflows)
+- [x] Renderer: `max-width: 100%` on fixed-width elements for viewport adaptation
+- [x] Renderer: `overflow-x: hidden` + `min-height` instead of `overflow: hidden` + fixed height
+
+#### Pending improvements
+- [ ] Responsive padding scaling — use `min(Xpx, Y%)` or `clamp()` so large paddings (e.g. 160px) shrink on mobile viewports
+- [ ] Responsive font scaling — scale down headline fonts on smaller breakpoints
+- [ ] Viewer navbar adaptation — collapse nav items into a hamburger or wrap on mobile
+- [ ] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
+- [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
+
+### Phase 5 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
