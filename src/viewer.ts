@@ -5,10 +5,20 @@ import { renderToHtml } from './renderer.js';
 import type { Canvas } from './types.js';
 
 let runningPort: number | null = null;
+let externalViewerUrl: string | null = null;
 const BASE_PORT = 3001;
 const MAX_ATTEMPTS = 20;
 
+/**
+ * Set an external viewer URL (used when a standalone viewer is already running).
+ * When set, getViewerUrl() returns this instead of the built-in server's URL.
+ */
+export function setExternalViewerUrl(url: string): void {
+  externalViewerUrl = url;
+}
+
 export function getViewerUrl(): string | null {
+  if (externalViewerUrl) return externalViewerUrl;
   return runningPort ? `http://localhost:${runningPort}` : null;
 }
 

@@ -309,16 +309,45 @@ The server includes a built-in web viewer that starts automatically on port **30
 - **Raw HTML** (`/canvas/:id/html`) — The rendered HTML for embedding or inspection
 - **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — Programmatic access
 
+### Standalone Viewer (recommended)
+
+By default, the viewer runs inside the MCP server process — when the Claude session ends, the viewer stops and URLs become unreachable. To keep the viewer alive across sessions, run it as a standalone process:
+
+```bash
+# In a separate terminal tab (stays alive independently)
+cd /path/to/canvas-mcp
+npm run viewer
+
+# Or on a specific port
+npm run viewer -- 3004
+```
+
+The standalone viewer:
+
+- **Persists across sessions** — URLs keep working after Claude finishes
+- **Shared across projects** — Multiple Claude sessions (from different projects) all use the same viewer
+- **Auto-detects new canvases** — Watches `~/.canvas-mcp/canvases/` for changes and picks them up automatically
+- **Auto-detected by MCP** — When the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
+
+All canvases are persisted to `~/.canvas-mcp/canvases/` as JSON files, so they survive process restarts.
+
+You can also set `CANVAS_VIEWER_URL` in your MCP server environment to explicitly point to a viewer instance:
+
+```bash
+claude mcp add canvas-mcp -e CANVAS_VIEWER_URL=http://localhost:3004 -- node /path/to/canvas-mcp/dist/index.js
+```
+
 ## Workflow
 
-1. `canvas_create` → get canvas ID
-2. Open the viewer URL (returned by `canvas_create`) in your browser for live preview
-3. `apply_preset` or `set_variables` → set up design tokens
-4. `batch_design` → build the UI with frames, text, icons, components, gradients
-5. Watch the viewer auto-refresh as you design
-6. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
-7. `canvas_diff` → compare before/after changes visually
-8. `export` → save final designs to PNG/PDF files
+1. Start the standalone viewer in a terminal tab: `npm run viewer`
+2. `canvas_create` → get canvas ID
+3. Open the viewer URL in your browser for live preview
+4. `apply_preset` or `set_variables` → set up design tokens
+5. `batch_design` → build the UI with frames, text, icons, components, gradients
+6. Watch the viewer auto-refresh as you design
+7. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
+8. `canvas_diff` → compare before/after changes visually
+9. `export` → save final designs to PNG/PDF files
 
 ## License
 

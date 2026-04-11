@@ -1,7 +1,57 @@
 import { nanoid } from 'nanoid';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 import type { Canvas, SceneNode } from './types.js';
 
 const store = new Map<string, Canvas>();
+
+// --- Disk persistence ---
+const CANVAS_DIR = join(homedir(), '.canvas-mcp', 'canvases');
+
+function ensureDir(): void {
+  mkdirSync(CANVAS_DIR, { recursive: true });
+}
+
+function persistCanvas(canvas: Canvas): void {
+  try {
+    ensureDir();
+    writeFileSync(join(CANVAS_DIR, `${canvas.id}.json`), JSON.stringify(canvas, null, 2));
+  } catch (err) {
+    process.stderr.write(`Warning: Could not persist canvas ${canvas.id}: ${(err as Error).message}\n`);
+  }
+}
+
+function removePersistedCanvas(id: string): void {
+  try {
+    const filePath = join(CANVAS_DIR, `${id}.json`);
+    if (existsSync(filePath)) unlinkSync(filePath);
+  } catch {}
+}
+
+/** Load all persisted canvases from disk into the in-memory store. */
+export function loadPersistedCanvases(): number {
+  try {
+    ensureDir();
+    const files = readdirSync(CANVAS_DIR).filter(f => f.endsWith('.json'));
+    let loaded = 0;
+    for (const file of files) {
+      try {
+        const data = JSON.parse(readFileSync(join(CANVAS_DIR, file), 'utf-8')) as Canvas;
+        if (data.id && data.root) {
+          store.set(data.id, data);
+          loaded++;
+        }
+      } catch {}
+    }
+    if (loaded > 0) {
+      process.stderr.write(`Loaded ${loaded} persisted canvas(es) from ${CANVAS_DIR}\n`);
+    }
+    return loaded;
+  } catch {
+    return 0;
+  }
+}
 
 export function createCanvas(name?: string): Canvas {
   const id = nanoid(10);
@@ -23,12 +73,16 @@ export function createCanvas(name?: string): Canvas {
     lastModified: new Date().toISOString(),
   };
   store.set(id, canvas);
+  persistCanvas(canvas);
   return canvas;
 }
 
 export function touchCanvas(canvasId: string): void {
   const canvas = store.get(canvasId);
-  if (canvas) canvas.lastModified = new Date().toISOString();
+  if (canvas) {
+    canvas.lastModified = new Date().toISOString();
+    persistCanvas(canvas);
+  }
 }
 
 export function getCanvas(id: string): Canvas | undefined {
@@ -44,6 +98,7 @@ export function listCanvases(): { id: string; name: string; createdAt: string }[
 }
 
 export function deleteCanvas(id: string): boolean {
+  removePersistedCanvas(id);
   return store.delete(id);
 }
 

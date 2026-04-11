@@ -3,14 +3,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases } from './scene-graph.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { parseDesignMd } from './design-md-parser.js';
-import { startViewer, getViewerUrl } from './viewer.js';
+import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import type { SceneNode } from './types.js';
 
@@ -487,12 +487,47 @@ function trimDepth(node: SceneNode, maxDepth: number, currentDepth = 0): SceneNo
 }
 
 // --- Start ---
-async function main() {
-  const viewerPort = parseInt(process.env.CANVAS_VIEWER_PORT ?? '0', 10);
+/** Check if a standalone viewer is already running on the given port. */
+async function probeViewer(port: number): Promise<boolean> {
   try {
-    await startViewer(viewerPort);
-  } catch (err) {
-    process.stderr.write(`Warning: Could not start viewer: ${(err as Error).message}\n`);
+    const res = await fetch(`http://localhost:${port}/api/canvases`, { signal: AbortSignal.timeout(1000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function main() {
+  // Load any canvases persisted from previous sessions
+  loadPersistedCanvases();
+
+  // If CANVAS_VIEWER_URL is set, use that external viewer (skip starting our own)
+  const externalUrl = process.env.CANVAS_VIEWER_URL;
+  if (externalUrl) {
+    setExternalViewerUrl(externalUrl.replace(/\/$/, ''));
+    process.stderr.write(`Using external viewer at ${externalUrl}\n`);
+  } else {
+    // Check common ports for a standalone viewer already running
+    const viewerPort = parseInt(process.env.CANVAS_VIEWER_PORT ?? '0', 10);
+    const portsToProbe = viewerPort > 0 ? [viewerPort] : Array.from({ length: 20 }, (_, i) => 3001 + i);
+
+    let foundExisting = false;
+    for (const p of portsToProbe) {
+      if (await probeViewer(p)) {
+        setExternalViewerUrl(`http://localhost:${p}`);
+        process.stderr.write(`Found standalone viewer at http://localhost:${p}, using it\n`);
+        foundExisting = true;
+        break;
+      }
+    }
+
+    if (!foundExisting) {
+      try {
+        await startViewer(viewerPort);
+      } catch (err) {
+        process.stderr.write(`Warning: Could not start viewer: ${(err as Error).message}\n`);
+      }
+    }
   }
 
   const transport = new StdioServerTransport();

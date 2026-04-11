@@ -4,13 +4,15 @@
   "description": "MCP server that gives any AI assistant a visual design canvas",
   "type": "module",
   "bin": {
-    "canvas-mcp": "./dist/index.js"
+    "canvas-mcp": "./dist/index.js",
+    "canvas-viewer": "./dist/viewer-standalone.js"
   },
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "viewer": "tsx src/viewer-standalone.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
