@@ -188,6 +188,57 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 | `height` | number? | Viewport height (default 900) |
 | `scale` | number? | Device scale (default 1) |
 
+### `canvas_evaluate`
+
+Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, and per-node actionable issues. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID to evaluate |
+| `mode` | `"fast"` \| `"detailed"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based layout checks (pixel-level sibling overlap). Default `"fast"`. |
+| `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`. Defaults to all. |
+
+**Categories and what they check**
+
+| Category | Weight | Checks |
+|----------|--------|--------|
+| `spacing` | 20 | Off-scale padding/gap values, too many unique spacing values |
+| `color` | 25 | WCAG AA contrast ratios for text against nearest background |
+| `typography` | 20 | Type-scale ratios (1.15–1.75), font-family count, weight variation |
+| `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse |
+| `consistency` | 20 | Frames missing `layout`, inconsistent sibling padding, sibling overlap (detailed mode) |
+
+**Return shape**
+
+```json
+{
+  "overallScore": 87,
+  "categories": [{ "name": "spacing", "score": 90, "issueCount": 1, "weight": 20 }],
+  "issues": [
+    {
+      "category": "color",
+      "severity": "error",
+      "nodeId": "abc123",
+      "message": "Text \"Sign In\" has contrast ratio 2.8:1 against #1a1a2e. WCAG AA requires 4.5:1.",
+      "suggestion": "Increase contrast by darkening/lightening the text or background."
+    }
+  ],
+  "summary": "Overall quality: Good (87/100). Strongest: spacing (90/100). Weakest: color (75/100)...",
+  "stats": { "totalNodes": 14, "textNodes": 5, "frameNodes": 8, "maxDepth": 4, "tokenUsagePercent": 61, "componentReusePercent": 0 },
+  "mode": "fast"
+}
+```
+
+**Example generator-evaluator loop**
+
+```
+batch_design({ canvasId, operations: "..." })
+const r = canvas_evaluate({ canvasId, mode: "fast" })
+// r.issues[].nodeId points to exactly what to fix
+batch_design({ canvasId, operations: `U("${r.issues[0].nodeId}", { color: "#ffffff" })` })
+canvas_evaluate({ canvasId })  // re-score
+```
+
 ## Gradients
 
 Nodes support linear and radial gradients via the `gradient` property:

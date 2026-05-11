@@ -232,7 +232,16 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [ ] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
 - [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
 
-### Phase 5 — Ecosystem (v1.0)
+### Phase 5 — Evaluation & AI Loops (v0.5)
+- [x] Heuristic design scoring (`canvas_evaluate`) — 5 weighted categories (spacing, color, typography, structure, consistency), 0–100 overall score
+- [x] Per-node actionable issues with `nodeId` references for closed-loop fixes
+- [x] Two modes: `fast` (JSON-only, <100ms) and `detailed` (Puppeteer-based pixel overlap)
+- [x] Category filtering for targeted re-evaluation
+- [ ] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
+- [ ] Benchmark suite — track scoring stability across a fixed corpus of designs
+- [ ] Auto-fix suggestions emitted as ready-to-run `batch_design` operations
+
+### Phase 6 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
