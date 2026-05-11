@@ -3,3 +3,7 @@ dist/
 *.tsbuildinfo
 .env
 .env.*
+
+# AI-assistant configs (personal, tool-specific)
+.claude/
+CLAUDE.md
