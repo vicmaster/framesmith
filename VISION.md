@@ -226,8 +226,8 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] Renderer: `overflow-x: hidden` + `min-height` instead of `overflow: hidden` + fixed height
 
 #### Pending improvements
-- [ ] Responsive padding scaling — use `min(Xpx, Y%)` or `clamp()` so large paddings (e.g. 160px) shrink on mobile viewports
-- [ ] Responsive font scaling — scale down headline fonts on smaller breakpoints
+- [x] Responsive padding scaling — `clamp()` so paddings >= 32px shrink on narrow viewports
+- [x] Responsive font scaling — `clamp()` so fonts >= 24px shrink on smaller breakpoints
 - [ ] Viewer navbar adaptation — collapse nav items into a hamburger or wrap on mobile
 - [ ] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
 - [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components

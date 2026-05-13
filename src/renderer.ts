@@ -9,7 +9,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { width: ${width}px; min-height: ${height}px; overflow-x: hidden; }
+  body { width: 100%; max-width: ${width}px; min-height: ${height}px; overflow-x: hidden; }
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
 </style>
@@ -128,12 +128,12 @@ function buildStyles(node: SceneNode): string {
   // Padding
   if (node.padding !== undefined) {
     if (typeof node.padding === 'number') {
-      s.push(`padding: ${node.padding}px`);
+      s.push(`padding: ${responsivePadding(node.padding)}`);
     } else if (Array.isArray(node.padding)) {
       if (node.padding.length === 2) {
-        s.push(`padding: ${node.padding[0]}px ${node.padding[1]}px`);
+        s.push(`padding: ${responsivePadding(node.padding[0])} ${responsivePadding(node.padding[1])}`);
       } else {
-        s.push(`padding: ${node.padding.map((p) => `${p}px`).join(' ')}`);
+        s.push(`padding: ${node.padding.map(responsivePadding).join(' ')}`);
       }
     }
   }
@@ -177,7 +177,7 @@ function buildStyles(node: SceneNode): string {
   if (node.backdropBlur) s.push(`backdrop-filter: blur(${node.backdropBlur}px)`);
 
   // Text
-  if (node.fontSize) s.push(`font-size: ${node.fontSize}px`);
+  if (node.fontSize) s.push(`font-size: ${responsiveFontSize(node.fontSize)}`);
   if (node.fontFamily) s.push(`font-family: ${node.fontFamily}`);
   if (node.fontWeight) s.push(`font-weight: ${node.fontWeight}`);
   if (node.color) s.push(`color: ${node.color}`);
@@ -201,6 +201,27 @@ function buildImageStyles(node: SceneNode): string {
 
 function cssLength(v: number | string): string {
   return typeof v === 'number' ? `${v}px` : v;
+}
+
+// Canonical design width — matches the default screenshot viewport.
+// Used to express padding/font as a fraction of viewport so narrower
+// breakpoints shrink the value proportionally.
+const DESIGN_WIDTH = 1440;
+const PADDING_SCALE_MIN = 32;
+const FONT_SCALE_MIN = 24;
+
+function responsivePadding(value: number): string {
+  if (value < PADDING_SCALE_MIN) return `${value}px`;
+  const min = Math.max(8, Math.round(value * 0.25));
+  const fluid = ((value / DESIGN_WIDTH) * 100).toFixed(2);
+  return `clamp(${min}px, ${fluid}vw, ${value}px)`;
+}
+
+function responsiveFontSize(value: number): string {
+  if (value < FONT_SCALE_MIN) return `${value}px`;
+  const min = Math.max(16, Math.round(value * 0.6));
+  const fluid = ((value / DESIGN_WIDTH) * 100).toFixed(2);
+  return `clamp(${min}px, ${fluid}vw, ${value}px)`;
 }
 
 function cssFlexAlign(v: string): string {
