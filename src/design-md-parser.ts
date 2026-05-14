@@ -56,13 +56,28 @@ function extractColors(content: string): Record<string, string> {
   while ((match = pattern.exec(section)) !== null) {
     const label = slugify(match[1].trim());
     const value = match[2].trim();
-    // Only keep actual color values
-    if (value.startsWith('#') || value.startsWith('rgb') || value.startsWith('hsl')) {
+    // Only keep standalone color values — rejects box-shadow strings,
+    // gradients, color lists, and anything with trailing content.
+    if (isColorValue(value)) {
       colors[label] = value;
     }
   }
 
   return colors;
+}
+
+/**
+ * True only when `value` is a single, complete CSS color token.
+ * Rejects box-shadows (`0 4px 6px rgba(...)`), gradients, comma-separated
+ * color lists, and values with trailing keywords like `inset`.
+ */
+function isColorValue(value: string): boolean {
+  const v = value.trim();
+  // Hex: #RGB, #RGBA, #RRGGBB, #RRGGBBAA
+  if (/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) return true;
+  // A single rgb()/rgba()/hsl()/hsla() call with no trailing content
+  if (/^(?:rgba?|hsla?)\([^)]*\)$/i.test(v)) return true;
+  return false;
 }
 
 /**
