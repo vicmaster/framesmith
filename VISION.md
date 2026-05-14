@@ -229,7 +229,7 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] Responsive padding scaling — `clamp()` so paddings >= 32px shrink on narrow viewports
 - [x] Responsive font scaling — `clamp()` so fonts >= 24px shrink on smaller breakpoints
 - [x] Viewer navbar adaptation — detail-page toolbar wraps to two rows on viewports <= 640px
-- [ ] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
+- [x] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
 - [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
 
 ### Phase 5 — Evaluation & AI Loops (v0.5)
