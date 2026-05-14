@@ -1,9 +1,11 @@
-import type { DesignVariables } from './types.js';
+import type { DesignVariables, SceneNode } from './types.js';
 
 export interface Preset {
   name: string;
   description: string;
   variables: DesignVariables;
+  /** Reusable component skeletons (button, card, badge) keyed by slug. */
+  components?: Record<string, SceneNode>;
 }
 
 const dark: Preset = {

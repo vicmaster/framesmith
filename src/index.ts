@@ -357,7 +357,7 @@ server.tool(
 // --- apply_preset ---
 server.tool(
   'apply_preset',
-  'Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables.',
+  'Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables, and copies in any reusable components (button, card, badge) the preset defines.',
   {
     canvasId: z.string().describe('Canvas ID'),
     preset: z.string().describe('Preset name (dark, light, material, minimal)'),
@@ -370,15 +370,24 @@ server.tool(
     if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see available presets.` }], isError: true };
 
     const result = setVariables(canvas, p.variables);
+
+    const components: string[] = [];
+    if (p.components) {
+      for (const [key, node] of Object.entries(p.components)) {
+        canvas.components[key] = structuredClone(node);
+        components.push(key);
+      }
+    }
+
     touchCanvas(canvasId);
-    return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result }, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result, components }, null, 2) }] };
   }
 );
 
 // --- import_design_md ---
 server.tool(
   'import_design_md',
-  `Import a DESIGN.md file as a design system preset. Parses the Google Stitch / awesome-design-md format and extracts colors, typography, spacing, and border radius into a reusable preset. After importing, use apply_preset to apply it to any canvas. Accepts either a file path or raw DESIGN.md content.`,
+  `Import a DESIGN.md file as a design system preset. Parses the Google Stitch / awesome-design-md format and extracts colors, typography, spacing, border radius, and reusable component skeletons (button, card, badge) into a preset. After importing, use apply_preset to apply it to any canvas. Accepts either a file path or raw DESIGN.md content.`,
   {
     content: z.string().optional().describe('Raw DESIGN.md content. Provide this OR filePath.'),
     filePath: z.string().optional().describe('Absolute path to a DESIGN.md file. Provide this OR content.'),
@@ -415,7 +424,8 @@ server.tool(
             spacing: Object.keys(preset.variables.spacing || {}),
             radius: Object.keys(preset.variables.radius || {}),
           },
-          usage: `Use apply_preset with preset="${preset.name}" to apply this design system to a canvas.`,
+          components: Object.keys(preset.components || {}),
+          usage: `Use apply_preset with preset="${preset.name}" to apply this design system (tokens + components) to a canvas.`,
         }, null, 2),
       }],
     };
