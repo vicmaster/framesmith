@@ -255,6 +255,13 @@ function renderDetailPage(canvas: Canvas, port: number): string {
   .json-panel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 480px; background: #111; border-left: 1px solid #222; overflow: auto; z-index: 10; }
   .json-panel.open { display: block; }
   .json-panel pre { padding: 20px; font-size: 12px; color: #a0a0a0; font-family: 'JetBrains Mono', 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; }
+  @media (max-width: 640px) {
+    .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 8px 10px; }
+    .toolbar .dim { display: none; }
+    .toolbar .spacer { flex-basis: 100%; height: 0; }
+    .toolbar .btn { flex: 1; min-width: 0; padding: 6px 2px; font-size: 11px; white-space: nowrap; }
+    .json-panel { width: 100%; }
+  }
 </style>
 </head>
 <body>
