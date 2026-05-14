@@ -1,4 +1,4 @@
-import type { DesignVariables } from './types.js';
+import type { DesignVariables, SceneNode } from './types.js';
 import type { Preset } from './presets.js';
 
 /**
@@ -12,6 +12,7 @@ export function parseDesignMd(content: string, name?: string): Preset {
   const spacing = extractSpacing(content);
   const radius = extractRadius(content);
   const description = extractDescription(content);
+  const components = extractComponents(content);
 
   const variables: DesignVariables = {};
   if (Object.keys(colors).length) variables.colors = colors;
@@ -19,11 +20,13 @@ export function parseDesignMd(content: string, name?: string): Preset {
   if (Object.keys(spacing).length) variables.spacing = spacing;
   if (Object.keys(radius).length) variables.radius = radius;
 
-  return {
+  const preset: Preset = {
     name: slugify(systemName),
     description: description || `Design system: ${systemName}`,
     variables,
   };
+  if (Object.keys(components).length) preset.components = components;
+  return preset;
 }
 
 function extractName(content: string): string {
@@ -241,6 +244,186 @@ function extractRadius(content: string): Record<string, number> {
   if (hasFull) radius.full = 9999;
 
   return radius;
+}
+
+/**
+ * Extract reusable component skeletons (button, card, badge) from the
+ * "Component Styling" section. Best-effort: pulls whatever fill / text
+ * color / padding / radius / border / font props it can find and falls
+ * back to sensible defaults for the rest. Components not described in
+ * the DESIGN.md are simply omitted.
+ */
+function extractComponents(content: string): Record<string, SceneNode> {
+  const components: Record<string, SceneNode> = {};
+
+  const buttonChunk = getComponentChunk(content, 'button');
+  if (buttonChunk) components.button = buildButton(extractStyleProps(buttonChunk));
+
+  const cardChunk = getComponentChunk(content, 'card');
+  if (cardChunk) components.card = buildCard(extractStyleProps(cardChunk));
+
+  const badgeChunk = getComponentChunk(content, 'badge');
+  if (badgeChunk) components.badge = buildBadge(extractStyleProps(badgeChunk));
+
+  return components;
+}
+
+/** Find the text describing one component — a sub-section heading if present, else a list item. */
+function getComponentChunk(content: string, keyword: string): string | null {
+  const sub = getSection(content, keyword);
+  if (sub) return sub;
+
+  const compSection = getSection(content, 'Component Styling') || getSection(content, 'Component');
+  if (!compSection) return null;
+
+  const lines = compSection.split('\n');
+  const re = new RegExp(keyword, 'i');
+  const idx = lines.findIndex((l) => re.test(l));
+  if (idx === -1) return null;
+
+  // Grab the matching line plus any continuation lines until the next list item / heading / blank.
+  const chunk = [lines[idx]];
+  for (let i = idx + 1; i < lines.length; i++) {
+    if (lines[i].trim() === '' || /^#{1,6}\s/.test(lines[i]) || /^\s*[-*]\s/.test(lines[i])) break;
+    chunk.push(lines[i]);
+  }
+  return chunk.join('\n');
+}
+
+interface StyleProps {
+  fill?: string;
+  color?: string;
+  padding?: number | [number, number];
+  cornerRadius?: number;
+  stroke?: string;
+  strokeWidth?: number;
+  fontSize?: number;
+  fontWeight?: number;
+}
+
+const COLOR_TOKEN = '#[0-9a-f]{3,8}|rgba?\\([^)]*\\)|hsla?\\([^)]*\\)';
+
+/** Pull CSS-ish style properties out of a free-text component description. */
+function extractStyleProps(text: string): StyleProps {
+  const props: StyleProps = {};
+
+  const bg = text.match(new RegExp(`(?:background(?:-color)?|fill)[^#\\n]{0,30}?(${COLOR_TOKEN})`, 'i'));
+  if (bg) props.fill = bg[1];
+
+  const tc = text.match(new RegExp(`text(?:\\s+colou?r)?[^#\\n]{0,30}?(${COLOR_TOKEN})`, 'i'));
+  if (tc) props.color = tc[1];
+
+  const padTwo = text.match(/padding[^\d\n]{0,20}?(\d+)\s*px\s+(\d+)\s*px/i);
+  const padOne = text.match(/padding[^\d\n]{0,20}?(\d+)\s*px/i);
+  if (padTwo) props.padding = [parseInt(padTwo[1], 10), parseInt(padTwo[2], 10)];
+  else if (padOne) props.padding = parseInt(padOne[1], 10);
+
+  if (/(?:border-)?radius[^\d\n]{0,15}?9999|pill|fully?\s+rounded/i.test(text)) {
+    props.cornerRadius = 9999;
+  } else {
+    const r = text.match(/(?:border-)?radius[^\d\n]{0,15}?(\d+)\s*px/i);
+    if (r) props.cornerRadius = parseInt(r[1], 10);
+  }
+
+  const border = text.match(new RegExp(`border[^\\d\\n]{0,15}?(\\d+)\\s*px\\s+solid\\s+(${COLOR_TOKEN})`, 'i'));
+  if (border) {
+    props.strokeWidth = parseInt(border[1], 10);
+    props.stroke = border[2];
+  }
+
+  const fs = text.match(/font-?size[^\d\n]{0,15}?(\d+)\s*px/i);
+  if (fs) props.fontSize = parseInt(fs[1], 10);
+
+  const fw = text.match(/(?:font-?weight|weight)[^\d\n]{0,15}?(\d{3})/i);
+  if (fw) props.fontWeight = parseInt(fw[1], 10);
+
+  return props;
+}
+
+function buildButton(p: StyleProps): SceneNode {
+  return {
+    id: 'button',
+    type: 'component',
+    name: 'button',
+    layout: 'horizontal',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: p.padding ?? [12, 24],
+    fill: p.fill ?? '#3b82f6',
+    cornerRadius: p.cornerRadius ?? 8,
+    ...(p.stroke ? { stroke: p.stroke, strokeWidth: p.strokeWidth ?? 1 } : {}),
+    children: [
+      {
+        id: 'button-label',
+        type: 'text',
+        name: 'label',
+        content: 'Button',
+        color: p.color ?? '#ffffff',
+        fontSize: p.fontSize ?? 14,
+        fontWeight: p.fontWeight ?? 600,
+      },
+    ],
+  };
+}
+
+function buildCard(p: StyleProps): SceneNode {
+  return {
+    id: 'card',
+    type: 'component',
+    name: 'card',
+    layout: 'vertical',
+    gap: 8,
+    width: 320,
+    padding: p.padding ?? 24,
+    fill: p.fill ?? '#1a1a1a',
+    cornerRadius: p.cornerRadius ?? 12,
+    ...(p.stroke ? { stroke: p.stroke, strokeWidth: p.strokeWidth ?? 1 } : {}),
+    children: [
+      {
+        id: 'card-title',
+        type: 'text',
+        name: 'title',
+        content: 'Card title',
+        color: p.color ?? '#ffffff',
+        fontSize: p.fontSize ?? 18,
+        fontWeight: p.fontWeight ?? 600,
+      },
+      {
+        id: 'card-body',
+        type: 'text',
+        name: 'body',
+        content: 'Card body text goes here.',
+        color: p.color ?? '#ffffffa0',
+        fontSize: 14,
+      },
+    ],
+  };
+}
+
+function buildBadge(p: StyleProps): SceneNode {
+  return {
+    id: 'badge',
+    type: 'component',
+    name: 'badge',
+    layout: 'horizontal',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: p.padding ?? [4, 10],
+    fill: p.fill ?? '#3b82f6',
+    cornerRadius: p.cornerRadius ?? 9999,
+    ...(p.stroke ? { stroke: p.stroke, strokeWidth: p.strokeWidth ?? 1 } : {}),
+    children: [
+      {
+        id: 'badge-label',
+        type: 'text',
+        name: 'label',
+        content: 'Badge',
+        color: p.color ?? '#ffffff',
+        fontSize: p.fontSize ?? 12,
+        fontWeight: p.fontWeight ?? 500,
+      },
+    ],
+  };
 }
 
 // --- Helpers ---

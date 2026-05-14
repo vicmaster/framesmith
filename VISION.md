@@ -230,7 +230,7 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] Responsive font scaling — `clamp()` so fonts >= 24px shrink on smaller breakpoints
 - [x] Viewer navbar adaptation — detail-page toolbar wraps to two rows on viewports <= 640px
 - [x] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
-- [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
+- [x] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
 
 ### Phase 5 — Evaluation & AI Loops (v0.5)
 - [x] Heuristic design scoring (`canvas_evaluate`) — 5 weighted categories (spacing, color, typography, structure, consistency), 0–100 overall score

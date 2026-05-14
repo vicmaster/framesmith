@@ -147,7 +147,7 @@ List available style guide presets. No params. Returns preset names and descript
 
 ### `apply_preset`
 
-Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables.
+Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables, and copies in any reusable components (`button`, `card`, `badge`) the preset defines so they can be instanced.
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -156,7 +156,7 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 
 ### `import_design_md`
 
-Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a design system preset. Parses the Google Stitch format and extracts colors, typography, spacing, and border radius. After importing, use `apply_preset` to apply it to any canvas.
+Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a design system preset. Parses the Google Stitch format and extracts colors, typography, spacing, and border radius. It also extracts reusable component skeletons (`button`, `card`, `badge`) from the "Component Styling" section — `apply_preset` then makes them available as instanceable components on the canvas. After importing, use `apply_preset` to apply it to any canvas.
 
 | Param | Type | Description |
 |-------|------|-------------|
