@@ -232,7 +232,22 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [x] DESIGN.md parser: filter out non-color values (e.g. full box-shadow strings) from colors map
 - [ ] DESIGN.md parser: extract component patterns (buttons, cards, badges) as reusable canvas components
 
-### Phase 5 — Evaluation & AI Loops (v0.5)
+### Phase 5 — Responsive Layout (v0.5)
+
+Designs must genuinely adapt across breakpoints, not just rescale. Today switching the viewport resizes the iframe, but the scene graph has no rules for reflowing — fixed-width columns clip on mobile and leave dead white space on desktop. Phase 4 added `clamp()` padding/font scaling; this phase makes *layout* itself responsive.
+
+Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed with a single `responsive` enum hint on container nodes (not a verbose per-breakpoint map) — the renderer infers the media queries. A per-breakpoint override map may come later as an optional escape hatch.
+
+- [ ] `responsive` hint on containers — `stack` (horizontal → vertical below breakpoint), `wrap` (children wrap instead of overflowing), `fixed` (never reflows, e.g. toolbars)
+- [ ] Renderer maps the `responsive` hint to CSS (media queries, `flex-wrap`, `flex-direction`)
+- [ ] Fluid widths — support `minWidth` / `maxWidth` alongside percentage `width` strings so containers shrink within bounds instead of clipping
+- [ ] Root document fills/centers the viewport cleanly — no dead white canvas on wide screens
+- [ ] AI guidance — tool descriptions / guidelines steer the assistant toward fluid widths + `responsive` hints instead of hardcoded px
+- [ ] `screenshot_responsive` + viewer reflect true reflow, not just an iframe resize
+- [ ] Viewer shows the adaptation clearly — side-by-side breakpoint comparison, not just toggle buttons
+- [ ] (Optional / stretch) per-breakpoint override map as an escape hatch for nodes needing precise control
+
+### Phase 6 — Evaluation & AI Loops (v0.6)
 - [x] Heuristic design scoring (`canvas_evaluate`) — 5 weighted categories (spacing, color, typography, structure, consistency), 0–100 overall score
 - [x] Per-node actionable issues with `nodeId` references for closed-loop fixes
 - [x] Two modes: `fast` (JSON-only, <100ms) and `detailed` (Puppeteer-based pixel overlap)
@@ -241,7 +256,7 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 - [ ] Benchmark suite — track scoring stability across a fixed corpus of designs
 - [ ] Auto-fix suggestions emitted as ready-to-run `batch_design` operations
 
-### Phase 6 — Ecosystem (v1.0)
+### Phase 7 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
