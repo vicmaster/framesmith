@@ -72,7 +72,13 @@ Use "document" to reference the root node. Bind results to reuse IDs: header=I("
 Concatenate bindings: U(header+"/childId", {...})
 
 Node types: frame, text, rectangle, ellipse, image, icon, component, instance
-Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, shadows, blur, backdropBlur, overflow, wrap, position, x, y, icon, iconSize, iconColor, componentId, overrides`,
+Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, shadows, blur, backdropBlur, overflow, wrap, position, x, y, icon, iconSize, iconColor, componentId, overrides, responsive
+
+Responsive layout (author desktop-first, adapt down):
+  - responsive: "stack" — on a horizontal container, flips to vertical below 768px (multi-column layouts that should stack on mobile)
+  - responsive: "wrap" — children wrap to the next line instead of overflowing (card grids, tag rows)
+  - responsive: "fixed" — never reflows (toolbars, fixed-position headers)
+Prefer fluid widths (percentages, "fit-content") + a "responsive" hint over hardcoded pixel widths.`,
   {
     canvasId: z.string().describe('Canvas ID'),
     operations: z.string().describe('Operations to execute, one per line'),

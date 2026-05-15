@@ -238,8 +238,8 @@ Designs must genuinely adapt across breakpoints, not just rescale. Today switchi
 
 Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed with a single `responsive` enum hint on container nodes (not a verbose per-breakpoint map) — the renderer infers the media queries. A per-breakpoint override map may come later as an optional escape hatch.
 
-- [ ] `responsive` hint on containers — `stack` (horizontal → vertical below breakpoint), `wrap` (children wrap instead of overflowing), `fixed` (never reflows, e.g. toolbars)
-- [ ] Renderer maps the `responsive` hint to CSS (media queries, `flex-wrap`, `flex-direction`)
+- [x] `responsive` hint on containers — `stack` (horizontal → vertical below breakpoint), `wrap` (children wrap instead of overflowing), `fixed` (never reflows, e.g. toolbars)
+- [x] Renderer maps the `responsive` hint to CSS (media queries, `flex-wrap`, `flex-direction`)
 - [ ] Fluid widths — support `minWidth` / `maxWidth` alongside percentage `width` strings so containers shrink within bounds instead of clipping
 - [ ] Root document fills/centers the viewport cleanly — no dead white canvas on wide screens
 - [ ] AI guidance — tool descriptions / guidelines steer the assistant toward fluid widths + `responsive` hints instead of hardcoded px

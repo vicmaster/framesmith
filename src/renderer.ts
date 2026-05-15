@@ -3,6 +3,7 @@ import { getIconSvg } from './icons.js';
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
   const body = renderNode(root, canvas);
+  const responsiveCss = buildResponsiveStylesheet(root, canvas);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -12,6 +13,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
   body { width: 100%; max-width: ${width}px; min-height: ${height}px; overflow-x: hidden; }
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
+${responsiveCss}
 </style>
 </head>
 <body>
@@ -121,7 +123,7 @@ function buildStyles(node: SceneNode): string {
   }
 
   if (node.gap !== undefined) s.push(`gap: ${node.gap}px`);
-  if (node.wrap) s.push('flex-wrap: wrap');
+  if (node.wrap || node.responsive === 'wrap') s.push('flex-wrap: wrap');
   if (node.alignItems) s.push(`align-items: ${cssFlexAlign(node.alignItems)}`);
   if (node.justifyContent) s.push(`justify-content: ${cssFlexJustify(node.justifyContent)}`);
 
@@ -209,6 +211,39 @@ function cssLength(v: number | string): string {
 const DESIGN_WIDTH = 1440;
 const PADDING_SCALE_MIN = 32;
 const FONT_SCALE_MIN = 24;
+
+// Mobile breakpoint for the `responsive: 'stack'` hint. Matches the viewer's
+// tablet preset (768) so the preview buttons demonstrate reflow visibly.
+const MOBILE_BREAKPOINT = 768;
+
+function buildResponsiveStylesheet(root: SceneNode, canvas?: Canvas): string {
+  const stackIds: string[] = [];
+  collectResponsiveStackIds(root, canvas, stackIds);
+  if (stackIds.length === 0) return '';
+
+  // !important is required because inline styles (flex-direction: row) would
+  // otherwise win over the @media rule regardless of selector specificity.
+  const selectors = stackIds.map((id) => `[data-node-id="${id}"]`).join(', ');
+  return `  @media (max-width: ${MOBILE_BREAKPOINT}px) {
+    ${selectors} { flex-direction: column !important; }
+  }`;
+}
+
+function collectResponsiveStackIds(node: SceneNode, canvas: Canvas | undefined, out: string[]): void {
+  // Resolve instances so responsive hints inside components are picked up
+  const resolved = node.type === 'instance' && node.componentId && canvas
+    ? resolveInstance(node, canvas) ?? node
+    : node;
+
+  if (resolved.responsive === 'stack' && resolved.layout === 'horizontal') {
+    out.push(resolved.id);
+  }
+  if (resolved.children) {
+    for (const child of resolved.children) {
+      collectResponsiveStackIds(child, canvas, out);
+    }
+  }
+}
 
 function responsivePadding(value: number): string {
   if (value < PADDING_SCALE_MIN) return `${value}px`;

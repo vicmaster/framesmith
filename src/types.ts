@@ -16,6 +16,13 @@ export interface SceneNode {
   justifyContent?: 'start' | 'center' | 'end' | 'space-between' | 'space-around';
   wrap?: boolean;
 
+  // Responsive layout hint. Authored desktop-first; the renderer adapts down.
+  //   stack — horizontal layout flips to vertical below the mobile breakpoint
+  //   wrap  — children wrap to the next line instead of overflowing
+  //   fixed — never reflows (e.g. toolbars). Marker today; reserved for future
+  //           opt-out of descendant fluid scaling.
+  responsive?: 'stack' | 'wrap' | 'fixed';
+
   // Position (when layout is 'none' on parent)
   x?: number;
   y?: number;
