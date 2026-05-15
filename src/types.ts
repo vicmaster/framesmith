@@ -9,6 +9,8 @@ export interface SceneNode {
   // Layout
   width?: number | string;
   height?: number | string;
+  minWidth?: number | string;
+  maxWidth?: number | string;
   layout?: 'horizontal' | 'vertical' | 'none';
   gap?: number;
   padding?: number | [number, number] | [number, number, number, number];

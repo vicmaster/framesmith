@@ -103,9 +103,14 @@ function buildStyles(node: SceneNode): string {
   // Dimensions
   if (node.width !== undefined) {
     s.push(`width: ${cssLength(node.width)}`);
-    // Allow elements to shrink to fit smaller viewports
-    if (typeof node.width === 'number') s.push('max-width: 100%');
+    // Auto-shrink fixed-pixel widths to the viewport unless the author opted into
+    // an explicit bound — author intent (maxWidth) always wins.
+    if (typeof node.width === 'number' && node.maxWidth === undefined) {
+      s.push('max-width: 100%');
+    }
   }
+  if (node.minWidth !== undefined) s.push(`min-width: ${cssLength(node.minWidth)}`);
+  if (node.maxWidth !== undefined) s.push(`max-width: ${cssLength(node.maxWidth)}`);
   if (node.height !== undefined) s.push(`height: ${cssLength(node.height)}`);
 
   // Layout
