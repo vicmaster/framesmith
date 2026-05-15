@@ -77,20 +77,71 @@ function parseJsonArg(str: string): Record<string, unknown> {
       depth--;
       if (depth === 0) {
         const jsonStr = str.substring(braceStart, i + 1);
-        // Handle unquoted keys: word followed by colon
-        const normalized = jsonStr.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
-        // Handle single quotes
-        const withDoubleQuotes = normalized.replace(/'/g, '"');
-        // Handle bare-word values (not number, boolean, null, string, object, array)
-        const withQuotedValues = withDoubleQuotes.replace(/:\s*([a-zA-Z_]\w*)(\s*[,}])/g, (match, val, after) => {
+        // Convert single-quoted strings to double-quoted, but leave single
+        // quotes inside existing double-quoted values alone (e.g. CSS-style
+        // `fontFamily: "system-ui, 'Segoe UI', sans-serif"`).
+        const quoteNormalized = normalizeQuotes(jsonStr);
+        // Quote unquoted object keys.
+        const keysQuoted = quoteNormalized.replace(/([{,]\s*)(\w+)\s*:/g, '$1"$2":');
+        // Quote bare-word values (e.g. horizontal → "horizontal"), preserving literals.
+        const valuesQuoted = keysQuoted.replace(/:\s*([a-zA-Z_]\w*)(\s*[,}])/g, (match, val, after) => {
           if (['true', 'false', 'null'].includes(val)) return match;
           return `: "${val}"${after}`;
         });
-        return JSON.parse(withQuotedValues);
+        return JSON.parse(valuesQuoted);
       }
     }
   }
   return {};
+}
+
+// Walks the input emitting a JSON-compatible string:
+//   - Inside a double-quoted span: pass through verbatim (so `'` stays as `'`).
+//   - On `'`: open a single-quoted span and re-emit as a double-quoted string,
+//     escaping any embedded `"` and respecting backslash escapes (`\'` → `'`).
+function normalizeQuotes(s: string): string {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '"') {
+      out += c;
+      i++;
+      while (i < s.length) {
+        const ch = s[i];
+        if (ch === '\\' && i + 1 < s.length) {
+          out += ch + s[i + 1];
+          i += 2;
+          continue;
+        }
+        out += ch;
+        i++;
+        if (ch === '"') break;
+      }
+    } else if (c === "'") {
+      out += '"';
+      i++;
+      while (i < s.length) {
+        const ch = s[i];
+        if (ch === '\\' && i + 1 < s.length) {
+          out += s[i + 1] === "'" ? "'" : ch + s[i + 1];
+          i += 2;
+          continue;
+        }
+        if (ch === "'") {
+          out += '"';
+          i++;
+          break;
+        }
+        out += ch === '"' ? '\\"' : ch;
+        i++;
+      }
+    } else {
+      out += c;
+      i++;
+    }
+  }
+  return out;
 }
 
 function splitArgs(argsStr: string): string[] {
