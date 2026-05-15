@@ -2,6 +2,10 @@
 
 An open-source MCP server that gives any AI assistant a visual design canvas. Uses HTML/CSS as the rendering engine — flexbox layout, text wrapping, and styling come for free.
 
+![canvas-mcp dashboard hero — a dark dashboard card showing $48,290 in revenue with a six-bar chart and three stat tiles, all composed via the canvas-mcp scene graph](docs/hero.png)
+
+> Above: a dashboard mock composed entirely via `batch_design` — gradients, shadows, a six-bar chart, and a responsive stat row that stacks below 768px.
+
 ```
 MCP Client → stdio → canvas-mcp server
                         ↓
