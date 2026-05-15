@@ -25,8 +25,6 @@ const C = {
   red: '#F87171',
 };
 
-const FONT = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-
 const barGradient = (blue = false) => ({
   type: 'linear' as const,
   angle: 180,
@@ -61,7 +59,6 @@ const statTile = (id: string, label: string, value: string, delta: string, delta
 
 const root: SceneNode = {
   id: 'doc', type: 'document',
-  fontFamily: FONT,
   gradient: { type: 'linear', angle: 135, stops: [{ color: C.bgFrom, position: 0 }, { color: C.bgTo, position: 100 }] },
   padding: 48, gap: 32,
   alignItems: 'center', justifyContent: 'center',
