@@ -10,7 +10,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { width: 100%; max-width: ${width}px; min-height: ${height}px; overflow-x: hidden; }
+  body { width: 100%; max-width: ${width}px; min-height: ${height}px; overflow-x: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
 ${responsiveCss}
