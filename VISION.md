@@ -241,7 +241,7 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 - [x] `responsive` hint on containers — `stack` (horizontal → vertical below breakpoint), `wrap` (children wrap instead of overflowing), `fixed` (never reflows, e.g. toolbars)
 - [x] Renderer maps the `responsive` hint to CSS (media queries, `flex-wrap`, `flex-direction`)
 - [x] Fluid widths — support `minWidth` / `maxWidth` alongside percentage `width` strings so containers shrink within bounds instead of clipping
-- [ ] Root document fills/centers the viewport cleanly — no dead white canvas on wide screens
+- [x] Root document fills/centers the viewport cleanly — no dead white canvas on wide screens
 - [ ] AI guidance — tool descriptions / guidelines steer the assistant toward fluid widths + `responsive` hints instead of hardcoded px
 - [ ] `screenshot_responsive` + viewer reflect true reflow, not just an iframe resize
 - [ ] Viewer shows the adaptation clearly — side-by-side breakpoint comparison, not just toggle buttons
