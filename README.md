@@ -245,6 +245,10 @@ batch_design({ canvasId, operations: `U("${r.issues[0].nodeId}", { color: "#ffff
 canvas_evaluate({ canvasId })  // re-score
 ```
 
+## Resources
+
+- **`canvas-mcp://guidelines`** — markdown authoring guide: width strategies (fixed / percentage / fluid+cap / floor / fit-content), responsive hint semantics (`stack` / `wrap` / `fixed`), common patterns (pricing tiers, two-column hero, tag list, toolbar), and anti-patterns. Source: [`docs/GUIDELINES.md`](docs/GUIDELINES.md).
+
 ## Gradients
 
 Nodes support linear and radial gradients via the `gradient` property:

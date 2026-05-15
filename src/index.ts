@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -18,6 +21,17 @@ const server = new McpServer({
   name: 'canvas-mcp',
   version: '0.1.0',
 });
+
+const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
+
+server.resource(
+  'guidelines',
+  'canvas-mcp://guidelines',
+  { description: 'Authoring guidelines: when to use fluid widths, responsive hints, and common patterns vs. anti-patterns.', mimeType: 'text/markdown' },
+  async (uri) => ({
+    contents: [{ uri: uri.href, mimeType: 'text/markdown', text: await readFile(GUIDELINES_PATH, 'utf-8') }],
+  })
+);
 
 // --- canvas_create ---
 server.tool(
@@ -78,7 +92,9 @@ Responsive layout (author desktop-first, adapt down):
   - responsive: "stack" — on a horizontal container, flips to vertical below 768px (multi-column layouts that should stack on mobile)
   - responsive: "wrap" — children wrap to the next line instead of overflowing (card grids, tag rows)
   - responsive: "fixed" — never reflows (toolbars, fixed-position headers)
-Prefer fluid widths (percentages, "fit-content") + a "responsive" hint over hardcoded pixel widths. width/minWidth/maxWidth accept numbers (px) or strings ("100%", "50vw", "fit-content"). Combine a percentage width with a maxWidth ceiling for content that fills the row but caps on wide screens (e.g. width: "100%", maxWidth: 600).`,
+Prefer fluid widths (percentages, "fit-content") + a "responsive" hint over hardcoded pixel widths. width/minWidth/maxWidth accept numbers (px) or strings ("100%", "50vw", "fit-content"). Combine a percentage width with a maxWidth ceiling for content that fills the row but caps on wide screens (e.g. width: "100%", maxWidth: 600).
+
+Read the canvas-mcp://guidelines resource for common patterns (pricing tiers, two-column hero, tag list, toolbar), anti-patterns, and width-strategy guidance.`,
   {
     canvasId: z.string().describe('Canvas ID'),
     operations: z.string().describe('Operations to execute, one per line'),
