@@ -4,13 +4,17 @@ import { getIconSvg } from './icons.js';
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
   const body = renderNode(root, canvas);
   const responsiveCss = buildResponsiveStylesheet(root, canvas);
+  // Hoist the root's fill/gradient to <html> so wide viewports show the design
+  // background instead of browser-default white on the sidebars.
+  const rootBg = rootBackgroundCss(root);
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { width: 100%; max-width: ${width}px; min-height: ${height}px; overflow-x: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  html { min-height: 100vh;${rootBg ? ` ${rootBg};` : ''} }
+  body { width: 100%; max-width: ${width}px; min-height: ${height}px; margin: 0 auto; overflow-x: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
 ${responsiveCss}
@@ -20,6 +24,18 @@ ${responsiveCss}
 ${body}
 </body>
 </html>`;
+}
+
+function rootBackgroundCss(root: SceneNode): string {
+  if (root.gradient) {
+    const g = root.gradient;
+    const stops = g.stops.map((st) => st.position !== undefined ? `${st.color} ${st.position}%` : st.color).join(', ');
+    return g.type === 'linear'
+      ? `background: linear-gradient(${g.angle ?? 180}deg, ${stops})`
+      : `background: radial-gradient(${stops})`;
+  }
+  if (root.fill) return `background-color: ${root.fill}`;
+  return '';
 }
 
 function renderNode(node: SceneNode, canvas?: Canvas): string {
