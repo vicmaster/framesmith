@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { getCanvas, listCanvases } from './scene-graph.js';
+import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas } from './scene-graph.js';
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces } from './workspaces.js';
@@ -119,6 +119,42 @@ export async function startViewer(port: number): Promise<number> {
         return;
       }
 
+      // Archive page
+      if (path === '/archive') {
+        res.setHeader('Content-Type', 'text/html');
+        res.end(renderArchivePage(runningPort ?? 3001));
+        return;
+      }
+
+      // Lifecycle API: archive / unarchive / delete a canvas. Three small
+      // wrappers around the scene-graph functions so the viewer's action
+      // buttons (archive page + detail page) don't need to round-trip
+      // through an MCP client.
+      const archiveApi = path.match(/^\/api\/canvas\/([^/]+)\/archive$/);
+      if (archiveApi && req.method === 'POST') {
+        const result = archiveCanvas(archiveApi[1]);
+        if (!result) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, canvasId: archiveApi[1], archived: true }));
+        return;
+      }
+      const unarchiveApi = path.match(/^\/api\/canvas\/([^/]+)\/unarchive$/);
+      if (unarchiveApi && req.method === 'POST') {
+        const result = unarchiveCanvas(unarchiveApi[1]);
+        if (!result) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, canvasId: unarchiveApi[1], archived: false }));
+        return;
+      }
+      const deleteApi = path.match(/^\/api\/canvas\/([^/]+)$/);
+      if (deleteApi && req.method === 'DELETE') {
+        if (!getCanvas(deleteApi[1])) { res.writeHead(404); res.end('Not found'); return; }
+        deleteCanvas(deleteApi[1]);
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, canvasId: deleteApi[1], deleted: true }));
+        return;
+      }
+
       // Index → default project
       if (path === '/') {
         res.writeHead(302, { Location: `/project/${DEFAULT_PROJECT_ID}` });
@@ -164,13 +200,15 @@ export async function startViewer(port: number): Promise<number> {
   return actualPort;
 }
 
-/** Renders the Figma-style left sidebar: workspaces → projects tree, with
- *  canvas-count badges and an active-state highlight on the current project.
- *  Workspaces always expanded for v1 — collapse logic can come later. */
-function renderSidebar(activeProjectId: string): string {
+/** Renders the Figma-style left sidebar: workspaces → projects tree + Archive
+ *  entry, with canvas-count badges and an active-state highlight on whatever
+ *  the user is currently viewing. Pass `activeProjectId` for a project view,
+ *  or `'archive'` for the archive view. */
+function renderSidebar(active: string): string {
   const allCanvases = listCanvases();
   const projectCount = (projectId: string) =>
     allCanvases.filter((c) => c.projectId === projectId && !c.archived).length;
+  const archivedCount = allCanvases.filter((c) => c.archived).length;
 
   const sections = listWorkspaces().map((ws) => {
     const wsProjects = listProjects(ws.id);
@@ -181,7 +219,7 @@ function renderSidebar(activeProjectId: string): string {
         </div>`;
     }
     const items = wsProjects.map((p) => {
-      const isActive = p.id === activeProjectId;
+      const isActive = p.id === active;
       return `<a href="/project/${p.id}" class="project${isActive ? ' active' : ''}">
           <span class="project-name">${esc(p.name)}</span>
           <span class="project-count">${projectCount(p.id)}</span>
@@ -193,11 +231,23 @@ function renderSidebar(activeProjectId: string): string {
       </div>`;
   }).join('');
 
+  const archiveActive = active === 'archive';
+  const archiveLink = `<a href="/archive" class="sidebar-archive${archiveActive ? ' active' : ''}">
+      <svg class="sidebar-archive-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 8v13H3V8"></path>
+        <rect x="1" y="3" width="22" height="5"></rect>
+        <line x1="10" y1="12" x2="14" y2="12"></line>
+      </svg>
+      <span class="sidebar-archive-name">Archive</span>
+      <span class="sidebar-archive-count">${archivedCount}</span>
+    </a>`;
+
   return `<aside class="sidebar">
       <div class="sidebar-header">
         <span class="sidebar-logo">Canvas MCP</span>
       </div>
       <nav class="sidebar-nav">${sections}</nav>
+      <div class="sidebar-footer">${archiveLink}</div>
     </aside>`;
 }
 
@@ -270,6 +320,16 @@ export function renderProjectPage(projectId: string, port: number): string | nul
   .project-count { font-size: 11px; color: #666; flex-shrink: 0; margin-left: 8px; }
   .project.active .project-count { color: #93c5fd; }
 
+  /* Sidebar footer: archive entry. Sits below all workspaces, separated by a hairline. */
+  .sidebar-footer { padding: 12px 8px; border-top: 1px solid #1a1a1a; }
+  .sidebar-archive { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #aaa; text-decoration: none; font-size: 13px; transition: background 0.15s, color 0.15s; }
+  .sidebar-archive:hover { background: #181818; color: #fff; }
+  .sidebar-archive.active { background: #1e3a5f; color: #fff; }
+  .sidebar-archive-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar-archive-name { flex: 1; }
+  .sidebar-archive-count { font-size: 11px; color: #666; }
+  .sidebar-archive.active .sidebar-archive-count { color: #93c5fd; }
+
   /* Main pane */
   .main { flex: 1; min-width: 0; }
   .main-header { padding: 24px 32px; border-bottom: 1px solid #1a1a1a; }
@@ -332,6 +392,155 @@ export function renderGalleryPage(port: number): string {
   return renderProjectPage(DEFAULT_PROJECT_ID, port) ?? '<h1>No projects found</h1>';
 }
 
+/** Archive view: shows all archived canvases across every project. Each card
+ *  includes the source-project name (since archive is cross-project) and
+ *  inline Restore / Delete actions that call the JSON API. */
+export function renderArchivePage(port: number): string {
+  const archived = listCanvases().filter((c) => c.archived);
+  const projectName = (projectId: string) => getProject(projectId)?.name ?? '—';
+
+  const cards = archived.map((c) => {
+    const canvas = getCanvas(c.id)!;
+    const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+    const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+    const archivedDate = c.lastModified ? new Date(c.lastModified).toLocaleString() : '';
+    const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
+    const thumbBody = isEmpty
+      ? `<div class="thumb-empty">
+            <svg class="thumb-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            </svg>
+            <span>Empty canvas</span>
+          </div>`
+      : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
+    return `
+      <div class="card card--archived" data-canvas-id="${c.id}">
+        <a href="/canvas/${c.id}" class="card-link">
+          <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${thumbBody}</div>
+          <div class="info">
+            <div class="name">${esc(c.name)}</div>
+            <div class="meta">${esc(projectName(c.projectId))} &middot; ${w} x ${h}</div>
+            <div class="meta-archived">Archived ${esc(archivedDate)}</div>
+          </div>
+        </a>
+        <div class="card-actions">
+          <button class="card-action" data-action="restore" data-id="${c.id}">Restore</button>
+          <button class="card-action card-action--danger" data-action="delete" data-id="${c.id}">Delete</button>
+        </div>
+      </div>`;
+  }).join('\n');
+
+  const emptyState = archived.length === 0
+    ? `<div class="empty">
+        <div class="empty-icon">&#9634;</div>
+        <div>No archived canvases</div>
+        <div class="empty-hint">Archive a canvas with <code>canvas_archive({ canvasId })</code> or the Archive button on a canvas page.</div>
+       </div>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Archive — Canvas MCP</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .app { display: flex; min-height: 100vh; }
+  .sidebar { width: 240px; flex-shrink: 0; background: #0f0f0f; border-right: 1px solid #1a1a1a; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-header { padding: 20px 18px; border-bottom: 1px solid #1a1a1a; }
+  .sidebar-logo { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.2px; }
+  .sidebar-nav { padding: 16px 8px; flex: 1; }
+  .ws-section { margin-bottom: 20px; }
+  .ws-name { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #666; padding: 0 10px 8px; font-weight: 600; }
+  .ws-empty { font-size: 12px; color: #555; padding: 4px 10px; font-style: italic; }
+  .project { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 6px; color: #aaa; text-decoration: none; font-size: 13px; transition: background 0.15s, color 0.15s; margin-bottom: 2px; }
+  .project:hover { background: #181818; color: #fff; }
+  .project.active { background: #1e3a5f; color: #fff; }
+  .project-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .project-count { font-size: 11px; color: #666; flex-shrink: 0; margin-left: 8px; }
+  .project.active .project-count { color: #93c5fd; }
+  .sidebar-footer { padding: 12px 8px; border-top: 1px solid #1a1a1a; }
+  .sidebar-archive { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; color: #aaa; text-decoration: none; font-size: 13px; transition: background 0.15s, color 0.15s; }
+  .sidebar-archive:hover { background: #181818; color: #fff; }
+  .sidebar-archive.active { background: #1e3a5f; color: #fff; }
+  .sidebar-archive-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .sidebar-archive-name { flex: 1; }
+  .sidebar-archive-count { font-size: 11px; color: #666; }
+  .sidebar-archive.active .sidebar-archive-count { color: #93c5fd; }
+
+  .main { flex: 1; min-width: 0; }
+  .main-header { padding: 24px 32px; border-bottom: 1px solid #1a1a1a; }
+  .breadcrumb { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .project-title { font-size: 22px; font-weight: 600; color: #fff; }
+  .project-meta { font-size: 13px; color: #666; margin-top: 6px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; padding: 32px; }
+  .card { position: relative; background: #111; border: 1px solid #222; border-radius: 12px; overflow: hidden; transition: border-color 0.2s, transform 0.2s; }
+  .card:hover { border-color: #3b82f6; transform: translateY(-2px); }
+  .card--archived { opacity: 0.78; }
+  .card--archived:hover { opacity: 1; }
+  .card-link { display: block; text-decoration: none; color: inherit; }
+  .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: #0a0a0a; position: relative; }
+  .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
+  .thumb--empty { background: radial-gradient(ellipse at center, #161616 0%, #0a0a0a 100%); }
+  .thumb-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #444; font-size: 12px; font-weight: 500; letter-spacing: 0.3px; }
+  .thumb-empty-icon { width: 36px; height: 36px; opacity: 0.7; }
+  .info { padding: 16px; }
+  .name { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .meta { font-size: 12px; color: #666; }
+  .meta-archived { font-size: 11px; color: #555; margin-top: 4px; font-style: italic; }
+
+  .card-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; opacity: 0; transition: opacity 0.15s; z-index: 2; }
+  .card:hover .card-actions { opacity: 1; }
+  .card-action { background: rgba(0,0,0,0.85); color: #fff; border: 1px solid #2a2a2a; padding: 5px 10px; border-radius: 5px; font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s; }
+  .card-action:hover { background: #1e3a5f; border-color: #3b82f6; }
+  .card-action--danger:hover { background: #7f1d1d; border-color: #ef4444; }
+
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 120px 32px; color: #555; font-size: 16px; }
+  .empty-icon { font-size: 48px; opacity: 0.3; }
+  .empty-hint { font-size: 13px; color: #444; text-align: center; max-width: 480px; }
+  .empty-hint code { background: #1a1a1a; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="app">
+    ${renderSidebar('archive')}
+    <main class="main">
+      <div class="main-header">
+        <div class="breadcrumb">Archive</div>
+        <h1 class="project-title">Archived canvases</h1>
+        <div class="project-meta">${archived.length} canvas${archived.length !== 1 ? 'es' : ''} across all projects</div>
+      </div>
+      ${archived.length > 0 ? `<div class="grid">${cards}</div>` : emptyState}
+    </main>
+  </div>
+  <script>
+    // Lifecycle actions: restore / permanent delete. Both call JSON endpoints
+    // and reload on success. Delete prompts to confirm — it's irreversible.
+    document.querySelectorAll('.card-action').forEach((btn) => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+        if (action === 'delete' && !confirm('Permanently delete this canvas? This cannot be undone.')) return;
+        try {
+          const url = '/api/canvas/' + id + (action === 'restore' ? '/unarchive' : '');
+          const method = action === 'delete' ? 'DELETE' : 'POST';
+          const res = await fetch(url, { method });
+          if (!res.ok) throw new Error('Request failed: ' + res.status);
+          location.reload();
+        } catch (err) {
+          alert('Action failed: ' + err.message);
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
+}
+
 export function renderDetailPage(canvas: Canvas, port: number): string {
   const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
   const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
@@ -353,6 +562,7 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
   .toolbar .btn { background: #1a1a1a; border: 1px solid #333; color: #ccc; padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; font-family: inherit; }
   .toolbar .btn:hover { background: #222; color: #fff; }
   .toolbar .btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .toolbar .btn--danger:hover { background: #7f1d1d; border-color: #ef4444; color: #fff; }
   .status { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
   .status.stale { background: #555; }
   .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: auto; background: #0a0a0a; padding: 24px 0; }
@@ -393,6 +603,11 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
     <button class="btn" onclick="setCompareMode()" id="bp-compare">Compare</button>
     <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
     <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
+    ${canvas.archived
+      ? `<button class="btn" onclick="lifecycleAction('unarchive')" id="btn-restore">Restore</button>`
+      : `<button class="btn" onclick="lifecycleAction('archive')" id="btn-archive">Archive</button>`
+    }
+    <button class="btn btn--danger" onclick="lifecycleAction('delete')" id="btn-delete">Delete</button>
     <div class="status" id="status" title="Auto-refresh active"></div>
   </div>
   <div class="viewport" id="viewport">
@@ -510,6 +725,23 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
         document.getElementById('json-content').textContent = JSON.stringify(data, null, 2);
       } catch (e) {
         document.getElementById('json-content').textContent = 'Error loading JSON';
+      }
+    }
+
+    // Archive / unarchive / delete. Delete is irreversible — confirm first.
+    // After action: archive / unarchive bounce back to the project page;
+    // delete bounces too (the canvas is gone, no point staying on its page).
+    async function lifecycleAction(action) {
+      if (action === 'delete' && !confirm('Permanently delete this canvas? This cannot be undone.')) return;
+      const projectId = ${JSON.stringify(canvas.projectId)};
+      try {
+        const url = '/api/canvas/' + canvasId + (action === 'archive' ? '/archive' : action === 'unarchive' ? '/unarchive' : '');
+        const method = action === 'delete' ? 'DELETE' : 'POST';
+        const res = await fetch(url, { method });
+        if (!res.ok) throw new Error('Request failed: ' + res.status);
+        location.href = '/project/' + projectId;
+      } catch (err) {
+        alert('Action failed: ' + err.message);
       }
     }
   </script>
