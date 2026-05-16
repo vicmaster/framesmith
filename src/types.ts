@@ -91,4 +91,30 @@ export interface Canvas {
   components: Record<string, SceneNode>;
   createdAt: string;
   lastModified: string;
+  /**
+   * Every canvas belongs to exactly one project. On migration, canvases
+   * without `projectId` are assigned to the default project (`DEFAULT_PROJECT_ID`).
+   */
+  projectId: string;
+  /** Soft-delete flag. Archived canvases stay in storage but are hidden from
+   * the default gallery view. Permadelete is a separate action. */
+  archived?: boolean;
+  archivedAt?: string;
 }
+
+export interface Workspace {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface Project {
+  id: string;
+  workspaceId: string;
+  name: string;
+  createdAt: string;
+}
+
+/** Stable IDs for the built-in defaults so migration is idempotent. */
+export const DEFAULT_WORKSPACE_ID = 'default-workspace';
+export const DEFAULT_PROJECT_ID = 'default-project';
