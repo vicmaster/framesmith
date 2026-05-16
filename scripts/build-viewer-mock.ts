@@ -17,44 +17,50 @@ import { renderToHtml } from '../src/renderer.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from '../src/types.js';
 
 // ---- Palette ------------------------------------------------------------
-// Warm dark with a slight blue cast; the accent (indigo → violet) is the
-// single signature color and is used sparingly so it actually reads as accent.
+// Amber-gold direction. Purple/indigo became the default for AI-generated
+// "premium dark theme" by 2026 (Linear-inspired everywhere); canvas-mcp's
+// identity is the opposite of that. Warm near-black surfaces, amber→orange
+// accent that maps to the canvas/paint metaphor of the product, used very
+// sparingly so it reads as a signature rather than as decoration.
 const C = {
-  // Surfaces (5 stops so we can layer depth without shadows)
-  bg0: '#08080c',
-  bg1: '#0d0d12',
-  sidebar: '#131319',
-  surface: '#16161e',
-  surfaceHover: '#1b1b25',
-  surfaceElevated: '#1e1e29',
+  // Surfaces — warm-tinted darks (brown/khaki undertone, not pure neutral)
+  bg0: '#09070a',
+  bg1: '#0d0b0a',
+  sidebar: '#14110c',
+  surface: '#1a160f',
+  surfaceHover: '#211c14',
+  surfaceElevated: '#251f15',
   // Borders
-  border: '#23232d',
-  borderSubtle: '#1a1a23',
-  borderHighlight: 'rgba(255,255,255,0.04)', // top-edge "glass" rim on cards
-  // Text
-  textPrimary: '#fafafa',
-  textSecondary: '#a8a8b3',
-  textTertiary: '#6e6e7a',
-  textMuted: '#4d4d56',
-  // Accent (indigo → violet)
-  accentFrom: '#6366f1',
-  accentMid: '#7c5cf6',
-  accentTo: '#a855f7',
-  accentSoft: '#c7b8ff',
-  accentBarBg: 'rgba(99,102,241,0.10)',
-  accentBarTo: 'rgba(168,85,247,0.04)',
-  // Project dot palette — stable but distinct so the sidebar reads
-  // multi-colored without being noisy.
-  dot1: '#34d399',
-  dot2: '#60a5fa',
-  dot3: '#f59e0b',
-  dot4: '#ec4899',
-  dot5: '#22d3ee',
-  dot6: '#a78bfa',
-  // Empty placeholder + chart accents
-  chartGreen: ['#34d399', '#10b981'],
-  chartBlue: ['#60a5fa', '#3b82f6'],
-  chartViolet: ['#a78bfa', '#7c3aed'],
+  border: '#2a241a',
+  borderSubtle: '#1f1b13',
+  borderHighlight: 'rgba(255,255,255,0.04)', // glass rim on cards
+  // Text — slightly warm whites/greys
+  textPrimary: '#fafaf5',
+  textSecondary: '#b8b3a6',
+  textTertiary: '#807965',
+  textMuted: '#4f4a3e',
+  // Accent (amber → orange → gold)
+  accentFrom: '#f59e0b', // amber-500
+  accentMid: '#f97316',  // orange-500
+  accentTo: '#d97706',   // amber-600
+  accentSoft: '#fde68a', // amber-200, for active text/count contrast
+  accentBarBg: 'rgba(245,158,11,0.12)',
+  accentBarTo: 'rgba(217,119,6,0.03)',
+  // Project dot palette — varied colors so the sidebar reads identifiable
+  // per project, but skewed away from purple to keep the AI-default-purple
+  // feel out of the design entirely.
+  dot1: '#22c55e', // green
+  dot2: '#3b82f6', // blue
+  dot3: '#f59e0b', // amber (matches main accent — it's fine, this is canvas-mcp)
+  dot4: '#ec4899', // pink
+  dot5: '#06b6d4', // cyan
+  dot6: '#ef4444', // red
+  // Content thumbnail palettes — keep mixed so cards have visual variety,
+  // but make the amber/gold one the most prominent (last in the rotation
+  // since it ends a row).
+  chartGreen:  ['#34d399', '#10b981'],
+  chartBlue:   ['#60a5fa', '#3b82f6'],
+  chartAmber:  ['#fcd34d', '#f59e0b'], // replaces the indigo/violet variant
 };
 
 const FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
@@ -279,7 +285,7 @@ const emptyThumb = (id: string): SceneNode => ({
   width: '100%', height: 168,
   position: 'relative',
   overflow: 'hidden',
-  gradient: { type: 'radial', stops: [{ color: '#1c1c26' }, { color: '#0f0f15' }] },
+  gradient: { type: 'radial', stops: [{ color: '#221c14' }, { color: '#0e0b08' }] },
   cornerRadius: [12, 12, 0, 0],
   alignItems: 'center', justifyContent: 'center',
   children: [
@@ -287,7 +293,7 @@ const emptyThumb = (id: string): SceneNode => ({
     {
       id: `${id}-halo`, type: 'ellipse',
       width: 140, height: 140,
-      gradient: { type: 'radial', stops: [{ color: 'rgba(124,92,246,0.10)' }, { color: 'rgba(124,92,246,0)' }] },
+      gradient: { type: 'radial', stops: [{ color: 'rgba(245,158,11,0.10)' }, { color: 'rgba(245,158,11,0)' }] },
       position: 'absolute', x: 74, y: 14,
     },
     // Stack two squares offset, hinting at "layered canvas" — feels deliberate
@@ -316,7 +322,7 @@ const contentThumb = (id: string, palette: string[]): SceneNode => ({
   width: '100%', height: 168,
   position: 'relative',
   overflow: 'hidden',
-  gradient: { type: 'linear', angle: 135, stops: [{ color: '#1f1b3a' }, { color: '#0f0e1a' }] },
+  gradient: { type: 'linear', angle: 135, stops: [{ color: '#2a1f10' }, { color: '#0e0b08' }] },
   cornerRadius: [12, 12, 0, 0],
   alignItems: 'center', justifyContent: 'center',
   children: [
@@ -334,11 +340,11 @@ const contentThumb = (id: string, palette: string[]): SceneNode => ({
   ],
 });
 
-const card = (id: string, name: string, meta: string, variant: 'empty' | 'green' | 'blue' | 'violet'): SceneNode => {
+const card = (id: string, name: string, meta: string, variant: 'empty' | 'green' | 'blue' | 'amber'): SceneNode => {
   const palette =
-    variant === 'green'  ? [...C.chartGreen,  ...C.chartBlue]  :
-    variant === 'blue'   ? [...C.chartBlue,   ...C.chartViolet]  :
-    variant === 'violet' ? [...C.chartViolet, ...C.chartGreen]  :
+    variant === 'green' ? [...C.chartGreen, ...C.chartAmber] :
+    variant === 'blue'  ? [...C.chartBlue,  ...C.chartAmber] :
+    variant === 'amber' ? [...C.chartAmber, ...C.chartGreen] :
     [];
   return {
     id, type: 'frame',
@@ -376,7 +382,7 @@ const grid: SceneNode = {
   width: '100%',
   children: [
     // 4 × 2 grid, mixing content + empty so the gallery has visual rhythm
-    card('c1', 'Sidebar spec',       'Updated 2h ago',  'violet'),
+    card('c1', 'Sidebar spec',       'Updated 2h ago',  'amber'),
     card('c2', 'Empty state',         'Updated 5h ago',  'empty'),
     card('c3', 'Project page',       'Updated yesterday','green'),
     card('c4', 'Archive view',       'Updated 3d ago',  'blue'),
@@ -395,7 +401,7 @@ const mainPane: SceneNode = {
   alignItems: 'stretch',
   // Ambient gradient: very subtle radial bloom from top-left in the accent
   // color, fading into the page bg. Reads as light, not as a flat dark plane.
-  gradient: { type: 'linear', angle: 165, stops: [{ color: '#101019', position: 0 }, { color: C.bg1, position: 60 }, { color: C.bg0, position: 100 }] },
+  gradient: { type: 'linear', angle: 165, stops: [{ color: '#16110a', position: 0 }, { color: C.bg1, position: 55 }, { color: C.bg0, position: 100 }] },
   children: [mainHeader, headerDivider, grid],
 };
 
