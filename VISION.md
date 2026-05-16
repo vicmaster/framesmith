@@ -252,11 +252,27 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 - [x] Per-node actionable issues with `nodeId` references for closed-loop fixes
 - [x] Two modes: `fast` (JSON-only, <100ms) and `detailed` (Puppeteer-based pixel overlap)
 - [x] Category filtering for targeted re-evaluation
-- [ ] Benchmark suite — track scoring stability across a fixed corpus of designs
+- [x] Benchmark suite — track scoring stability across a fixed corpus of designs
 - [x] Auto-fix suggestions emitted as ready-to-run `batch_design` operations
 - [x] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
 
-### Phase 7 — Ecosystem (v1.0)
+### Phase 7 — Workspace UI overhaul (v0.7)
+
+A flat dashboard of every canvas works at 5–10 canvases; it breaks down at 20+. Users will run more than one project through canvas-mcp, and today there's no way to group, archive, or visually separate work across projects. Plus the viewer chrome doesn't match the polish of the designs it renders. This phase introduces a `Workspace > Project > Canvas` hierarchy on the MCP side (so the AI can organise work), a Figma-style sidebar in the viewer, and a UI refresh that brings the chrome up to the level of the content.
+
+Authoring intent: **the AI is the primary author**, so hierarchy lands as MCP tools first; the viewer becomes the secondary client that reflects those tools' state.
+
+- [ ] Data model — introduce `Workspace` and `Project` entities; auto-migrate existing canvases into a default `Personal` workspace + `Untitled` project on first load (no manual intervention required)
+- [ ] MCP tools — Workspaces: `workspace_create`, `workspace_list`, `workspace_rename`, `workspace_delete`
+- [ ] MCP tools — Projects: `project_create`, `project_list`, `project_rename`, `project_delete`
+- [ ] MCP tools — Canvas lifecycle: `canvas_move` (between projects), `canvas_archive`, `canvas_delete`; `canvas_create` accepts optional `projectId`
+- [ ] Thumbnails — empty / never-rendered canvases get a distinct placeholder treatment (the current silent-white panel is the dominant visual at >5 canvases)
+- [ ] Viewer — Figma-style collapsible left sidebar: workspaces → projects, with active-state highlighting
+- [ ] Viewer — main pane is project-scoped: breadcrumb + canvas grid for the selected project; clear empty-states
+- [ ] Viewer — archive surface (separate sidebar entry); restore + permadelete actions
+- [ ] Viewer — premium UI refresh across gallery, detail page, and compare view (typography, spacing, color, micro-interactions)
+
+### Phase 8 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
