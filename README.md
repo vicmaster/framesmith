@@ -44,15 +44,35 @@ node dist/index.js
 
 ### `canvas_create`
 
-Create a new canvas.
+Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitled` project of the `Personal` workspace.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `name` | string? | Canvas name |
+| `projectId` | string? | Target project. Defaults to the built-in Untitled project. See `project_list`. |
 
 ### `canvas_list`
 
-List all canvases. No params.
+List canvases. Excludes archived canvases by default.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `projectId` | string? | Scope to one project |
+| `includeArchived` | bool? | Include archived canvases (default false) |
+
+Returns `[{ id, name, createdAt, lastModified, projectId, archived }]`.
+
+### `canvas_move` / `canvas_archive` / `canvas_unarchive` / `canvas_delete`
+
+Canvas lifecycle. `canvas_move` reassigns a canvas to a different project. `canvas_archive` sets a soft-delete flag (canvas stays on disk, hidden from default `canvas_list`); `canvas_unarchive` clears it. `canvas_delete` removes the canvas and its file permanently — irreversible.
+
+### `workspace_create` / `workspace_list` / `workspace_rename` / `workspace_delete`
+
+Top-level container CRUD. The built-in `Personal` workspace cannot be deleted, and `workspace_delete` refuses if the workspace still contains projects (move or delete them first).
+
+### `project_create` / `project_list` / `project_rename` / `project_delete`
+
+Mid-level container CRUD inside a workspace. The built-in `Untitled` project cannot be deleted. `project_delete` refuses if the project still contains any canvases (archived ones still count — move or delete them first).
 
 ### `batch_design`
 

@@ -111,17 +111,70 @@ export function getCanvas(id: string): Canvas | undefined {
   return store.get(id);
 }
 
-export function listCanvases(): { id: string; name: string; createdAt: string }[] {
+export interface CanvasSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastModified: string;
+  projectId: string;
+  archived: boolean;
+}
+
+export function listCanvases(): CanvasSummary[] {
   return Array.from(store.values()).map((c) => ({
     id: c.id,
     name: c.name,
     createdAt: c.createdAt,
+    lastModified: c.lastModified,
+    projectId: c.projectId,
+    archived: c.archived === true,
   }));
 }
 
 export function deleteCanvas(id: string): boolean {
   removePersistedCanvas(id);
   return store.delete(id);
+}
+
+export function archiveCanvas(id: string): Canvas | undefined {
+  const canvas = store.get(id);
+  if (!canvas) return undefined;
+  canvas.archived = true;
+  canvas.archivedAt = new Date().toISOString();
+  canvas.lastModified = canvas.archivedAt;
+  persistCanvas(canvas);
+  return canvas;
+}
+
+export function unarchiveCanvas(id: string): Canvas | undefined {
+  const canvas = store.get(id);
+  if (!canvas) return undefined;
+  canvas.archived = false;
+  delete canvas.archivedAt;
+  canvas.lastModified = new Date().toISOString();
+  persistCanvas(canvas);
+  return canvas;
+}
+
+export function moveCanvas(id: string, projectId: string): Canvas | undefined {
+  const canvas = store.get(id);
+  if (!canvas) return undefined;
+  canvas.projectId = projectId;
+  canvas.lastModified = new Date().toISOString();
+  persistCanvas(canvas);
+  return canvas;
+}
+
+/** How many (non-archived) canvases sit in a given project. Used by the
+ * project_delete handler to refuse deletion when a project is non-empty. */
+export function countCanvasesInProject(projectId: string, includeArchived = true): number {
+  let count = 0;
+  for (const c of store.values()) {
+    if (c.projectId !== projectId) continue;
+    if (!includeArchived && c.archived) continue;
+    count++;
+  }
+  return count;
 }
 
 export interface FindResult {
