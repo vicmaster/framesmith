@@ -233,9 +233,11 @@ const DESIGN_WIDTH = 1440;
 const PADDING_SCALE_MIN = 32;
 const FONT_SCALE_MIN = 24;
 
-// Mobile breakpoint for the `responsive: 'stack'` hint. Matches the viewer's
-// tablet preset (768) so the preview buttons demonstrate reflow visibly.
-const MOBILE_BREAKPOINT = 768;
+// Mobile breakpoint for the `responsive: 'stack'` hint. 767 = one below the
+// tablet preset of 768, matching Bootstrap/Tailwind where 768 is the start of
+// the desktop band. `@media (max-width: 767px)` is inclusive of 767 and below,
+// so the tablet preset at exactly 768 stays in the row layout.
+const MOBILE_BREAKPOINT = 767;
 
 function buildResponsiveStylesheet(root: SceneNode, canvas?: Canvas): string {
   const stackIds: string[] = [];
