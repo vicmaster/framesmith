@@ -54,12 +54,10 @@ try {
     }));
     await page.close();
 
-    // The renderer emits `@media (max-width: 768px)` for the `stack` hint, which
-    // CSS-matches viewports where width ≤ 768 (Bootstrap/Tailwind use the same
-    // breakpoint and treat 768 as the start of `md`). So at the tablet preset of
-    // exactly 768, the stack rule fires — column, not row. Worth a separate PR
-    // if we want 768 to be desktop-side; out of scope here.
-    const expectStack = bp.width <= 768;
+    // The renderer emits `@media (max-width: 767px)` for the `stack` hint, so
+    // the tablet preset at exactly 768 lands in the desktop band. Matches the
+    // Bootstrap/Tailwind convention where 768 is the start of `md`.
+    const expectStack = bp.width < 768;
     const maxOk = r.bodyMaxWidth === `${bp.width}px`;
     const minOk = r.bodyMinHeight === `${bp.height}px`;
     const widthOk = r.bodyWidth === bp.width;
