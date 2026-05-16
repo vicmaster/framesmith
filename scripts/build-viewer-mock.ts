@@ -7,11 +7,12 @@
 // Usage: npx tsx scripts/build-viewer-mock.ts
 
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import puppeteer from 'puppeteer';
 import { renderToHtml } from '../src/renderer.js';
-import type { SceneNode } from '../src/types.js';
+import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from '../src/types.js';
 
 // Linear-inspired palette: warm dark (slight blue/purple cast), indigo→violet
 // accent gradient, layered surface tones so cards and chrome have depth
@@ -261,6 +262,26 @@ const SCALE = 2;
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'viewer-refresh-mock.png');
 
+// Also publish the canvas into the local store so the design is *live* in the
+// running viewer (the whole point of dogfood-first — you should be able to
+// review the spec at http://localhost:3001 with breakpoints, JSON inspector,
+// and Compare mode, not just as a flat PNG in the PR). Stable canvas ID keeps
+// re-runs idempotent — no duplicate "viewer-refresh-mock-v2/v3/…" cards.
+const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
+const CANVAS_ID = 'viewer-refresh-mock';
+const now = new Date().toISOString();
+const canvas: Canvas = {
+  id: CANVAS_ID,
+  name: 'viewer-refresh-mock (Phase 7 slice 5 spec)',
+  root: { ...root, width: WIDTH, height: HEIGHT },
+  variables: {},
+  components: {},
+  createdAt: now,
+  lastModified: now,
+  projectId: DEFAULT_PROJECT_ID,
+};
+
+// Render to PNG (the checked-in design artifact)
 const html = renderToHtml(root, WIDTH, HEIGHT);
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 try {
@@ -274,3 +295,9 @@ try {
 } finally {
   await browser.close();
 }
+
+// Publish to the local canvas store
+await mkdir(STORE_DIR, { recursive: true });
+await writeFile(join(STORE_DIR, `${CANVAS_ID}.json`), JSON.stringify(canvas, null, 2));
+console.log(`Published canvas "${CANVAS_ID}" to ${STORE_DIR}`);
+console.log(`Open it in the viewer: http://localhost:3001/canvas/${CANVAS_ID}`);
