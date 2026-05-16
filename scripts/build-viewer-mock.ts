@@ -39,13 +39,11 @@ const C = {
   textSecondary: '#b8b3a6',
   textTertiary: '#807965',
   textMuted: '#4f4a3e',
-  // Accent (amber → orange → gold)
-  accentFrom: '#f59e0b', // amber-500
-  accentMid: '#f97316',  // orange-500
-  accentTo: '#d97706',   // amber-600
-  accentSoft: '#fde68a', // amber-200, for active text/count contrast
-  accentBarBg: 'rgba(245,158,11,0.12)',
-  accentBarTo: 'rgba(217,119,6,0.03)',
+  // Accent — flat amber + a couple derivatives. No gradient pairs.
+  accentFrom: '#f59e0b',                  // amber-500 — the signature
+  accentDeep: '#b45309',                  // amber-700 — for hover-down states
+  accentSoft: '#fde68a',                  // amber-200 — active text/count contrast
+  accentActiveBg: 'rgba(245,158,11,0.08)',// active-row fill, single flat tint
   // Project dot palette — varied colors so the sidebar reads identifiable
   // per project, but skewed away from purple to keep the AI-default-purple
   // feel out of the design entirely.
@@ -75,15 +73,15 @@ const sidebarHeader: SceneNode = {
   gap: 11,
   padding: [22, 20],
   children: [
-    // Logo mark: a small rounded gradient square (instead of a circle — feels
-    // more product-y, like Linear's L mark).
+    // Logo mark: flat amber rounded square. Gradient-free per the design
+    // direction — flat colors read as more disciplined and confident than
+    // the AI-default "gradient on the brand mark" recipe.
     {
       id: 'sb-logo-mark',
       type: 'frame',
       width: 22, height: 22,
       cornerRadius: 6,
-      gradient: { type: 'linear', angle: 135, stops: [{ color: C.accentFrom }, { color: C.accentTo }] },
-      shadows: [{ x: 0, y: 1, blur: 0, spread: 0, color: 'rgba(255,255,255,0.10)', inset: true }],
+      fill: C.accentFrom,
     },
     { id: 'sb-logo-text', type: 'text', content: 'Canvas', fontSize: 14, fontWeight: 600, color: C.textPrimary, letterSpacing: -0.1 },
   ],
@@ -113,13 +111,14 @@ const projectRow = (id: string, name: string, count: string, dotColor: string, a
     gap: 10,
     cornerRadius: 6,
     children: [
-      // Left accent bar appears only when active. Conceptually a "focus rail."
+      // Left accent bar appears only when active. Flat amber — was a gradient,
+      // gradient-free design direction means it's a single confident color.
       ...(active
         ? [{
             id: `${id}-bar`,
             type: 'frame' as const,
             width: 2, height: 14,
-            gradient: { type: 'linear' as const, angle: 180, stops: [{ color: C.accentFrom }, { color: C.accentTo }] },
+            fill: C.accentFrom,
             cornerRadius: 2,
           }]
         : []),
@@ -137,7 +136,9 @@ const projectRow = (id: string, name: string, count: string, dotColor: string, a
     ],
   };
   if (active) {
-    base.gradient = { type: 'linear', angle: 90, stops: [{ color: C.accentBarBg }, { color: C.accentBarTo }] };
+    // Flat low-alpha amber instead of horizontal gradient — feels more
+    // intentional and matches the no-gradients direction.
+    base.fill = C.accentActiveBg;
   }
   return base;
 };
@@ -278,25 +279,19 @@ const headerDivider: SceneNode = { id: 'main-divider', type: 'frame', height: 1,
 // ---- Cards --------------------------------------------------------------
 
 // Empty thumbnail: instead of a tiny dashed square that reads as "broken,"
-// use a soft radial bloom + a hairline grid impression to feel like
+// use two stacked hairline rectangles on a flat warm surface — feels like
 // "blank canvas, ready" rather than "missing image."
 const emptyThumb = (id: string): SceneNode => ({
   id: `${id}-thumb`, type: 'frame',
   width: '100%', height: 168,
   position: 'relative',
   overflow: 'hidden',
-  gradient: { type: 'radial', stops: [{ color: '#221c14' }, { color: '#0e0b08' }] },
+  fill: '#15110b', // flat warm dark (between sidebar and surface tones)
   cornerRadius: [12, 12, 0, 0],
   alignItems: 'center', justifyContent: 'center',
   children: [
-    // Soft halo behind the placeholder mark
-    {
-      id: `${id}-halo`, type: 'ellipse',
-      width: 140, height: 140,
-      gradient: { type: 'radial', stops: [{ color: 'rgba(245,158,11,0.10)' }, { color: 'rgba(245,158,11,0)' }] },
-      position: 'absolute', x: 74, y: 14,
-    },
-    // Stack two squares offset, hinting at "layered canvas" — feels deliberate
+    // Stack two squares offset, hinting at "layered canvas." No halo —
+    // the gradient halo was the obvious thing to drop in a flat redesign.
     {
       id: `${id}-mark-back`, type: 'frame',
       width: 38, height: 28,
@@ -315,14 +310,15 @@ const emptyThumb = (id: string): SceneNode => ({
   ],
 });
 
-// Content thumbnail: a faux "designed canvas" preview — gradient bg + a
-// realistic mini bar chart, so the gallery doesn't look 80% empty.
+// Content thumbnail: faux "designed canvas" preview — flat warm bg + a
+// mini bar chart where each bar is a single flat color. Gradient bars
+// were the cliché AI tell; flat chart bars feel more like a real product.
 const contentThumb = (id: string, palette: string[]): SceneNode => ({
   id: `${id}-thumb`, type: 'frame',
   width: '100%', height: 168,
   position: 'relative',
   overflow: 'hidden',
-  gradient: { type: 'linear', angle: 135, stops: [{ color: '#2a1f10' }, { color: '#0e0b08' }] },
+  fill: '#1a140c', // flat darker warm than empty-thumb so they read distinct
   cornerRadius: [12, 12, 0, 0],
   alignItems: 'center', justifyContent: 'center',
   children: [
@@ -334,7 +330,9 @@ const contentThumb = (id: string, palette: string[]): SceneNode => ({
         type: 'frame' as const,
         width: 14, height: h,
         cornerRadius: 2,
-        gradient: { type: 'linear' as const, angle: 180, stops: [{ color: i === 4 ? palette[2] : palette[0] }, { color: i === 4 ? palette[3] : palette[1] }] },
+        // The last bar uses the secondary palette color so the eye lands
+        // on it as the "headline" — same compositional move, just flat.
+        fill: i === 4 ? palette[2] : palette[0],
       })),
     },
   ],
@@ -399,9 +397,9 @@ const mainPane: SceneNode = {
   layout: 'vertical',
   width: '100%',
   alignItems: 'stretch',
-  // Ambient gradient: very subtle radial bloom from top-left in the accent
-  // color, fading into the page bg. Reads as light, not as a flat dark plane.
-  gradient: { type: 'linear', angle: 165, stops: [{ color: '#16110a', position: 0 }, { color: C.bg1, position: 55 }, { color: C.bg0, position: 100 }] },
+  // Flat warm-dark fill — was a top-left bloom gradient. Restraint reads
+  // more confident than ambient lighting effects in 2026 dark-theme UIs.
+  fill: C.bg1,
   children: [mainHeader, headerDivider, grid],
 };
 
