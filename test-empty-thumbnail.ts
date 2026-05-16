@@ -43,8 +43,12 @@ check(
   html.includes('Empty canvas'),
 );
 check(
-  'empty canvas card includes the dashed-square SVG icon',
-  html.includes('class="thumb-empty-icon"') && html.includes('stroke-dasharray="3 3"'),
+  'empty canvas card includes the layered-hairlines visual mark',
+  html.includes('class="thumb-empty-back"') && html.includes('class="thumb-empty-front"'),
+);
+check(
+  'empty canvas card still has accessible "Empty canvas" label (hidden text)',
+  html.includes('class="thumb-empty-icon"') && html.includes('Empty canvas'),
 );
 
 // The empty card should NOT have an iframe; the with-content one should.
@@ -77,7 +81,8 @@ if (contentCardMatch) {
 // CSS hooks for the new placeholder must be in the inline stylesheet.
 check('CSS contains .thumb--empty rule', html.includes('.thumb--empty'));
 check('CSS contains .thumb-empty rule (placeholder body)', html.includes('.thumb-empty {'));
-check('CSS contains .thumb-empty-icon rule', html.includes('.thumb-empty-icon'));
+check('CSS contains .thumb-empty-back/front rules (layered hairlines)',
+  html.includes('.thumb-empty-back') && html.includes('.thumb-empty-front'));
 
 rmSync(tmp, { recursive: true, force: true });
 process.exit(allPass ? 0 : 1);
