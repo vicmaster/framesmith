@@ -245,6 +245,43 @@ batch_design({ canvasId, operations: `U("${r.issues[0].nodeId}", { color: "#ffff
 canvas_evaluate({ canvasId })  // re-score
 ```
 
+Issues that have a mechanical fix come back with an extra `fix: { op, rationale }` field — see `canvas_autofix` below.
+
+### `canvas_autofix`
+
+Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a mechanically derived fix — no judgement calls. Each fix carries a ready-to-paste `batch_design` Update op string. Closes the generator-evaluator loop without a second AI hop.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas to autofix |
+| `categories` | string[]? | Restrict to fixes from these categories (default: all) |
+
+**What gets auto-fixed**
+
+- **Spacing** — off-scale `gap` or scalar `padding` snaps to the nearest scale value. Array `padding` is skipped (ambiguous which index).
+- **Consistency** — frames with multiple children but no `layout` get `layout: "vertical"`.
+- **Color** — recoverable WCAG contrast failures get `color: "#000000"` or `"#FFFFFF"`, whichever wins against the resolved background. Failures so bad that neither black nor white meets the threshold are not auto-fixed (the background also needs to change).
+
+**Return shape**
+
+```json
+{
+  "totalIssues": 18,
+  "fixableCount": 5,
+  "fixes": [
+    {
+      "nodeId": "abc123",
+      "category": "color",
+      "op": "U(\"abc123\", { color: \"#000000\" })",
+      "rationale": "Switch text color to #000000 for WCAG AA contrast against #F8FAFC",
+      "message": "Text \"Sign In\" has contrast ratio 2.8:1 against #F8FAFC. WCAG AA requires 4.5:1."
+    }
+  ]
+}
+```
+
+Apply the ops by joining them with newlines and passing to `batch_design`, then re-evaluate.
+
 ## Resources
 
 - **`canvas-mcp://guidelines`** — markdown authoring guide: width strategies (fixed / percentage / fluid+cap / floor / fit-content), responsive hint semantics (`stack` / `wrap` / `fixed`), common patterns (pricing tiers, two-column hero, tag list, toolbar), and anti-patterns. Source: [`docs/GUIDELINES.md`](docs/GUIDELINES.md).

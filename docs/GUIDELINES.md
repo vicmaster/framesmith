@@ -72,5 +72,6 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 ## After designing
 
 - **`canvas_evaluate`** scores the design on 5 categories (spacing, color, typography, structure, consistency) and surfaces actionable issues with `nodeId` references. Use it in a generator-evaluator loop: `batch_design` → `canvas_evaluate` → fix the returned nodeIds.
+- **`canvas_autofix`** runs `canvas_evaluate` internally and returns just the subset of issues that have a mechanically derived fix — off-scale spacing snaps to scale, missing layout becomes `vertical`, recoverable WCAG contrast failures get `#000` or `#FFF` based on background luminance. Each fix is a ready-to-paste `batch_design` Update op. Run those ops via `batch_design`, then re-evaluate — closes the loop without judgment calls on your part.
 - **`screenshot_responsive`** renders the same scene at mobile / tablet / desktop. Inspect all three; if `responsive` hints are set correctly the mobile layout will look right with no extra work.
 - **`snapshot_layout`** returns computed bounding boxes — useful for asserting alignment or detecting overflow programmatically.
