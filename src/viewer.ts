@@ -245,6 +245,66 @@ function projectDotColor(projectId: string): string {
   return DOT_PALETTE[Math.abs(hash) % DOT_PALETTE.length];
 }
 
+/** Mobile sidebar drawer: at narrow viewports the 248px sidebar swallows most
+ *  of the screen. Toggle button (hamburger) sits fixed top-left, sidebar
+ *  becomes off-canvas, tapping the backdrop closes it. Injected into both
+ *  project + archive pages — detail page has no sidebar so it doesn't need
+ *  this. */
+const MOBILE_TOGGLE_HTML = `
+  <button class="sidebar-toggle" aria-label="Toggle sidebar" onclick="toggleSidebar()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </button>
+  <div class="sidebar-backdrop" onclick="toggleSidebar()"></div>`;
+
+const MOBILE_TOGGLE_CSS = `
+  .sidebar-toggle { display: none; }
+  .sidebar-backdrop { display: none; }
+  @media (max-width: 768px) {
+    .sidebar-toggle {
+      display: flex; align-items: center; justify-content: center;
+      position: fixed; top: 12px; left: 12px;
+      width: 36px; height: 36px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      z-index: 60;
+      transition: background 0.15s, color 0.15s;
+    }
+    .sidebar-toggle:hover { background: var(--surface-hover); color: var(--text-primary); }
+    .sidebar {
+      position: fixed; top: 0; bottom: 0; left: 0; height: 100vh;
+      transform: translateX(-100%);
+      transition: transform 0.22s ease;
+      z-index: 100;
+      box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+    }
+    body.sidebar-open .sidebar { transform: translateX(0); }
+    .sidebar-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 90;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+    }
+    body.sidebar-open .sidebar-backdrop {
+      display: block;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .main-header { padding-left: 64px; }  /* avoid hamburger overlapping breadcrumb */
+  }`;
+
+const MOBILE_TOGGLE_JS = `
+    function toggleSidebar() {
+      document.body.classList.toggle('sidebar-open');
+    }`;
+
 /** Renders the Figma-style left sidebar: workspaces → projects tree + Archive
  *  entry, with canvas-count badges and an active-state highlight on whatever
  *  the user is currently viewing. Pass `activeProjectId` for a project view,
@@ -404,9 +464,11 @@ export function renderProjectPage(projectId: string, port: number): string | nul
   .empty-icon { font-size: 44px; opacity: 0.3; }
   .empty-hint { font-size: 13px; color: var(--text-muted); text-align: center; max-width: 480px; }
   .empty-hint code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--text-secondary); }
+  ${MOBILE_TOGGLE_CSS}
 </style>
 </head>
 <body>
+  ${MOBILE_TOGGLE_HTML}
   <div class="app">
     ${renderSidebar(projectId)}
     <main class="main">
@@ -419,6 +481,8 @@ export function renderProjectPage(projectId: string, port: number): string | nul
     </main>
   </div>
   <script>
+    ${MOBILE_TOGGLE_JS}
+
     // Auto-refresh: poll the canvas count for this project, reload if it changes.
     let lastCount = ${canvases.length};
     setInterval(async () => {
@@ -557,9 +621,11 @@ export function renderArchivePage(port: number): string {
   .empty-icon { font-size: 44px; opacity: 0.3; }
   .empty-hint { font-size: 13px; color: var(--text-muted); text-align: center; max-width: 480px; }
   .empty-hint code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--text-secondary); }
+  ${MOBILE_TOGGLE_CSS}
 </style>
 </head>
 <body>
+  ${MOBILE_TOGGLE_HTML}
   <div class="app">
     ${renderSidebar('archive')}
     <main class="main">
@@ -572,6 +638,8 @@ export function renderArchivePage(port: number): string {
     </main>
   </div>
   <script>
+    ${MOBILE_TOGGLE_JS}
+
     // Lifecycle actions: restore / permanent delete. Both call JSON endpoints
     // and reload on success. Delete prompts to confirm — it's irreversible.
     document.querySelectorAll('.card-action').forEach((btn) => {
@@ -610,6 +678,11 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
   ${THEME_CSS}
   body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   .toolbar { height: 52px; background: var(--sidebar); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; padding: 0 20px; gap: 14px; flex-shrink: 0; }
+  /* Grouped clusters of related buttons with subtle vertical dividers
+   * between them. Reads as "view modes / utilities / lifecycle" three-way
+   * grouping rather than a flat wall of 8 same-weight buttons. */
+  .toolbar-cluster { display: inline-flex; align-items: center; gap: 6px; }
+  .toolbar-divider { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
   .toolbar a { color: var(--text-tertiary); text-decoration: none; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
   .toolbar a:hover { color: var(--text-primary); }
   .toolbar .title { font-size: 15px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
@@ -653,17 +726,25 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
     <span class="title">${esc(canvas.name)}</span>
     <span class="dim">${w} x ${h}</span>
     <div class="spacer"></div>
-    <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
-    <button class="btn" onclick="setViewport(768, 1024)" id="bp-tablet">Tablet</button>
-    <button class="btn active" onclick="setViewport(${w}, ${h})" id="bp-desktop">Desktop</button>
-    <button class="btn" onclick="setCompareMode()" id="bp-compare">Compare</button>
-    <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
-    <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
-    ${canvas.archived
-      ? `<button class="btn" onclick="lifecycleAction('unarchive')" id="btn-restore">Restore</button>`
-      : `<button class="btn" onclick="lifecycleAction('archive')" id="btn-archive">Archive</button>`
-    }
-    <button class="btn btn--danger" onclick="lifecycleAction('delete')" id="btn-delete">Delete</button>
+    <div class="toolbar-cluster">
+      <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
+      <button class="btn" onclick="setViewport(768, 1024)" id="bp-tablet">Tablet</button>
+      <button class="btn active" onclick="setViewport(${w}, ${h})" id="bp-desktop">Desktop</button>
+      <button class="btn" onclick="setCompareMode()" id="bp-compare">Compare</button>
+    </div>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <div class="toolbar-cluster">
+      <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
+      <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
+    </div>
+    <span class="toolbar-divider" aria-hidden="true"></span>
+    <div class="toolbar-cluster">
+      ${canvas.archived
+        ? `<button class="btn" onclick="lifecycleAction('unarchive')" id="btn-restore">Restore</button>`
+        : `<button class="btn" onclick="lifecycleAction('archive')" id="btn-archive">Archive</button>`
+      }
+      <button class="btn btn--danger" onclick="lifecycleAction('delete')" id="btn-delete">Delete</button>
+    </div>
     <div class="status" id="status" title="Auto-refresh active"></div>
   </div>
   <div class="viewport" id="viewport">

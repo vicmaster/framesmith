@@ -32,6 +32,10 @@ const markupChecks: Array<{ name: string; needle: string | RegExp }> = [
   { name: 'refreshFrames helper defined', needle: 'function refreshFrames' },
   { name: '.viewport.compare CSS rule', needle: '.viewport.compare' },
   { name: '--bp-w CSS variable wiring', needle: '--bp-w' },
+  // Slice-5b polish: toolbar buttons are grouped into clusters separated by
+  // hairline dividers (was a flat row of 8 same-weight buttons).
+  { name: 'toolbar clusters group related buttons', needle: 'class="toolbar-cluster"' },
+  { name: 'toolbar dividers between clusters', needle: 'class="toolbar-divider"' },
 ];
 
 let allPass = true;

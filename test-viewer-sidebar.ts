@@ -101,5 +101,12 @@ check('empty project: hint suggests canvas_create with this projectId', htmlEmpt
 // ---- 8. Unknown project → null (404 path) -------------------------------
 check('renderProjectPage: returns null for unknown projectId', viewer.renderProjectPage('does-not-exist', 3001) === null);
 
+// ---- 9. Mobile sidebar toggle (off-canvas drawer below 768px) ------------
+check('mobile: page includes sidebar-toggle hamburger button', htmlDefault.includes('class="sidebar-toggle"'));
+check('mobile: page includes sidebar-backdrop overlay', htmlDefault.includes('class="sidebar-backdrop"'));
+check('mobile: toggleSidebar JS handler is defined', htmlDefault.includes('function toggleSidebar'));
+check('mobile: CSS has @media (max-width: 768px) breakpoint', htmlDefault.includes('@media (max-width: 768px)'));
+check('mobile: sidebar gets transform off-canvas in mobile CSS', htmlDefault.includes('transform: translateX(-100%)'));
+
 rmSync(tmp, { recursive: true, force: true });
 process.exit(allPass ? 0 : 1);
