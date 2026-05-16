@@ -201,7 +201,7 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID to evaluate |
-| `mode` | `"fast"` \| `"detailed"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based layout checks (pixel-level sibling overlap). Default `"fast"`. |
+| `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `CANVAS_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`. Defaults to all. |
 
 **Categories and what they check**
@@ -234,6 +234,24 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
   "mode": "fast"
 }
 ```
+
+**With `mode: "llm"`**, the response additionally carries:
+
+```json
+{
+  "llmCritique": {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "score": 84,
+    "summary": "Clean dashboard layout with a strong primary metric and clear hierarchy.",
+    "strengths": ["balanced spacing", "consistent type scale"],
+    "weaknesses": ["stat tiles sit slightly below the card's baseline"],
+    "suggestions": ["align the stat row to the card's bottom edge for a tighter composition"]
+  }
+}
+```
+
+Provider selection: `CANVAS_LLM_PROVIDER` env var (`anthropic` | `openai`), else falls back to whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set. Default models: `claude-sonnet-4-6` / `gpt-4.1` (override via `CANVAS_LLM_ANTHROPIC_MODEL` / `CANVAS_LLM_OPENAI_MODEL`). Adding a third provider is one entry in the `judges` table in `src/llm-judge.ts`.
 
 **Example generator-evaluator loop**
 

@@ -16,9 +16,11 @@
     "bench": "tsx benchmark/run.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "lucide-static": "^0.577.0",
     "nanoid": "^5.1.5",
+    "openai": "^6.38.0",
     "puppeteer": "^24.7.2",
     "zod": "^3.24.4"
   },

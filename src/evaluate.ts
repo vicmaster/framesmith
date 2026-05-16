@@ -50,7 +50,13 @@ export interface EvaluationResult {
     tokenUsagePercent: number;
     componentReusePercent: number;
   };
-  mode: 'fast' | 'detailed';
+  mode: 'fast' | 'detailed' | 'llm';
+  /**
+   * Present only when mode is 'llm'. The heuristic categories above still run
+   * (so you don't lose the deterministic signal); this field carries the
+   * vision-model's holistic critique on top.
+   */
+  llmCritique?: import('./llm-judge.js').LLMJudgeResult;
 }
 
 interface NodeEntry {
@@ -594,7 +600,7 @@ const CATEGORY_WEIGHTS = new Map([
 
 export async function evaluateCanvas(
   canvas: Canvas,
-  options: { mode: 'fast' | 'detailed'; categories?: string[] },
+  options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[] },
 ): Promise<EvaluationResult> {
   // Resolve variables so $tokens become actual values for contrast checks
   const resolvedRoot = resolveVariables(canvas.root, canvas.variables);
