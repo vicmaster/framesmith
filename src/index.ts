@@ -15,6 +15,7 @@ import { listPresets, getPreset, registerPreset } from './presets.js';
 import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
+import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
 import type { SceneNode } from './types.js';
 
 const server = new McpServer({
@@ -459,10 +460,14 @@ server.tool(
 // --- canvas_evaluate ---
 server.tool(
   'canvas_evaluate',
-  `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores (spacing, color, typography, structure, consistency), and actionable issues referencing specific node IDs. Use 'fast' mode for instant JSON-only analysis, or 'detailed' for Puppeteer-based layout checks. Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds.`,
+  `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores (spacing, color, typography, structure, consistency), and actionable issues referencing specific node IDs. Modes:
+  - "fast": JSON-only, <100ms, deterministic heuristics only.
+  - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
+  - "llm": fast-mode heuristics plus a vision-model critique (provider picked from CANVAS_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field with { score, summary, strengths, weaknesses, suggestions }. Cost: one paid API call per invocation.
+Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset).`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
-    mode: z.enum(['fast', 'detailed']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = includes Puppeteer layout checks'),
+    mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model critique'),
     categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency']))
       .optional()
       .describe('Specific categories to evaluate (default: all)'),
@@ -472,6 +477,23 @@ server.tool(
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const result = await evaluateCanvas(canvas, { mode, categories });
+
+    if (mode === 'llm') {
+      try {
+        const resolved = resolveVariables(canvas.root, canvas.variables);
+        const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+        const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+        const html = renderToHtml(resolved, w, h, canvas);
+        const screenshotPng = await takeScreenshot(html, { width: w, height: h, scale: 1 });
+        result.llmCritique = await judgeCanvas(screenshotPng);
+      } catch (err) {
+        const msg = err instanceof LLMJudgeUnavailableError
+          ? err.message
+          : `LLM critique failed: ${(err as Error).message}`;
+        return { content: [{ type: 'text', text: msg }], isError: true };
+      }
+    }
+
     return {
       content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     };

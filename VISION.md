@@ -254,7 +254,7 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 - [x] Category filtering for targeted re-evaluation
 - [ ] Benchmark suite — track scoring stability across a fixed corpus of designs
 - [x] Auto-fix suggestions emitted as ready-to-run `batch_design` operations
-- [ ] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
+- [x] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
 
 ### Phase 7 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
