@@ -178,18 +178,23 @@ export interface ResponsiveResult {
 }
 
 export async function takeResponsiveScreenshots(
-  html: string,
+  renderForBreakpoint: (bp: Breakpoint) => string,
   breakpoints: Breakpoint[],
   scale = 2,
 ): Promise<ResponsiveResult[]> {
   const results: ResponsiveResult[] = [];
   const b = await getBrowser();
 
+  // Render HTML separately per breakpoint so the body's max-width / min-height
+  // scaffold matches the viewport, not the largest breakpoint. The viewport
+  // change alone would already let @media rules fire, but matching the scaffold
+  // gives true reflow — no inflated min-height leaking design-width padding
+  // into smaller shots.
   for (const bp of breakpoints) {
     const page = await b.newPage();
     try {
       await page.setViewport({ width: bp.width, height: bp.height, deviceScaleFactor: scale });
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
+      await page.setContent(renderForBreakpoint(bp), { waitUntil: 'domcontentloaded' });
       const buffer = await page.screenshot({ type: 'png', fullPage: false });
       results.push({
         label: bp.label,
