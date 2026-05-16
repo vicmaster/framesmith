@@ -14,6 +14,20 @@ export interface EvaluationIssue {
   nodeName?: string;
   message: string;
   suggestion?: string;
+  /**
+   * Mechanically derived fix the AI / user can apply by running `op` through
+   * the `batch_design` tool. Only present when the check can fix the issue
+   * without a judgement call (off-scale spacing, missing layout on a
+   * multi-child frame, recoverable contrast failure).
+   */
+  fix?: AutoFix;
+}
+
+export interface AutoFix {
+  /** Ready-to-run batch_design Update op, e.g. `U("foo", { color: "#000000" })`. */
+  op: string;
+  /** One-line human-readable explanation of what this fix changes and why. */
+  rationale: string;
 }
 
 export interface CategoryScore {
@@ -99,6 +113,26 @@ function buildTreeContext(root: SceneNode): NodeEntry[] {
   return entries;
 }
 
+// --- AutoFix helpers ---
+
+// Format a batch_design Update op string. JSON.stringify handles primitive
+// values correctly: strings become quoted (`"#FFF"`), numbers stay bare (`16`).
+function formatUpdateOp(nodeId: string, props: Record<string, unknown>): string {
+  const entries = Object.entries(props).map(([k, v]) => `${k}: ${JSON.stringify(v)}`);
+  return `U("${nodeId}", { ${entries.join(', ')} })`;
+}
+
+// Pick #FFFFFF or #000000 — whichever has higher contrast against the given
+// background. Returns null if neither meets the WCAG threshold required for
+// the text size, signaling that the bg also has to change (out of scope here).
+function pickHighContrastColor(bg: [number, number, number], required: number): string | null {
+  const whiteRatio = contrastRatio([255, 255, 255], bg);
+  const blackRatio = contrastRatio([0, 0, 0], bg);
+  const best = whiteRatio >= blackRatio ? '#FFFFFF' : '#000000';
+  const bestRatio = Math.max(whiteRatio, blackRatio);
+  return bestRatio >= required ? best : null;
+}
+
 // --- Checkers ---
 
 const DEFAULT_SPACING_SCALE = [0, 2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64];
@@ -109,19 +143,23 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
     ? Object.values(variables.spacing).sort((a, b) => a - b)
     : DEFAULT_SPACING_SCALE;
 
-  const allValues: { value: number; nodeId: string; nodeName?: string; prop: string }[] = [];
+  // `fixable` is false for padding when the source value is an array — the
+  // off-scale entry might be any index, so a single Update op would clobber
+  // the others. Scalar padding and gap are always single-property fixes.
+  const allValues: { value: number; nodeId: string; nodeName?: string; prop: string; fixable: boolean }[] = [];
 
   for (const { node } of entries) {
     if (node.gap !== undefined && typeof node.gap === 'number') {
-      allValues.push({ value: node.gap, nodeId: node.id, nodeName: node.name, prop: 'gap' });
+      allValues.push({ value: node.gap, nodeId: node.id, nodeName: node.name, prop: 'gap', fixable: true });
     }
     if (node.padding !== undefined) {
-      const pads = typeof node.padding === 'number'
-        ? [node.padding]
-        : Array.isArray(node.padding) ? node.padding : [];
-      for (const p of pads) {
-        if (typeof p === 'number' && p > 0) {
-          allValues.push({ value: p, nodeId: node.id, nodeName: node.name, prop: 'padding' });
+      if (typeof node.padding === 'number' && node.padding > 0) {
+        allValues.push({ value: node.padding, nodeId: node.id, nodeName: node.name, prop: 'padding', fixable: true });
+      } else if (Array.isArray(node.padding)) {
+        for (const p of node.padding) {
+          if (typeof p === 'number' && p > 0) {
+            allValues.push({ value: p, nodeId: node.id, nodeName: node.name, prop: 'padding', fixable: false });
+          }
         }
       }
     }
@@ -134,14 +172,21 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
     const nearest = scale.reduce((a, b) => (Math.abs(b - v.value) < Math.abs(a - v.value) ? b : a));
     if (!scale.includes(v.value)) {
       offScaleCount++;
-      issues.push({
+      const issue: EvaluationIssue = {
         category: 'spacing',
         severity: 'warning',
         nodeId: v.nodeId,
         nodeName: v.nodeName,
         message: `${v.prop}: ${v.value}px is not on the spacing scale.`,
         suggestion: `Use ${nearest}px instead.`,
-      });
+      };
+      if (v.fixable) {
+        issue.fix = {
+          op: formatUpdateOp(v.nodeId, { [v.prop]: nearest }),
+          rationale: `Snap ${v.prop} to ${nearest}px on the spacing scale`,
+        };
+      }
+      issues.push(issue);
     }
   }
 
@@ -211,14 +256,22 @@ function checkColorContrast(entries: NodeEntry[]): CheckResult {
 
     if (ratio < required) {
       failCount++;
-      issues.push({
+      const issue: EvaluationIssue = {
         category: 'color',
         severity: 'error',
         nodeId: node.id,
         nodeName: node.name,
         message: `Text "${(node.content ?? '').slice(0, 30)}" has contrast ratio ${ratio.toFixed(1)}:1 against ${bgStr}. WCAG AA requires ${required}:1.`,
         suggestion: `Increase contrast by darkening/lightening the text or background.`,
-      });
+      };
+      const recoverColor = pickHighContrastColor(bg, required);
+      if (recoverColor) {
+        issue.fix = {
+          op: formatUpdateOp(node.id, { color: recoverColor }),
+          rationale: `Switch text color to ${recoverColor} for WCAG AA contrast against ${bgStr}`,
+        };
+      }
+      issues.push(issue);
     }
   }
 
@@ -393,6 +446,8 @@ function checkConsistency(entries: NodeEntry[]): CheckResult {
       !node.layout
     ) {
       score -= 5;
+      // Default to vertical — matches the renderer's implicit fallback for
+      // containers without `layout` set, and is the more common authoring intent.
       issues.push({
         category: 'consistency',
         severity: 'warning',
@@ -400,6 +455,10 @@ function checkConsistency(entries: NodeEntry[]): CheckResult {
         nodeName: node.name,
         message: `Frame "${node.name ?? node.id}" has ${node.children.length} children but no layout property.`,
         suggestion: `Set layout to "horizontal" or "vertical".`,
+        fix: {
+          op: formatUpdateOp(node.id, { layout: 'vertical' }),
+          rationale: 'Set layout to "vertical" (matches renderer default for multi-child frames)',
+        },
       });
     }
   }

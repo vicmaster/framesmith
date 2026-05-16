@@ -478,6 +478,41 @@ server.tool(
   }
 );
 
+// --- canvas_autofix ---
+server.tool(
+  'canvas_autofix',
+  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins). Each fix carries a ready-to-paste \`batch_design\` Update op string and a one-line rationale. Closes the generator-evaluator loop: generate with batch_design → autofix → re-evaluate. Issues without a fix are not returned here; call canvas_evaluate to see the full set.`,
+  {
+    canvasId: z.string().describe('Canvas ID to autofix'),
+    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency']))
+      .optional()
+      .describe('Restrict to fixes from these categories (default: all)'),
+  },
+  async ({ canvasId, categories }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    const result = await evaluateCanvas(canvas, { mode: 'fast', categories });
+    const fixes = result.issues
+      .filter((issue) => issue.fix)
+      .map((issue) => ({
+        nodeId: issue.nodeId,
+        category: issue.category,
+        op: issue.fix!.op,
+        rationale: issue.fix!.rationale,
+        message: issue.message,
+      }));
+
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        totalIssues: result.issues.length,
+        fixableCount: fixes.length,
+        fixes,
+      }, null, 2) }],
+    };
+  }
+);
+
 // --- viewer_url ---
 server.tool(
   'viewer_url',
