@@ -711,10 +711,22 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
   @media (max-width: 640px) {
-    .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 8px 10px; }
+    .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 12px; gap: 8px; }
+    .toolbar a { font-size: 13px; }
+    .toolbar .title { font-size: 14px; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .toolbar .dim { display: none; }
+    /* Dividers don't make sense when clusters wrap to separate rows — hide. */
+    .toolbar-divider { display: none; }
+    /* Spacer becomes a full-width line break so the buttons drop to a new row
+     * underneath the title (rather than getting crammed alongside it). */
     .toolbar .spacer { flex-basis: 100%; height: 0; }
-    .toolbar .btn { flex: 1; min-width: 0; padding: 6px 2px; font-size: 11px; white-space: nowrap; }
+    /* Auto-refresh dot is too small to be worth its own line on mobile. Hide. */
+    .status { display: none; }
+    /* Each cluster takes a full row. Buttons inside the cluster share the
+     * row width evenly via flex: 1, with compact padding. Three cluster-rows
+     * stack cleanly under the title row. */
+    .toolbar-cluster { flex: 0 0 100%; gap: 6px; }
+    .toolbar .btn { flex: 1; min-width: 0; padding: 8px 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
     .json-panel { width: 100%; }
     .compare-grid { --scale: 0.18; gap: 12px; padding: 12px; }
   }
