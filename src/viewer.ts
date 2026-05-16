@@ -153,17 +153,29 @@ export async function startViewer(port: number): Promise<number> {
   return actualPort;
 }
 
-function renderGalleryPage(port: number): string {
+export function renderGalleryPage(port: number): string {
   const canvases = listCanvases();
   const cards = canvases.map((c) => {
     const canvas = getCanvas(c.id)!;
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const date = new Date(c.createdAt).toLocaleString();
+    // A canvas is "visually empty" when the document root has no children.
+    // The renderer would otherwise produce a silent white panel, which
+    // dominates the gallery at scale. Surface a distinct placeholder instead.
+    const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
+    const thumbBody = isEmpty
+      ? `<div class="thumb-empty">
+            <svg class="thumb-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 3">
+              <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+            </svg>
+            <span>Empty canvas</span>
+          </div>`
+      : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
     return `
       <a href="/canvas/${c.id}" class="card">
-        <div class="thumb">
-          <iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">
+          ${thumbBody}
         </div>
         <div class="info">
           <div class="name">${esc(c.name)}</div>
@@ -196,6 +208,11 @@ function renderGalleryPage(port: number): string {
   .card:hover { border-color: #3b82f6; transform: translateY(-2px); }
   .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: #0a0a0a; position: relative; }
   .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
+  .thumb--empty { background: radial-gradient(ellipse at center, #161616 0%, #0a0a0a 100%); }
+  .thumb-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #444; font-size: 12px; font-weight: 500; letter-spacing: 0.3px; }
+  .thumb-empty-icon { width: 36px; height: 36px; opacity: 0.7; }
+  .card:hover .thumb-empty { color: #666; }
+  .card:hover .thumb-empty-icon { opacity: 1; }
   .info { padding: 16px; }
   .name { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
   .meta { font-size: 12px; color: #666; }
