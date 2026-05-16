@@ -1,8 +1,10 @@
 // Renders docs/viewer-refresh-mock.png — the design spec for the Phase 7
 // slice 5 viewer UI refresh. Composed entirely as a canvas-mcp scene graph
-// (gradients, shadows, components, fluid widths) and screenshotted through
-// the renderer + puppeteer pipeline. Implementation lands against this mock
-// in a follow-up PR; iterating the design here is cheaper than iterating CSS.
+// and screenshotted through the renderer + puppeteer pipeline.
+//
+// Also publishes the canvas to ~/.canvas-mcp/canvases/ so the live spec is
+// reviewable at http://localhost:3001/canvas/viewer-refresh-mock with breakpoint
+// + Compare modes (not just as a flat PNG attached to a PR).
 //
 // Usage: npx tsx scripts/build-viewer-mock.ts
 
@@ -14,26 +16,48 @@ import puppeteer from 'puppeteer';
 import { renderToHtml } from '../src/renderer.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from '../src/types.js';
 
-// Linear-inspired palette: warm dark (slight blue/purple cast), indigo→violet
-// accent gradient, layered surface tones so cards and chrome have depth
-// without heavy shadows. Tabular-feeling counts via fixed-width labels.
+// ---- Palette ------------------------------------------------------------
+// Warm dark with a slight blue cast; the accent (indigo → violet) is the
+// single signature color and is used sparingly so it actually reads as accent.
 const C = {
-  bg: '#0e0e12',
+  // Surfaces (5 stops so we can layer depth without shadows)
+  bg0: '#08080c',
+  bg1: '#0d0d12',
   sidebar: '#131319',
-  surface: '#16161c',
-  surfaceElevated: '#1c1c24',
-  border: '#25252e',
-  borderSubtle: '#1d1d24',
-  textPrimary: '#f5f5f7',
-  textSecondary: '#a1a1ab',
-  textTertiary: '#71717a',
-  textMuted: '#5a5a64',
+  surface: '#16161e',
+  surfaceHover: '#1b1b25',
+  surfaceElevated: '#1e1e29',
+  // Borders
+  border: '#23232d',
+  borderSubtle: '#1a1a23',
+  borderHighlight: 'rgba(255,255,255,0.04)', // top-edge "glass" rim on cards
+  // Text
+  textPrimary: '#fafafa',
+  textSecondary: '#a8a8b3',
+  textTertiary: '#6e6e7a',
+  textMuted: '#4d4d56',
+  // Accent (indigo → violet)
   accentFrom: '#6366f1',
-  accentTo: '#8b5cf6',
-  accentActiveBg: '#1e1b4b',
-  accentSoft: '#c4b5fd',
-  archiveBg: '#1a1421',
+  accentMid: '#7c5cf6',
+  accentTo: '#a855f7',
+  accentSoft: '#c7b8ff',
+  accentBarBg: 'rgba(99,102,241,0.10)',
+  accentBarTo: 'rgba(168,85,247,0.04)',
+  // Project dot palette — stable but distinct so the sidebar reads
+  // multi-colored without being noisy.
+  dot1: '#34d399',
+  dot2: '#60a5fa',
+  dot3: '#f59e0b',
+  dot4: '#ec4899',
+  dot5: '#22d3ee',
+  dot6: '#a78bfa',
+  // Empty placeholder + chart accents
+  chartGreen: ['#34d399', '#10b981'],
+  chartBlue: ['#60a5fa', '#3b82f6'],
+  chartViolet: ['#a78bfa', '#7c3aed'],
 };
+
+const FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
 
 // ---- Sidebar pieces -----------------------------------------------------
 
@@ -42,46 +66,81 @@ const sidebarHeader: SceneNode = {
   type: 'frame',
   layout: 'horizontal',
   alignItems: 'center',
-  gap: 10,
-  padding: [18, 18],
+  gap: 11,
+  padding: [22, 20],
   children: [
+    // Logo mark: a small rounded gradient square (instead of a circle — feels
+    // more product-y, like Linear's L mark).
     {
-      id: 'sb-logo-dot',
-      type: 'ellipse',
-      width: 16, height: 16,
+      id: 'sb-logo-mark',
+      type: 'frame',
+      width: 22, height: 22,
+      cornerRadius: 6,
       gradient: { type: 'linear', angle: 135, stops: [{ color: C.accentFrom }, { color: C.accentTo }] },
+      shadows: [{ x: 0, y: 1, blur: 0, spread: 0, color: 'rgba(255,255,255,0.10)', inset: true }],
     },
-    { id: 'sb-logo-text', type: 'text', content: 'Canvas MCP', fontSize: 14, fontWeight: 600, color: C.textPrimary, letterSpacing: 0.1 },
+    { id: 'sb-logo-text', type: 'text', content: 'Canvas', fontSize: 14, fontWeight: 600, color: C.textPrimary, letterSpacing: -0.1 },
   ],
 };
 
 const wsLabel = (id: string, text: string): SceneNode => ({
   id, type: 'text', content: text,
-  fontSize: 11, fontWeight: 600, color: C.textMuted,
-  letterSpacing: 0.8, textTransform: 'uppercase',
+  fontSize: 10, fontWeight: 600, color: C.textMuted,
+  letterSpacing: 0.9, textTransform: 'uppercase',
 });
 
-const projectRow = (id: string, name: string, count: string, active = false): SceneNode => {
+const projectDot = (id: string, color: string): SceneNode => ({
+  id, type: 'ellipse', width: 6, height: 6, fill: color,
+});
+
+// Project row. When active, it gets:
+//   - a soft gradient fill (accent-from low alpha → accent-to lower alpha)
+//   - a 2px solid accent-color left bar (acts as a focus marker)
+//   - 600-weight project name + brighter count badge
+// This reads more like Linear's active-item treatment than a flat blue tint.
+const projectRow = (id: string, name: string, count: string, dotColor: string, active = false): SceneNode => {
   const base: SceneNode = {
     id, type: 'frame',
     layout: 'horizontal',
-    alignItems: 'center', justifyContent: 'space-between',
-    padding: [8, 12], gap: 8,
+    alignItems: 'center',
+    padding: [8, 12, 8, active ? 10 : 12], // shave 2px of left padding when active so the left bar can fit
+    gap: 10,
     cornerRadius: 6,
     children: [
-      { id: `${id}-name`, type: 'text', content: name, fontSize: 13, fontWeight: active ? 600 : 500, color: active ? C.textPrimary : C.textSecondary },
+      // Left accent bar appears only when active. Conceptually a "focus rail."
+      ...(active
+        ? [{
+            id: `${id}-bar`,
+            type: 'frame' as const,
+            width: 2, height: 14,
+            gradient: { type: 'linear' as const, angle: 180, stops: [{ color: C.accentFrom }, { color: C.accentTo }] },
+            cornerRadius: 2,
+          }]
+        : []),
+      projectDot(`${id}-dot`, dotColor),
+      {
+        id: `${id}-name`,
+        type: 'text',
+        content: name,
+        fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        color: active ? C.textPrimary : C.textSecondary,
+        width: '100%', // takes remaining width so the count anchors right
+      },
       { id: `${id}-count`, type: 'text', content: count, fontSize: 11, fontWeight: 500, color: active ? C.accentSoft : C.textMuted },
     ],
   };
-  if (active) base.fill = C.accentActiveBg;
+  if (active) {
+    base.gradient = { type: 'linear', angle: 90, stops: [{ color: C.accentBarBg }, { color: C.accentBarTo }] };
+  }
   return base;
 };
 
 const wsSection = (id: string, label: string, projects: SceneNode[]): SceneNode => ({
-  id, type: 'frame', layout: 'vertical', gap: 2,
-  padding: [0, 8, 16, 8],
+  id, type: 'frame', layout: 'vertical', gap: 1,
+  padding: [0, 8, 14, 8],
   children: [
-    { id: `${id}-label-wrap`, type: 'frame', padding: [12, 8, 8, 8], children: [wsLabel(`${id}-label`, label)] },
+    { id: `${id}-label-wrap`, type: 'frame', padding: [16, 12, 8, 12], children: [wsLabel(`${id}-label`, label)] },
     ...projects,
   ],
 });
@@ -94,50 +153,60 @@ const archiveRow: SceneNode = {
   padding: [9, 12],
   cornerRadius: 6,
   children: [
+    // Archive box icon — small rounded rect with a top "lid line" via inner shadow
     {
       id: 'sb-archive-icon',
-      type: 'frame', width: 16, height: 14,
-      fill: C.surface,
-      cornerRadius: 3,
-      stroke: C.border, strokeWidth: 1,
+      type: 'frame', width: 16, height: 13,
+      fill: 'transparent',
+      stroke: C.textTertiary, strokeWidth: 1.2,
+      cornerRadius: 2,
     },
     { id: 'sb-archive-name', type: 'text', content: 'Archive', fontSize: 13, fontWeight: 500, color: C.textSecondary, width: '100%' },
-    { id: 'sb-archive-count', type: 'text', content: '3', fontSize: 11, fontWeight: 500, color: C.textMuted },
+    { id: 'sb-archive-count', type: 'text', content: '8', fontSize: 11, fontWeight: 500, color: C.textMuted },
   ],
 };
 
 const sidebar: SceneNode = {
   id: 'sidebar',
   type: 'frame',
-  width: 240, height: 900,
+  width: 248, height: 900,
   fill: C.sidebar,
   layout: 'vertical',
   alignItems: 'stretch',
+  shadows: [
+    // 1px right border via shadow (cleaner than `stroke` which paints all sides)
+    { x: 1, y: 0, blur: 0, spread: 0, color: C.borderSubtle },
+  ],
   children: [
     sidebarHeader,
-    { id: 'sb-header-divider', type: 'frame', height: 1, fill: C.borderSubtle, width: '100%' },
     {
       id: 'sb-nav', type: 'frame',
-      layout: 'vertical', gap: 0, padding: [12, 0, 0, 0],
+      layout: 'vertical', gap: 0, padding: [4, 0, 0, 0],
       width: '100%',
       children: [
-        wsSection('ws-personal', 'Personal', [
-          projectRow('p-untitled', 'Untitled', '21', true),
-          projectRow('p-brand', 'Brand', '5'),
-          projectRow('p-marketing', 'Marketing', '8'),
+        // Dogfood the example data: canvas-mcp is the active workspace, Viewer
+        // is the active project — i.e. exactly what we're working on right now.
+        wsSection('ws-canvas', 'canvas-mcp', [
+          projectRow('p-viewer',   'Viewer',          '14', C.dot1, true),
+          projectRow('p-renderer', 'Renderer',        '6',  C.dot2),
+          projectRow('p-roadmap',  'Roadmap',         '5',  C.dot3),
         ]),
-        wsSection('ws-acme', 'Acme', [
-          projectRow('p-website', 'Website redesign', '12'),
-          projectRow('p-mobile', 'Mobile app', '4'),
+        wsSection('ws-coide', 'Coide', [
+          projectRow('p-agents',  'Agents tab',  '9', C.dot4),
+          projectRow('p-memory',  'Memory',      '4', C.dot5),
+        ]),
+        wsSection('ws-magma', 'Magmalabs', [
+          projectRow('p-sandbox', 'Sandbox', '3', C.dot6),
         ]),
       ],
     },
-    // Footer pushed to bottom (no flex-grow primitive — use a spacer frame instead).
-    { id: 'sb-spacer', type: 'frame', height: 260 },
-    { id: 'sb-footer-divider', type: 'frame', height: 1, fill: C.borderSubtle, width: '100%' },
+    // Push footer to the bottom. Implemented as a fixed-height spacer because
+    // the renderer doesn't expose flex-grow as a primitive.
+    { id: 'sb-spacer', type: 'frame', height: 190 },
     {
       id: 'sb-footer', type: 'frame',
-      padding: [10, 8], width: '100%',
+      padding: [10, 8, 14, 8], width: '100%', gap: 2,
+      shadows: [{ x: 0, y: -1, blur: 0, spread: 0, color: C.borderSubtle, inset: true }],
       children: [archiveRow],
     },
   ],
@@ -145,94 +214,176 @@ const sidebar: SceneNode = {
 
 // ---- Main pane pieces ---------------------------------------------------
 
+// A small "Personal / Untitled" style breadcrumb where the workspace name
+// is dim and the project name is brighter — guides the eye to "where am I."
+const breadcrumb: SceneNode = {
+  id: 'breadcrumb', type: 'frame',
+  layout: 'horizontal', alignItems: 'center', gap: 8,
+  children: [
+    { id: 'bc-ws',   type: 'text', content: 'canvas-mcp', fontSize: 12, fontWeight: 500, color: C.textTertiary },
+    { id: 'bc-sep',  type: 'text', content: '/',          fontSize: 12, fontWeight: 500, color: C.textMuted },
+    { id: 'bc-proj', type: 'text', content: 'Viewer',     fontSize: 12, fontWeight: 600, color: C.textSecondary },
+  ],
+};
+
+// Title row: title on the left, "14 canvases" meta and a "+ New canvas" CTA
+// on the right. Justify space-between gives the page a stronger horizontal axis.
+const titleRow: SceneNode = {
+  id: 'title-row', type: 'frame',
+  layout: 'horizontal', alignItems: 'center', justifyContent: 'space-between', gap: 24,
+  children: [
+    {
+      id: 'title-block', type: 'frame', layout: 'vertical', gap: 6, alignItems: 'start',
+      children: [
+        breadcrumb,
+        { id: 'title', type: 'text', content: 'Viewer', fontSize: 36, fontWeight: 700, color: C.textPrimary, letterSpacing: -0.6 },
+        { id: 'meta', type: 'text', content: '14 canvases', fontSize: 13, fontWeight: 500, color: C.textTertiary },
+      ],
+    },
+    // "+ New canvas" pill: subtle border, soft gradient on hover (mocked via
+    // a low-alpha fill here). Right-aligned so it anchors the header axis.
+    {
+      id: 'cta-new', type: 'frame',
+      layout: 'horizontal', alignItems: 'center', gap: 8,
+      padding: [10, 16],
+      cornerRadius: 8,
+      fill: C.surfaceElevated,
+      shadows: [
+        { x: 0, y: 1, blur: 0, spread: 0, color: C.borderHighlight, inset: true },
+        { x: 0, y: 1, blur: 2, spread: 0, color: 'rgba(0,0,0,0.3)' },
+      ],
+      children: [
+        { id: 'cta-plus', type: 'text', content: '+', fontSize: 14, fontWeight: 600, color: C.accentSoft },
+        { id: 'cta-text', type: 'text', content: 'New canvas', fontSize: 13, fontWeight: 600, color: C.textPrimary },
+      ],
+    },
+  ],
+};
+
 const mainHeader: SceneNode = {
   id: 'main-header',
   type: 'frame',
-  layout: 'vertical', gap: 6,
-  padding: [28, 32, 26, 32],
-  children: [
-    { id: 'breadcrumb', type: 'text', content: 'Personal / Untitled', fontSize: 12, fontWeight: 500, color: C.textTertiary },
-    { id: 'title', type: 'text', content: 'Untitled', fontSize: 26, fontWeight: 600, color: C.textPrimary, letterSpacing: -0.3 },
-    { id: 'meta', type: 'text', content: '21 canvases', fontSize: 13, fontWeight: 500, color: C.textSecondary },
-  ],
+  padding: [28, 36, 24, 36],
+  children: [titleRow],
 };
 
 const headerDivider: SceneNode = { id: 'main-divider', type: 'frame', height: 1, fill: C.borderSubtle, width: '100%' };
 
-// A "card" with a thumbnail area + name/meta strip.
-const card = (id: string, name: string, meta: string, thumb: 'empty' | 'content' = 'empty'): SceneNode => ({
-  id, type: 'frame',
-  width: 288, // 4 across in (1440 - 240 - 64 - 3*24)/4 ≈ 288
-  fill: C.surface,
-  cornerRadius: 12,
-  layout: 'vertical',
+// ---- Cards --------------------------------------------------------------
+
+// Empty thumbnail: instead of a tiny dashed square that reads as "broken,"
+// use a soft radial bloom + a hairline grid impression to feel like
+// "blank canvas, ready" rather than "missing image."
+const emptyThumb = (id: string): SceneNode => ({
+  id: `${id}-thumb`, type: 'frame',
+  width: '100%', height: 168,
+  position: 'relative',
+  overflow: 'hidden',
+  gradient: { type: 'radial', stops: [{ color: '#1c1c26' }, { color: '#0f0f15' }] },
+  cornerRadius: [12, 12, 0, 0],
+  alignItems: 'center', justifyContent: 'center',
   children: [
+    // Soft halo behind the placeholder mark
     {
-      id: `${id}-thumb`, type: 'frame',
-      width: '100%', height: 180,
-      // `position: relative` scopes any absolutely-positioned children to
-      // this frame (otherwise they migrate to body coordinates).
-      position: 'relative',
-      gradient: thumb === 'empty'
-        ? { type: 'radial', stops: [{ color: '#1a1a22' }, { color: '#0f0f14' }] }
-        : { type: 'linear', angle: 135, stops: [{ color: '#1e1b4b' }, { color: '#0e0e12' }] },
-      cornerRadius: [12, 12, 0, 0],
-      alignItems: 'center', justifyContent: 'center',
-      overflow: 'hidden',
-      children: thumb === 'empty'
-        ? [
-            {
-              id: `${id}-thumb-icon`, type: 'frame',
-              width: 28, height: 28,
-              stroke: C.textMuted, strokeWidth: 1,
-              cornerRadius: 4,
-              opacity: 0.5,
-            },
-          ]
-        : [
-            // Faux dashboard content: a small bar chart. Layout flex so the
-            // bars share a baseline; no `position: absolute` (which broke
-            // out of the thumb in the first pass).
-            {
-              id: `${id}-chart`, type: 'frame',
-              layout: 'horizontal', alignItems: 'end', gap: 8,
-              children: [
-                { id: `${id}-b1`, type: 'frame', width: 14, height: 36, cornerRadius: 2, gradient: { type: 'linear', angle: 180, stops: [{ color: '#34d399' }, { color: '#10b981' }] } },
-                { id: `${id}-b2`, type: 'frame', width: 14, height: 60, cornerRadius: 2, gradient: { type: 'linear', angle: 180, stops: [{ color: '#34d399' }, { color: '#10b981' }] } },
-                { id: `${id}-b3`, type: 'frame', width: 14, height: 48, cornerRadius: 2, gradient: { type: 'linear', angle: 180, stops: [{ color: '#34d399' }, { color: '#10b981' }] } },
-                { id: `${id}-b4`, type: 'frame', width: 14, height: 76, cornerRadius: 2, gradient: { type: 'linear', angle: 180, stops: [{ color: '#34d399' }, { color: '#10b981' }] } },
-                { id: `${id}-b5`, type: 'frame', width: 14, height: 92, cornerRadius: 2, gradient: { type: 'linear', angle: 180, stops: [{ color: '#60a5fa' }, { color: '#3b82f6' }] } },
-              ],
-            },
-          ],
+      id: `${id}-halo`, type: 'ellipse',
+      width: 140, height: 140,
+      gradient: { type: 'radial', stops: [{ color: 'rgba(124,92,246,0.10)' }, { color: 'rgba(124,92,246,0)' }] },
+      position: 'absolute', x: 74, y: 14,
+    },
+    // Stack two squares offset, hinting at "layered canvas" — feels deliberate
+    {
+      id: `${id}-mark-back`, type: 'frame',
+      width: 38, height: 28,
+      stroke: 'rgba(255,255,255,0.06)', strokeWidth: 1,
+      cornerRadius: 4,
+      position: 'absolute', x: 144, y: 76,
     },
     {
-      id: `${id}-info`, type: 'frame',
-      padding: [14, 16, 16, 16],
-      gap: 4,
-      children: [
-        { id: `${id}-name`, type: 'text', content: name, fontSize: 14, fontWeight: 600, color: C.textPrimary },
-        { id: `${id}-meta`, type: 'text', content: meta, fontSize: 12, fontWeight: 500, color: C.textTertiary },
-      ],
+      id: `${id}-mark-front`, type: 'frame',
+      width: 38, height: 28,
+      stroke: 'rgba(255,255,255,0.10)', strokeWidth: 1,
+      cornerRadius: 4,
+      fill: 'rgba(255,255,255,0.02)',
+      position: 'absolute', x: 152, y: 72,
     },
   ],
 });
+
+// Content thumbnail: a faux "designed canvas" preview — gradient bg + a
+// realistic mini bar chart, so the gallery doesn't look 80% empty.
+const contentThumb = (id: string, palette: string[]): SceneNode => ({
+  id: `${id}-thumb`, type: 'frame',
+  width: '100%', height: 168,
+  position: 'relative',
+  overflow: 'hidden',
+  gradient: { type: 'linear', angle: 135, stops: [{ color: '#1f1b3a' }, { color: '#0f0e1a' }] },
+  cornerRadius: [12, 12, 0, 0],
+  alignItems: 'center', justifyContent: 'center',
+  children: [
+    {
+      id: `${id}-chart`, type: 'frame',
+      layout: 'horizontal', alignItems: 'end', gap: 7,
+      children: [40, 64, 50, 80, 96].map((h, i) => ({
+        id: `${id}-b${i}`,
+        type: 'frame' as const,
+        width: 14, height: h,
+        cornerRadius: 2,
+        gradient: { type: 'linear' as const, angle: 180, stops: [{ color: i === 4 ? palette[2] : palette[0] }, { color: i === 4 ? palette[3] : palette[1] }] },
+      })),
+    },
+  ],
+});
+
+const card = (id: string, name: string, meta: string, variant: 'empty' | 'green' | 'blue' | 'violet'): SceneNode => {
+  const palette =
+    variant === 'green'  ? [...C.chartGreen,  ...C.chartBlue]  :
+    variant === 'blue'   ? [...C.chartBlue,   ...C.chartViolet]  :
+    variant === 'violet' ? [...C.chartViolet, ...C.chartGreen]  :
+    [];
+  return {
+    id, type: 'frame',
+    width: 264,
+    fill: C.surface,
+    cornerRadius: 12,
+    layout: 'vertical',
+    shadows: [
+      // 1px top-highlight gives the card a glassy upper edge — Linear-style polish
+      { x: 0, y: 1, blur: 0, spread: 0, color: C.borderHighlight, inset: true },
+      // Soft drop shadow for depth without weight
+      { x: 0, y: 4, blur: 12, spread: -2, color: 'rgba(0,0,0,0.35)' },
+    ],
+    children: [
+      variant === 'empty' ? emptyThumb(id) : contentThumb(id, palette),
+      {
+        id: `${id}-info`, type: 'frame',
+        padding: [14, 16, 16, 16],
+        gap: 4,
+        children: [
+          { id: `${id}-name`, type: 'text', content: name, fontSize: 14, fontWeight: 600, color: C.textPrimary, letterSpacing: -0.1 },
+          { id: `${id}-meta`, type: 'text', content: meta, fontSize: 12, fontWeight: 500, color: C.textTertiary },
+        ],
+      },
+    ],
+  };
+};
 
 const grid: SceneNode = {
   id: 'grid',
   type: 'frame',
   layout: 'horizontal', wrap: true,
-  gap: 24,
-  padding: [28, 32],
+  gap: 20,
+  padding: [24, 36, 36, 36],
+  width: '100%',
   children: [
-    card('c1', 'readme-hero', '1440 × 900', 'content'),
-    card('c2', 'Bad Design', '1440 × 900'),
-    card('c3', 'Sample Test Design', '1440 × 900'),
-    card('c4', 'Dashboard', '1440 × 900', 'content'),
-    card('c5', 'Components', '1440 × 900'),
-    card('c6', 'Responsive scaling', '1440 × 900'),
-    card('c7', 'Detailed Test', '1440 × 900'),
-    card('c8', 'Material', '1440 × 900'),
+    // 4 × 2 grid, mixing content + empty so the gallery has visual rhythm
+    card('c1', 'Sidebar spec',       'Updated 2h ago',  'violet'),
+    card('c2', 'Empty state',         'Updated 5h ago',  'empty'),
+    card('c3', 'Project page',       'Updated yesterday','green'),
+    card('c4', 'Archive view',       'Updated 3d ago',  'blue'),
+    card('c5', 'Compare layout',     '1440 × 900',      'empty'),
+    card('c6', 'Detail toolbar',     '1440 × 900',      'empty'),
+    card('c7', 'Hover states',       '1440 × 900',      'empty'),
+    card('c8', 'Typography study',   '1440 × 900',      'green'),
   ],
 };
 
@@ -242,6 +393,9 @@ const mainPane: SceneNode = {
   layout: 'vertical',
   width: '100%',
   alignItems: 'stretch',
+  // Ambient gradient: very subtle radial bloom from top-left in the accent
+  // color, fading into the page bg. Reads as light, not as a flat dark plane.
+  gradient: { type: 'linear', angle: 165, stops: [{ color: '#101019', position: 0 }, { color: C.bg1, position: 60 }, { color: C.bg0, position: 100 }] },
   children: [mainHeader, headerDivider, grid],
 };
 
@@ -250,7 +404,8 @@ const mainPane: SceneNode = {
 const root: SceneNode = {
   id: 'doc',
   type: 'document',
-  fill: C.bg,
+  fill: C.bg0,
+  fontFamily: FONT_STACK,
   layout: 'horizontal',
   alignItems: 'stretch',
   children: [sidebar, mainPane],
@@ -262,11 +417,9 @@ const SCALE = 2;
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'viewer-refresh-mock.png');
 
-// Also publish the canvas into the local store so the design is *live* in the
-// running viewer (the whole point of dogfood-first — you should be able to
-// review the spec at http://localhost:3001 with breakpoints, JSON inspector,
-// and Compare mode, not just as a flat PNG in the PR). Stable canvas ID keeps
-// re-runs idempotent — no duplicate "viewer-refresh-mock-v2/v3/…" cards.
+// Publish to the local canvas store so the design is reviewable LIVE in the
+// viewer at http://localhost:3001/canvas/viewer-refresh-mock with breakpoints
+// and Compare mode — not just as a flat PNG attached to a PR.
 const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
 const CANVAS_ID = 'viewer-refresh-mock';
 const now = new Date().toISOString();
@@ -281,7 +434,6 @@ const canvas: Canvas = {
   projectId: DEFAULT_PROJECT_ID,
 };
 
-// Render to PNG (the checked-in design artifact)
 const html = renderToHtml(root, WIDTH, HEIGHT);
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 try {
@@ -296,7 +448,6 @@ try {
   await browser.close();
 }
 
-// Publish to the local canvas store
 await mkdir(STORE_DIR, { recursive: true });
 await writeFile(join(STORE_DIR, `${CANVAS_ID}.json`), JSON.stringify(canvas, null, 2));
 console.log(`Published canvas "${CANVAS_ID}" to ${STORE_DIR}`);
