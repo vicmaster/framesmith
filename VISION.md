@@ -252,9 +252,9 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 - [x] Per-node actionable issues with `nodeId` references for closed-loop fixes
 - [x] Two modes: `fast` (JSON-only, <100ms) and `detailed` (Puppeteer-based pixel overlap)
 - [x] Category filtering for targeted re-evaluation
-- [ ] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
 - [ ] Benchmark suite — track scoring stability across a fixed corpus of designs
 - [ ] Auto-fix suggestions emitted as ready-to-run `batch_design` operations
+- [ ] LLM-judge mode (optional secondary evaluator using a vision model on the screenshot)
 
 ### Phase 7 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
