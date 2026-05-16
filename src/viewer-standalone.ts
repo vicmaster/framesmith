@@ -14,19 +14,26 @@
  */
 
 import { loadPersistedCanvases } from './scene-graph.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } from './workspaces.js';
 import { startViewer, getViewerUrl } from './viewer.js';
 import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdirSync } from 'node:fs';
 
-const CANVAS_DIR = join(homedir(), '.canvas-mcp', 'canvases');
+// Match the env-overridable data dir scene-graph.ts uses, so CANVAS_MCP_HOME
+// relocates the watcher too.
+const DATA_DIR = process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+const CANVAS_DIR = join(DATA_DIR, 'canvases');
 
 async function main() {
   // Ensure directory exists
   mkdirSync(CANVAS_DIR, { recursive: true });
 
-  // Initial load
+  // Boot order matches src/index.ts: workspaces first so the default
+  // project exists before canvas migration assigns it.
+  loadPersistedWorkspaces();
+  ensureDefaultWorkspaceAndProject();
   loadPersistedCanvases();
 
   // Determine port

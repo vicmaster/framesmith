@@ -2,7 +2,8 @@ import { createServer, type Server } from 'node:http';
 import { getCanvas, listCanvases } from './scene-graph.js';
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
-import type { Canvas } from './types.js';
+import { getProject, listProjects, listWorkspaces } from './workspaces.js';
+import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
 
 let runningPort: number | null = null;
 let externalViewerUrl: string | null = null;
@@ -108,10 +109,20 @@ export async function startViewer(port: number): Promise<number> {
         return;
       }
 
-      // Gallery (index)
-      if (path === '/') {
+      // Project page
+      const projectMatch = path.match(/^\/project\/([^/]+)$/);
+      if (projectMatch) {
+        const html = renderProjectPage(projectMatch[1], runningPort ?? 3001);
+        if (!html) { res.writeHead(404); res.end('Project not found'); return; }
         res.setHeader('Content-Type', 'text/html');
-        res.end(renderGalleryPage(runningPort ?? 3001));
+        res.end(html);
+        return;
+      }
+
+      // Index → default project
+      if (path === '/') {
+        res.writeHead(302, { Location: `/project/${DEFAULT_PROJECT_ID}` });
+        res.end();
         return;
       }
 
@@ -153,16 +164,60 @@ export async function startViewer(port: number): Promise<number> {
   return actualPort;
 }
 
-export function renderGalleryPage(port: number): string {
-  const canvases = listCanvases();
+/** Renders the Figma-style left sidebar: workspaces → projects tree, with
+ *  canvas-count badges and an active-state highlight on the current project.
+ *  Workspaces always expanded for v1 — collapse logic can come later. */
+function renderSidebar(activeProjectId: string): string {
+  const allCanvases = listCanvases();
+  const projectCount = (projectId: string) =>
+    allCanvases.filter((c) => c.projectId === projectId && !c.archived).length;
+
+  const sections = listWorkspaces().map((ws) => {
+    const wsProjects = listProjects(ws.id);
+    if (wsProjects.length === 0) {
+      return `<div class="ws-section">
+          <div class="ws-name">${esc(ws.name)}</div>
+          <div class="ws-empty">No projects yet</div>
+        </div>`;
+    }
+    const items = wsProjects.map((p) => {
+      const isActive = p.id === activeProjectId;
+      return `<a href="/project/${p.id}" class="project${isActive ? ' active' : ''}">
+          <span class="project-name">${esc(p.name)}</span>
+          <span class="project-count">${projectCount(p.id)}</span>
+        </a>`;
+    }).join('');
+    return `<div class="ws-section">
+        <div class="ws-name">${esc(ws.name)}</div>
+        ${items}
+      </div>`;
+  }).join('');
+
+  return `<aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-logo">Canvas MCP</span>
+      </div>
+      <nav class="sidebar-nav">${sections}</nav>
+    </aside>`;
+}
+
+/** Project-scoped main page. Sidebar on left, breadcrumb + canvas grid on right.
+ *  Returns null when the project doesn't exist so the route handler can 404. */
+export function renderProjectPage(projectId: string, port: number): string | null {
+  const project = getProject(projectId);
+  if (!project) return null;
+
+  // Find the parent workspace for the breadcrumb. Default to "Personal" if
+  // somehow orphaned (shouldn't happen after slice 1 migration).
+  const ws = listWorkspaces().find((w) => w.id === project.workspaceId);
+  const wsName = ws?.name ?? 'Personal';
+
+  const canvases = listCanvases().filter((c) => c.projectId === projectId && !c.archived);
   const cards = canvases.map((c) => {
     const canvas = getCanvas(c.id)!;
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const date = new Date(c.createdAt).toLocaleString();
-    // A canvas is "visually empty" when the document root has no children.
-    // The renderer would otherwise produce a silent white panel, which
-    // dominates the gallery at scale. Surface a distinct placeholder instead.
     const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
     const thumbBody = isEmpty
       ? `<div class="thumb-empty">
@@ -174,9 +229,7 @@ export function renderGalleryPage(port: number): string {
       : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
     return `
       <a href="/canvas/${c.id}" class="card">
-        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">
-          ${thumbBody}
-        </div>
+        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${thumbBody}</div>
         <div class="info">
           <div class="name">${esc(c.name)}</div>
           <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
@@ -184,11 +237,11 @@ export function renderGalleryPage(port: number): string {
       </a>`;
   }).join('\n');
 
-  const empty = canvases.length === 0
+  const emptyState = canvases.length === 0
     ? `<div class="empty">
         <div class="empty-icon">&#9634;</div>
-        <div>No canvases yet</div>
-        <div class="empty-hint">Create one via your MCP client using <code>canvas_create</code></div>
+        <div>No canvases in ${esc(project.name)} yet</div>
+        <div class="empty-hint">Create one via your MCP client using <code>canvas_create({ projectId: "${project.id}" })</code></div>
        </div>`
     : '';
 
@@ -196,13 +249,35 @@ export function renderGalleryPage(port: number): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Canvas MCP Viewer</title>
+<title>${esc(project.name)} — Canvas MCP</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; min-height: 100vh; }
-  .header { padding: 24px 32px; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 12px; }
-  .header h1 { font-size: 20px; font-weight: 600; color: #fff; }
-  .header .badge { background: #3b82f6; color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+  body { background: #0a0a0a; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .app { display: flex; min-height: 100vh; }
+
+  /* Sidebar */
+  .sidebar { width: 240px; flex-shrink: 0; background: #0f0f0f; border-right: 1px solid #1a1a1a; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  .sidebar-header { padding: 20px 18px; border-bottom: 1px solid #1a1a1a; }
+  .sidebar-logo { font-size: 14px; font-weight: 600; color: #fff; letter-spacing: 0.2px; }
+  .sidebar-nav { padding: 16px 8px; flex: 1; }
+  .ws-section { margin-bottom: 20px; }
+  .ws-name { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: #666; padding: 0 10px 8px; font-weight: 600; }
+  .ws-empty { font-size: 12px; color: #555; padding: 4px 10px; font-style: italic; }
+  .project { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px; border-radius: 6px; color: #aaa; text-decoration: none; font-size: 13px; transition: background 0.15s, color 0.15s; margin-bottom: 2px; }
+  .project:hover { background: #181818; color: #fff; }
+  .project.active { background: #1e3a5f; color: #fff; }
+  .project-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .project-count { font-size: 11px; color: #666; flex-shrink: 0; margin-left: 8px; }
+  .project.active .project-count { color: #93c5fd; }
+
+  /* Main pane */
+  .main { flex: 1; min-width: 0; }
+  .main-header { padding: 24px 32px; border-bottom: 1px solid #1a1a1a; }
+  .breadcrumb { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .project-title { font-size: 22px; font-weight: 600; color: #fff; }
+  .project-meta { font-size: 13px; color: #666; margin-top: 6px; }
+
+  /* Existing card / thumb styles */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 24px; padding: 32px; }
   .card { background: #111; border: 1px solid #222; border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; transition: border-color 0.2s, transform 0.2s; }
   .card:hover { border-color: #3b82f6; transform: translateY(-2px); }
@@ -223,24 +298,38 @@ export function renderGalleryPage(port: number): string {
 </style>
 </head>
 <body>
-  <div class="header">
-    <h1>Canvas MCP</h1>
-    <span class="badge">${canvases.length} canvas${canvases.length !== 1 ? 'es' : ''}</span>
+  <div class="app">
+    ${renderSidebar(projectId)}
+    <main class="main">
+      <div class="main-header">
+        <div class="breadcrumb">${esc(wsName)} / ${esc(project.name)}</div>
+        <h1 class="project-title">${esc(project.name)}</h1>
+        <div class="project-meta">${canvases.length} canvas${canvases.length !== 1 ? 'es' : ''}</div>
+      </div>
+      ${canvases.length > 0 ? `<div class="grid">${cards}</div>` : emptyState}
+    </main>
   </div>
-  ${canvases.length > 0 ? `<div class="grid">${cards}</div>` : empty}
   <script>
-    // Auto-refresh gallery every 3 seconds
+    // Auto-refresh: poll the canvas count for this project, reload if it changes.
     let lastCount = ${canvases.length};
     setInterval(async () => {
       try {
         const res = await fetch('/api/canvases');
         const data = await res.json();
-        if (data.length !== lastCount) location.reload();
+        const inProject = data.filter((c) => c.projectId === '${projectId}' && !c.archived).length;
+        if (inProject !== lastCount) location.reload();
       } catch {}
     }, 3000);
   </script>
 </body>
 </html>`;
+}
+
+/** Backwards-compatible alias: renders the default project. The previous
+ *  `renderGalleryPage` was a flat all-canvases view; the new model is
+ *  project-scoped, and the default project is the natural landing place. */
+export function renderGalleryPage(port: number): string {
+  return renderProjectPage(DEFAULT_PROJECT_ID, port) ?? '<h1>No projects found</h1>';
 }
 
 export function renderDetailPage(canvas: Canvas, port: number): string {
@@ -294,7 +383,7 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
 </head>
 <body>
   <div class="toolbar">
-    <a href="/">&larr; Back</a>
+    <a href="/project/${canvas.projectId}">&larr; Back</a>
     <span class="title">${esc(canvas.name)}</span>
     <span class="dim">${w} x ${h}</span>
     <div class="spacer"></div>
