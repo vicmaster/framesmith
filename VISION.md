@@ -262,17 +262,40 @@ A flat dashboard of every canvas works at 5–10 canvases; it breaks down at 20+
 
 Authoring intent: **the AI is the primary author**, so hierarchy lands as MCP tools first; the viewer becomes the secondary client that reflects those tools' state.
 
-- [ ] Data model — introduce `Workspace` and `Project` entities; auto-migrate existing canvases into a default `Personal` workspace + `Untitled` project on first load (no manual intervention required)
-- [ ] MCP tools — Workspaces: `workspace_create`, `workspace_list`, `workspace_rename`, `workspace_delete`
-- [ ] MCP tools — Projects: `project_create`, `project_list`, `project_rename`, `project_delete`
-- [ ] MCP tools — Canvas lifecycle: `canvas_move` (between projects), `canvas_archive`, `canvas_delete`; `canvas_create` accepts optional `projectId`
-- [ ] Thumbnails — empty / never-rendered canvases get a distinct placeholder treatment (the current silent-white panel is the dominant visual at >5 canvases)
-- [ ] Viewer — Figma-style collapsible left sidebar: workspaces → projects, with active-state highlighting
-- [ ] Viewer — main pane is project-scoped: breadcrumb + canvas grid for the selected project; clear empty-states
-- [ ] Viewer — archive surface (separate sidebar entry); restore + permadelete actions
-- [ ] Viewer — premium UI refresh across gallery, detail page, and compare view (typography, spacing, color, micro-interactions)
+- [x] Data model — introduce `Workspace` and `Project` entities; auto-migrate existing canvases into a default `Personal` workspace + `Untitled` project on first load (no manual intervention required)
+- [x] MCP tools — Workspaces: `workspace_create`, `workspace_list`, `workspace_rename`, `workspace_delete`
+- [x] MCP tools — Projects: `project_create`, `project_list`, `project_rename`, `project_delete`
+- [x] MCP tools — Canvas lifecycle: `canvas_move` (between projects), `canvas_archive`, `canvas_delete`; `canvas_create` accepts optional `projectId`
+- [x] Thumbnails — empty / never-rendered canvases get a distinct placeholder treatment (the current silent-white panel is the dominant visual at >5 canvases)
+- [x] Viewer — Figma-style collapsible left sidebar: workspaces → projects, with active-state highlighting
+- [x] Viewer — main pane is project-scoped: breadcrumb + canvas grid for the selected project; clear empty-states
+- [x] Viewer — archive surface (separate sidebar entry); restore + permadelete actions
+- [x] Viewer — premium UI refresh across gallery, detail page, and compare view (typography, spacing, color, micro-interactions)
 
-### Phase 8 — Ecosystem (v1.0)
+### Phase 8 — Renderer expressiveness (v0.8)
+
+The slice 5 UI refresh hit ceilings the current renderer can't cross: no `backdrop-filter` (so no real glassmorphism), no custom font loading (typography stuck on the system stack), no SVG path support (custom icons like the archive box / logo mark are approximated with stroked rectangles), and no transitions/animations (state changes feel instant, not crafted). Each of these is what separates "competent dark UI" from "designer says wow." This phase expands the renderer's expressivity vocabulary so future designs aren't bottlenecked by what the scene graph can express.
+
+Surfaced during Phase 7 — every item came from a concrete design moment we wanted but couldn't render.
+
+- [ ] `backdrop-filter` support — `blur` / `saturate` / `brightness`; enables glassmorphism on cards, modals, sticky toolbars
+- [ ] Custom font loading — `fontFamily` URLs (Google Fonts or hosted .woff2) loaded via `@font-face` in the renderer's `<head>`; canvas-level `fonts` array for declarations
+- [ ] SVG path primitives — `path` node type with `d` attribute support so iconography stops being approximated rectangles
+- [ ] Transitions + animations — `transition` shorthand on nodes, plus a small `@keyframes` library for common patterns (fade-in, slide-up). Useful for the viewer chrome and for designed canvases alike
+- [ ] `position: absolute` foot-gun fix — automatic `position: relative` injection on a frame when any descendant uses `position: absolute` without a positioned ancestor (a real bug that bit the slice 5 mock)
+- [ ] (Stretch) CSS variables exposed at the node level for token-driven theming inside a canvas (precursor to Phase 9 design systems)
+
+### Phase 9 — Workspace-level design systems (v0.9)
+
+Design tokens already live on `Canvas.variables` (colors / spacing / radius / typography) and the preset system can apply named systems per-canvas. Promote that to **workspace-inherited** tokens: a workspace declares a design system once, all projects + canvases under it inherit by default with explicit per-canvas overrides allowed. Closes the loop on "I'm working on Coide; every Coide canvas should follow Coide's design system."
+
+- [ ] `Workspace.designSystem` field referencing a preset by name OR an inline tokens object
+- [ ] Resolution order at render: canvas variables → project (if we add a layer) → workspace → built-in defaults
+- [ ] MCP tools: `workspace_set_design_system`, `workspace_get_design_system`
+- [ ] Preset migration: existing presets become workspace-installable
+- [ ] Guidelines update: when authoring, reach for workspace tokens instead of literal hex codes
+
+### Phase 10 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access
