@@ -32,6 +32,14 @@ const markupChecks: Array<{ name: string; needle: string | RegExp }> = [
   { name: 'refreshFrames helper defined', needle: 'function refreshFrames' },
   { name: '.viewport.compare CSS rule', needle: '.viewport.compare' },
   { name: '--bp-w CSS variable wiring', needle: '--bp-w' },
+  // Slice-5b polish: toolbar buttons are grouped into clusters separated by
+  // hairline dividers (was a flat row of 8 same-weight buttons).
+  { name: 'toolbar clusters group related buttons', needle: 'class="toolbar-cluster"' },
+  { name: 'toolbar dividers between clusters', needle: 'class="toolbar-divider"' },
+  // Mobile polish: dividers hidden, clusters stack full-width, status dot hidden.
+  { name: 'mobile: toolbar-divider hidden in @media query', needle: /@media \(max-width: 640px\)[\s\S]*?\.toolbar-divider\s*\{\s*display:\s*none/ },
+  { name: 'mobile: cluster takes 100% row width', needle: /@media \(max-width: 640px\)[\s\S]*?\.toolbar-cluster\s*\{[^}]*flex:\s*0\s*0\s*100%/ },
+  { name: 'mobile: status dot hidden', needle: /@media \(max-width: 640px\)[\s\S]*?\.status\s*\{\s*display:\s*none/ },
 ];
 
 let allPass = true;
