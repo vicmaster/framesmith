@@ -7,6 +7,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases } from './scene-graph.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } from './workspaces.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
@@ -589,7 +590,11 @@ async function probeViewer(port: number): Promise<boolean> {
 }
 
 async function main() {
-  // Load any canvases persisted from previous sessions
+  // Phase 7 boot order matters: workspaces+projects load first so the default
+  // workspace/project exist, then canvas migration can assign DEFAULT_PROJECT_ID
+  // to any pre-Phase-7 canvases that lack a projectId.
+  loadPersistedWorkspaces();
+  ensureDefaultWorkspaceAndProject();
   loadPersistedCanvases();
 
   // If CANVAS_VIEWER_URL is set, use that external viewer (skip starting our own)

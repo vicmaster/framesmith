@@ -2,21 +2,29 @@ import { nanoid } from 'nanoid';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import type { Canvas, SceneNode } from './types.js';
+import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 
 const store = new Map<string, Canvas>();
 
 // --- Disk persistence ---
-const CANVAS_DIR = join(homedir(), '.canvas-mcp', 'canvases');
+// `CANVAS_MCP_HOME` lets tests redirect persistence to a tmp dir without
+// touching the real ~/.canvas-mcp tree. Resolved per call so an env var set
+// after module import still takes effect.
+function dataDir(): string {
+  return process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+}
+function canvasDir(): string {
+  return join(dataDir(), 'canvases');
+}
 
 function ensureDir(): void {
-  mkdirSync(CANVAS_DIR, { recursive: true });
+  mkdirSync(canvasDir(), { recursive: true });
 }
 
 function persistCanvas(canvas: Canvas): void {
   try {
     ensureDir();
-    writeFileSync(join(CANVAS_DIR, `${canvas.id}.json`), JSON.stringify(canvas, null, 2));
+    writeFileSync(join(canvasDir(), `${canvas.id}.json`), JSON.stringify(canvas, null, 2));
   } catch (err) {
     process.stderr.write(`Warning: Could not persist canvas ${canvas.id}: ${(err as Error).message}\n`);
   }
@@ -24,28 +32,41 @@ function persistCanvas(canvas: Canvas): void {
 
 function removePersistedCanvas(id: string): void {
   try {
-    const filePath = join(CANVAS_DIR, `${id}.json`);
+    const filePath = join(canvasDir(), `${id}.json`);
     if (existsSync(filePath)) unlinkSync(filePath);
   } catch {}
 }
 
-/** Load all persisted canvases from disk into the in-memory store. */
+/**
+ * Load all persisted canvases from disk into the in-memory store. Migrates
+ * pre-Phase-7 canvases that have no `projectId` by assigning them to the
+ * default project (created by `ensureDefaultWorkspaceAndProject` at startup)
+ * and rewriting them to disk so the migration is one-shot per canvas.
+ */
 export function loadPersistedCanvases(): number {
+  store.clear();
   try {
     ensureDir();
-    const files = readdirSync(CANVAS_DIR).filter(f => f.endsWith('.json'));
+    const files = readdirSync(canvasDir()).filter(f => f.endsWith('.json'));
     let loaded = 0;
+    let migrated = 0;
     for (const file of files) {
       try {
-        const data = JSON.parse(readFileSync(join(CANVAS_DIR, file), 'utf-8')) as Canvas;
+        const data = JSON.parse(readFileSync(join(canvasDir(), file), 'utf-8')) as Canvas;
         if (data.id && data.root) {
+          if (!data.projectId) {
+            data.projectId = DEFAULT_PROJECT_ID;
+            persistCanvas(data);
+            migrated++;
+          }
           store.set(data.id, data);
           loaded++;
         }
       } catch {}
     }
     if (loaded > 0) {
-      process.stderr.write(`Loaded ${loaded} persisted canvas(es) from ${CANVAS_DIR}\n`);
+      const migratedSuffix = migrated > 0 ? ` (${migrated} migrated to default project)` : '';
+      process.stderr.write(`Loaded ${loaded} persisted canvas(es) from ${canvasDir()}${migratedSuffix}\n`);
     }
     return loaded;
   } catch {
@@ -53,7 +74,7 @@ export function loadPersistedCanvases(): number {
   }
 }
 
-export function createCanvas(name?: string): Canvas {
+export function createCanvas(name?: string, projectId: string = DEFAULT_PROJECT_ID): Canvas {
   const id = nanoid(10);
   const canvas: Canvas = {
     id,
@@ -71,6 +92,7 @@ export function createCanvas(name?: string): Canvas {
     components: {},
     createdAt: new Date().toISOString(),
     lastModified: new Date().toISOString(),
+    projectId,
   };
   store.set(id, canvas);
   persistCanvas(canvas);
