@@ -244,7 +244,7 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 - [x] Root document fills/centers the viewport cleanly — no dead white canvas on wide screens
 - [x] AI guidance — tool descriptions / guidelines steer the assistant toward fluid widths + `responsive` hints instead of hardcoded px
 - [x] `screenshot_responsive` + viewer reflect true reflow, not just an iframe resize
-- [ ] Viewer shows the adaptation clearly — side-by-side breakpoint comparison, not just toggle buttons
+- [x] Viewer shows the adaptation clearly — side-by-side breakpoint comparison, not just toggle buttons
 - [ ] (Optional / stretch) per-breakpoint override map as an escape hatch for nodes needing precise control
 
 ### Phase 6 — Evaluation & AI Loops (v0.6)

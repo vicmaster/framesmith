@@ -226,7 +226,7 @@ function renderGalleryPage(port: number): string {
 </html>`;
 }
 
-function renderDetailPage(canvas: Canvas, port: number): string {
+export function renderDetailPage(canvas: Canvas, port: number): string {
   const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
   const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
 
@@ -252,15 +252,26 @@ function renderDetailPage(canvas: Canvas, port: number): string {
   .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: auto; background: #0a0a0a; padding: 24px 0; }
   .viewport iframe { border: none; background: #fff; transition: width 0.3s, height 0.3s; transform-origin: top center; }
   .viewport.fit iframe { width: 100% !important; height: 100% !important; }
+  .viewport.compare #frame { display: none; }
+  .viewport.compare .compare-grid { display: flex; }
+  .viewport.compare #btn-fit { pointer-events: none; opacity: 0.4; }
+  .compare-grid { display: none; gap: 24px; padding: 24px; align-items: flex-start; --scale: 0.35; }
+  .compare-cell { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+  .bp-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+  .iframe-wrap { background: #fff; overflow: hidden; border-radius: 6px; border: 1px solid #222; width: calc(var(--bp-w) * var(--scale) * 1px); height: calc(var(--bp-h) * var(--scale) * 1px); }
+  .iframe-wrap iframe { border: 0; background: #fff; width: calc(var(--bp-w) * 1px); height: calc(var(--bp-h) * 1px); transform: scale(var(--scale)); transform-origin: top left; }
   .json-panel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 480px; background: #111; border-left: 1px solid #222; overflow: auto; z-index: 10; }
   .json-panel.open { display: block; }
   .json-panel pre { padding: 20px; font-size: 12px; color: #a0a0a0; font-family: 'JetBrains Mono', 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; }
+  @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
+  @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
   @media (max-width: 640px) {
     .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 8px 12px; gap: 8px 10px; }
     .toolbar .dim { display: none; }
     .toolbar .spacer { flex-basis: 100%; height: 0; }
     .toolbar .btn { flex: 1; min-width: 0; padding: 6px 2px; font-size: 11px; white-space: nowrap; }
     .json-panel { width: 100%; }
+    .compare-grid { --scale: 0.18; gap: 12px; padding: 12px; }
   }
 </style>
 </head>
@@ -273,12 +284,27 @@ function renderDetailPage(canvas: Canvas, port: number): string {
     <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
     <button class="btn" onclick="setViewport(768, 1024)" id="bp-tablet">Tablet</button>
     <button class="btn active" onclick="setViewport(${w}, ${h})" id="bp-desktop">Desktop</button>
+    <button class="btn" onclick="setCompareMode()" id="bp-compare">Compare</button>
     <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
     <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
     <div class="status" id="status" title="Auto-refresh active"></div>
   </div>
   <div class="viewport" id="viewport">
     <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
+    <div class="compare-grid" id="compare-grid">
+      <div class="compare-cell" style="--bp-w: 390; --bp-h: 844;">
+        <div class="bp-label">Mobile · 390×844</div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=390&h=844" data-bp="mobile"></iframe></div>
+      </div>
+      <div class="compare-cell" style="--bp-w: 768; --bp-h: 1024;">
+        <div class="bp-label">Tablet · 768×1024</div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet"></iframe></div>
+      </div>
+      <div class="compare-cell" style="--bp-w: ${w}; --bp-h: ${h};">
+        <div class="bp-label">Desktop · ${w}×${h}</div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
+      </div>
+    </div>
   </div>
   <div class="json-panel" id="json-panel">
     <pre id="json-content">Loading...</pre>
@@ -296,7 +322,7 @@ function renderDetailPage(canvas: Canvas, port: number): string {
         document.getElementById('status').className = 'status';
         if (meta.lastModified !== lastModified) {
           lastModified = meta.lastModified;
-          document.getElementById('frame').src = '/canvas/' + canvasId + '/html?t=' + Date.now();
+          refreshFrames();
           // Update JSON if panel is open
           if (document.getElementById('json-panel').classList.contains('open')) loadJson();
         }
@@ -305,13 +331,27 @@ function renderDetailPage(canvas: Canvas, port: number): string {
       }
     }, 2000);
 
+    function refreshFrames() {
+      const t = Date.now();
+      const bump = (frame) => {
+        const url = new URL(frame.src, location.href);
+        url.searchParams.set('t', t);
+        frame.src = url.toString();
+      };
+      if (document.getElementById('viewport').classList.contains('compare')) {
+        document.querySelectorAll('.compare-cell iframe').forEach(bump);
+      } else {
+        bump(document.getElementById('frame'));
+      }
+    }
+
     const canvasW = ${w};
     const canvasH = ${h};
 
     function setViewport(w, h) {
       const frame = document.getElementById('frame');
       const vp = document.getElementById('viewport');
-      vp.classList.remove('fit');
+      vp.classList.remove('fit', 'compare');
       document.getElementById('btn-fit').classList.remove('active');
 
       // Reload iframe at the new viewport size so content reflows
@@ -330,6 +370,16 @@ function renderDetailPage(canvas: Canvas, port: number): string {
       if (w === 390) { document.getElementById('bp-mobile').classList.add('active'); currentBp = 'mobile'; }
       else if (w === 768) { document.getElementById('bp-tablet').classList.add('active'); currentBp = 'tablet'; }
       else { document.getElementById('bp-desktop').classList.add('active'); currentBp = 'desktop'; }
+    }
+
+    function setCompareMode() {
+      const vp = document.getElementById('viewport');
+      vp.classList.remove('fit');
+      vp.classList.add('compare');
+      document.getElementById('btn-fit').classList.remove('active');
+      document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('bp-compare').classList.add('active');
+      currentBp = 'compare';
     }
 
     function toggleFit() {
