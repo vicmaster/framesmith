@@ -301,12 +301,14 @@ server.tool(
     ];
     const bps = breakpoints ?? defaultBreakpoints;
 
-    // Render HTML at the largest breakpoint width for the base HTML
-    const maxWidth = Math.max(...bps.map((b) => b.width));
-    const maxHeight = Math.max(...bps.map((b) => b.height));
-    const html = renderToHtml(resolved, maxWidth, maxHeight, canvas);
-
-    const results = await takeResponsiveScreenshots(html, bps, scale);
+    // True reflow: render HTML per breakpoint so the body scaffold matches the
+    // viewport. The viewport change alone would let @media rules fire, but
+    // matching the scaffold avoids min-height inflated to the largest breakpoint.
+    const results = await takeResponsiveScreenshots(
+      (bp) => renderToHtml(resolved, bp.width, bp.height, canvas),
+      bps,
+      scale,
+    );
 
     return {
       content: results.map((r) => ({
