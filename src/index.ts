@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } from './workspaces.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, listProjects, renameProject, deleteProject } from './workspaces.js';
+import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
@@ -38,10 +39,16 @@ server.resource(
 // --- canvas_create ---
 server.tool(
   'canvas_create',
-  'Create a new design canvas. Returns the canvas ID, root node ID, and viewer URL. Always share the viewer URL with the user so they can see the design live in their browser.',
-  { name: z.string().optional().describe('Name for the canvas') },
-  async ({ name }) => {
-    const canvas = createCanvas(name);
+  'Create a new design canvas. Returns the canvas ID, root node ID, project assignment, and viewer URL. Always share the viewer URL with the user so they can see the design live in their browser. If `projectId` is omitted, the canvas lands in the default Untitled project.',
+  {
+    name: z.string().optional().describe('Name for the canvas'),
+    projectId: z.string().optional().describe('Project to create the canvas in. Defaults to the built-in Untitled project. Use project_list to see available projects.'),
+  },
+  async ({ name, projectId }) => {
+    if (projectId && !getProject(projectId)) {
+      return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see available projects.` }], isError: true };
+    }
+    const canvas = createCanvas(name, projectId ?? DEFAULT_PROJECT_ID);
     const viewerUrl = getViewerUrl();
     return {
       content: [
@@ -51,6 +58,7 @@ server.tool(
             canvasId: canvas.id,
             rootId: canvas.root.id,
             name: canvas.name,
+            projectId: canvas.projectId,
             viewerUrl: viewerUrl ? `${viewerUrl}/canvas/${canvas.id}` : null,
             galleryUrl: viewerUrl,
           }, null, 2),
@@ -63,13 +71,184 @@ server.tool(
 // --- canvas_list ---
 server.tool(
   'canvas_list',
-  'List all canvases.',
-  {},
-  async () => {
-    const canvases = listCanvases();
+  'List canvases. By default returns all non-archived canvases. Filter by `projectId` to scope to one project. Set `includeArchived: true` to include archived canvases in the result.',
+  {
+    projectId: z.string().optional().describe('Only list canvases in this project'),
+    includeArchived: z.boolean().optional().describe('Include archived canvases in the result (default false)'),
+  },
+  async ({ projectId, includeArchived }) => {
+    let canvases = listCanvases();
+    if (projectId) canvases = canvases.filter((c) => c.projectId === projectId);
+    if (!includeArchived) canvases = canvases.filter((c) => !c.archived);
     return {
       content: [{ type: 'text', text: JSON.stringify(canvases, null, 2) }],
     };
+  }
+);
+
+// --- canvas_move ---
+server.tool(
+  'canvas_move',
+  'Move a canvas to a different project. The canvas keeps its ID; only the projectId field changes.',
+  {
+    canvasId: z.string().describe('Canvas to move'),
+    projectId: z.string().describe('Target project. Must already exist (use project_list / project_create).'),
+  },
+  async ({ canvasId, projectId }) => {
+    if (!getCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    const moved = moveCanvas(canvasId, projectId)!;
+    return { content: [{ type: 'text', text: JSON.stringify({ canvasId, projectId: moved.projectId }, null, 2) }] };
+  }
+);
+
+// --- canvas_archive ---
+server.tool(
+  'canvas_archive',
+  'Soft-delete a canvas: sets `archived: true` and hides it from default canvas_list output. The canvas stays in storage and can be restored with canvas_unarchive. Use canvas_delete for permanent removal.',
+  { canvasId: z.string().describe('Canvas to archive') },
+  async ({ canvasId }) => {
+    const result = archiveCanvas(canvasId);
+    if (!result) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify({ canvasId, archived: true, archivedAt: result.archivedAt }, null, 2) }] };
+  }
+);
+
+// --- canvas_unarchive ---
+server.tool(
+  'canvas_unarchive',
+  'Restore an archived canvas (clears the archived flag). The reverse of canvas_archive.',
+  { canvasId: z.string().describe('Canvas to unarchive') },
+  async ({ canvasId }) => {
+    const result = unarchiveCanvas(canvasId);
+    if (!result) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify({ canvasId, archived: false }, null, 2) }] };
+  }
+);
+
+// --- canvas_delete ---
+server.tool(
+  'canvas_delete',
+  'Permanently delete a canvas — removes both the in-memory entry and the on-disk JSON file. Irreversible; use canvas_archive for soft deletion.',
+  { canvasId: z.string().describe('Canvas to permanently delete') },
+  async ({ canvasId }) => {
+    if (!getCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    deleteCanvas(canvasId);
+    return { content: [{ type: 'text', text: JSON.stringify({ canvasId, deleted: true }, null, 2) }] };
+  }
+);
+
+// --- workspace_create ---
+server.tool(
+  'workspace_create',
+  'Create a new workspace. Workspaces are top-level containers grouping related projects; the default "Personal" workspace ships built-in.',
+  { name: z.string().describe('Workspace name') },
+  async ({ name }) => {
+    const ws = createWorkspace(name);
+    return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }] };
+  }
+);
+
+// --- workspace_list ---
+server.tool(
+  'workspace_list',
+  'List all workspaces. The built-in "Personal" workspace is always present.',
+  {},
+  async () => {
+    return { content: [{ type: 'text', text: JSON.stringify(listWorkspaces(), null, 2) }] };
+  }
+);
+
+// --- workspace_rename ---
+server.tool(
+  'workspace_rename',
+  'Rename an existing workspace.',
+  {
+    workspaceId: z.string().describe('Workspace to rename'),
+    name: z.string().describe('New workspace name'),
+  },
+  async ({ workspaceId, name }) => {
+    const ws = renameWorkspace(workspaceId, name);
+    if (!ws) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(ws, null, 2) }] };
+  }
+);
+
+// --- workspace_delete ---
+server.tool(
+  'workspace_delete',
+  'Delete a workspace. Refuses if the workspace still contains projects — move or delete those first. The built-in "Personal" workspace cannot be deleted.',
+  { workspaceId: z.string().describe('Workspace to delete') },
+  async ({ workspaceId }) => {
+    if (workspaceId === DEFAULT_WORKSPACE_ID) {
+      return { content: [{ type: 'text', text: 'Error: the built-in "Personal" workspace cannot be deleted.' }], isError: true };
+    }
+    const projectsInWorkspace = listProjects(workspaceId);
+    if (projectsInWorkspace.length > 0) {
+      return { content: [{ type: 'text', text: `Error: workspace "${workspaceId}" still contains ${projectsInWorkspace.length} project(s). Delete or move them before deleting the workspace.` }], isError: true };
+    }
+    const ok = deleteWorkspace(workspaceId);
+    if (!ok) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify({ workspaceId, deleted: true }, null, 2) }] };
+  }
+);
+
+// --- project_create ---
+server.tool(
+  'project_create',
+  'Create a new project inside a workspace. Projects group related canvases.',
+  {
+    workspaceId: z.string().describe('Workspace the project belongs to'),
+    name: z.string().describe('Project name'),
+  },
+  async ({ workspaceId, name }) => {
+    const project = createProject(workspaceId, name);
+    if (!project) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+  }
+);
+
+// --- project_list ---
+server.tool(
+  'project_list',
+  'List projects. Pass `workspaceId` to scope to one workspace; omit to list all projects across all workspaces.',
+  { workspaceId: z.string().optional().describe('Filter by workspace') },
+  async ({ workspaceId }) => {
+    return { content: [{ type: 'text', text: JSON.stringify(listProjects(workspaceId), null, 2) }] };
+  }
+);
+
+// --- project_rename ---
+server.tool(
+  'project_rename',
+  'Rename an existing project.',
+  {
+    projectId: z.string().describe('Project to rename'),
+    name: z.string().describe('New project name'),
+  },
+  async ({ projectId, name }) => {
+    const project = renameProject(projectId, name);
+    if (!project) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
+  }
+);
+
+// --- project_delete ---
+server.tool(
+  'project_delete',
+  'Delete a project. Refuses if the project still contains any canvases (archived or not) — move them to another project (canvas_move) or delete them (canvas_delete) first. The built-in "Untitled" project cannot be deleted.',
+  { projectId: z.string().describe('Project to delete') },
+  async ({ projectId }) => {
+    if (projectId === DEFAULT_PROJECT_ID) {
+      return { content: [{ type: 'text', text: 'Error: the built-in "Untitled" project cannot be deleted.' }], isError: true };
+    }
+    const count = countCanvasesInProject(projectId);
+    if (count > 0) {
+      return { content: [{ type: 'text', text: `Error: project "${projectId}" still contains ${count} canvas(es). Move or delete them before deleting the project.` }], isError: true };
+    }
+    const ok = deleteProject(projectId);
+    if (!ok) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify({ projectId, deleted: true }, null, 2) }] };
   }
 );
 

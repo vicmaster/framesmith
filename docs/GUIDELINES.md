@@ -2,6 +2,18 @@
 
 How to design with canvas-mcp so the result holds up across breakpoints.
 
+## Organizing work
+
+Canvases live inside a `Workspace > Project > Canvas` hierarchy. The built-in `Personal` workspace + `Untitled` project always exist as a default home; create more once you're running multiple projects.
+
+- **`workspace_create({ name })`** — top-level container (e.g. "Client work", "Personal").
+- **`project_create({ workspaceId, name })`** — group related canvases inside a workspace.
+- **`canvas_create({ name, projectId })`** — drops the canvas in the given project (defaults to Untitled).
+- **`canvas_move({ canvasId, projectId })`** — reassign a canvas between projects.
+- **`canvas_archive` / `canvas_unarchive`** — soft-delete: canvas stays on disk but hides from default listings. Reach for this when iterating; reach for `canvas_delete` (permanent) only when sure.
+
+`workspace_delete` and `project_delete` refuse to remove non-empty containers. Clear the contents first or `canvas_move` them out.
+
 ## Two-line summary
 
 1. **Author desktop-first at one design width.** Pick a width (1200 or 1440 is typical), compose the design there.
