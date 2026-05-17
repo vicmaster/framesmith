@@ -7,10 +7,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, listProjects, renameProject, deleteProject } from './workspaces.js';
-import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem } from './workspaces.js';
+import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables } from './types.js';
 import { parseAndExecute } from './operations.js';
-import { resolveVariables, setVariables, getVariables } from './variables.js';
+import { resolveVariables, setVariables, getVariables, mergeDesignTokens } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
@@ -26,6 +26,14 @@ const server = new McpServer({
 });
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
+
+/** Phase 9 — merge workspace + project + canvas design tokens with canvas
+ * winning. Looked up via the canvas's projectId → workspaceId chain. */
+function tokensFor(canvas: Canvas): DesignVariables {
+  const project = getProject(canvas.projectId);
+  const workspace = project ? getWorkspace(project.workspaceId) : undefined;
+  return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
+}
 
 server.resource(
   'guidelines',
@@ -252,6 +260,110 @@ server.tool(
   }
 );
 
+// --- Phase 9: design system inheritance ---
+// Workspace-level tokens are inherited by every project + canvas under the
+// workspace; project-level tokens override workspace and are themselves
+// overridden by canvas.variables. Resolution chain at render is
+// workspace → project → canvas (rightmost wins).
+
+const designVariablesSchema = z.object({
+  colors: z.record(z.string()).optional(),
+  spacing: z.record(z.number()).optional(),
+  radius: z.record(z.number()).optional(),
+  typography: z.record(z.object({
+    fontSize: z.number(),
+    fontWeight: z.union([z.string(), z.number()]).optional(),
+    fontFamily: z.string().optional(),
+    lineHeight: z.union([z.number(), z.string()]).optional(),
+  })).optional(),
+});
+
+// --- workspace_set_design_system ---
+server.tool(
+  'workspace_set_design_system',
+  'Set the workspace-level design system (inherited by every project + canvas under it). Merges per-category with existing tokens — pass `{ colors: { primary: "#..." } }` to update colors without resetting spacing/radius/typography.',
+  {
+    workspaceId: z.string().describe('Workspace ID'),
+    variables: designVariablesSchema.describe('Design tokens to set'),
+  },
+  async ({ workspaceId, variables }) => {
+    if (!getWorkspace(workspaceId)) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    const result = setWorkspaceDesignSystem(workspaceId, variables);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// --- workspace_get_design_system ---
+server.tool(
+  'workspace_get_design_system',
+  'Get the workspace-level design system tokens.',
+  { workspaceId: z.string().describe('Workspace ID') },
+  async ({ workspaceId }) => {
+    if (!getWorkspace(workspaceId)) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(getWorkspaceDesignSystem(workspaceId) ?? {}, null, 2) }] };
+  }
+);
+
+// --- workspace_apply_preset ---
+server.tool(
+  'workspace_apply_preset',
+  'Apply a built-in style guide preset (dark/light/material/minimal) to a workspace. Merges the preset\'s tokens into the workspace design system — every canvas under it inherits them. Components from the preset are NOT copied at the workspace level (component instancing is canvas-scoped). Use list_presets to see options.',
+  {
+    workspaceId: z.string().describe('Workspace ID'),
+    preset: z.string().describe('Preset name (e.g. "dark", "light", "material", "minimal")'),
+  },
+  async ({ workspaceId, preset }) => {
+    if (!getWorkspace(workspaceId)) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+    const p = getPreset(preset);
+    if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see options.` }], isError: true };
+    const result = setWorkspaceDesignSystem(workspaceId, p.variables);
+    return { content: [{ type: 'text', text: JSON.stringify({ workspaceId, preset, designSystem: result }, null, 2) }] };
+  }
+);
+
+// --- project_set_design_system ---
+server.tool(
+  'project_set_design_system',
+  'Set the project-level design system, which sits between the parent workspace and individual canvases in the resolution chain. Merges per-category with existing project tokens.',
+  {
+    projectId: z.string().describe('Project ID'),
+    variables: designVariablesSchema.describe('Design tokens to set'),
+  },
+  async ({ projectId, variables }) => {
+    if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    const result = setProjectDesignSystem(projectId, variables);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+);
+
+// --- project_get_design_system ---
+server.tool(
+  'project_get_design_system',
+  'Get the project-level design system tokens (project-only overrides, not the merged inheritance chain).',
+  { projectId: z.string().describe('Project ID') },
+  async ({ projectId }) => {
+    if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(getProjectDesignSystem(projectId) ?? {}, null, 2) }] };
+  }
+);
+
+// --- project_apply_preset ---
+server.tool(
+  'project_apply_preset',
+  'Apply a built-in style guide preset (dark/light/material/minimal) to a project. Merges the preset\'s tokens into the project design system. The project sits between workspace and canvas in the resolution chain.',
+  {
+    projectId: z.string().describe('Project ID'),
+    preset: z.string().describe('Preset name (e.g. "dark", "light", "material", "minimal")'),
+  },
+  async ({ projectId, preset }) => {
+    if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+    const p = getPreset(preset);
+    if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see options.` }], isError: true };
+    const result = setProjectDesignSystem(projectId, p.variables);
+    return { content: [{ type: 'text', text: JSON.stringify({ projectId, preset, designSystem: result }, null, 2) }] };
+  }
+);
+
 // --- batch_design ---
 server.tool(
   'batch_design',
@@ -311,7 +423,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, canvas.variables);
+    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
     const html = renderToHtml(resolved, w, h, canvas);
@@ -370,7 +482,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, canvas.variables);
+    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const html = renderToHtml(resolved, w, h, canvas);
@@ -474,7 +586,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, canvas.variables);
+    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
     const html = renderToHtml(resolved, w, h, canvas);
@@ -512,7 +624,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, canvas.variables);
+    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
     const defaultBreakpoints = [
       { label: 'mobile', width: 390, height: 844 },
       { label: 'tablet', width: 768, height: 1024 },
@@ -698,7 +810,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 
     if (mode === 'llm') {
       try {
-        const resolved = resolveVariables(canvas.root, canvas.variables);
+        const resolved = resolveVariables(canvas.root, tokensFor(canvas));
         const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
         const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
         const html = renderToHtml(resolved, w, h, canvas);

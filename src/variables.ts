@@ -59,3 +59,19 @@ export function setVariables(canvas: Canvas, vars: Partial<DesignVariables>): De
 export function getVariables(canvas: Canvas): DesignVariables {
   return canvas.variables;
 }
+
+/** Phase 9 — merge three layers of design tokens with rightmost winning:
+ * canvas.variables overrides project.designSystem overrides workspace.designSystem.
+ * Per category, keys are merged (not replaced wholesale), so a canvas can
+ * override a single color without losing the workspace's full color palette. */
+export function mergeDesignTokens(...layers: Array<DesignVariables | undefined>): DesignVariables {
+  const out: DesignVariables = {};
+  for (const layer of layers) {
+    if (!layer) continue;
+    if (layer.colors) out.colors = { ...(out.colors ?? {}), ...layer.colors };
+    if (layer.spacing) out.spacing = { ...(out.spacing ?? {}), ...layer.spacing };
+    if (layer.radius) out.radius = { ...(out.radius ?? {}), ...layer.radius };
+    if (layer.typography) out.typography = { ...(out.typography ?? {}), ...layer.typography };
+  }
+  return out;
+}

@@ -289,11 +289,11 @@ Surfaced during Phase 7 — every item came from a concrete design moment we wan
 
 Design tokens already live on `Canvas.variables` (colors / spacing / radius / typography) and the preset system can apply named systems per-canvas. Promote that to **workspace-inherited** tokens: a workspace declares a design system once, all projects + canvases under it inherit by default with explicit per-canvas overrides allowed. Closes the loop on "I'm working on Coide; every Coide canvas should follow Coide's design system."
 
-- [ ] `Workspace.designSystem` field referencing a preset by name OR an inline tokens object
-- [ ] Resolution order at render: canvas variables → project (if we add a layer) → workspace → built-in defaults
-- [ ] MCP tools: `workspace_set_design_system`, `workspace_get_design_system`
-- [ ] Preset migration: existing presets become workspace-installable
-- [ ] Guidelines update: when authoring, reach for workspace tokens instead of literal hex codes
+- [x] `Workspace.designSystem` field (inline `DesignVariables`); symmetric `Project.designSystem` for project-level overrides
+- [x] Resolution order at render: canvas variables → project → workspace → built-in defaults (rightmost wins via `mergeDesignTokens`)
+- [x] MCP tools: `workspace_set_design_system`, `workspace_get_design_system`, `workspace_apply_preset` (+ symmetric `project_*` trio)
+- [x] Preset migration: existing presets are workspace/project-installable via `*_apply_preset` tools
+- [x] Guidelines update: when authoring, reach for workspace tokens instead of literal hex codes
 
 ### Phase 10 — Ecosystem (v1.0)
 - [x] Web-based canvas viewer (read-only UI to browse designs)

@@ -12,7 +12,7 @@ import { nanoid } from 'nanoid';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Project, type Workspace } from './types.js';
+import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type DesignVariables, type Project, type Workspace } from './types.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
@@ -162,4 +162,42 @@ export function deleteProject(id: string): boolean {
   const had = projects.delete(id);
   if (had) persistProjects();
   return had;
+}
+
+// ---- Phase 9: Design system inheritance ----
+
+/** Set (replace) the workspace-level design system. Merges per-category with
+ * the existing designSystem so the caller can supply a partial — e.g. update
+ * `colors` without resetting `spacing`. */
+export function setWorkspaceDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
+  const ws = workspaces.get(id);
+  if (!ws) return undefined;
+  ws.designSystem = mergeDesignSystem(ws.designSystem, vars);
+  persistWorkspaces();
+  return ws.designSystem;
+}
+
+export function getWorkspaceDesignSystem(id: string): DesignVariables | undefined {
+  return workspaces.get(id)?.designSystem;
+}
+
+export function setProjectDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
+  const p = projects.get(id);
+  if (!p) return undefined;
+  p.designSystem = mergeDesignSystem(p.designSystem, vars);
+  persistProjects();
+  return p.designSystem;
+}
+
+export function getProjectDesignSystem(id: string): DesignVariables | undefined {
+  return projects.get(id)?.designSystem;
+}
+
+function mergeDesignSystem(base: DesignVariables | undefined, patch: Partial<DesignVariables>): DesignVariables {
+  const out: DesignVariables = { ...(base ?? {}) };
+  if (patch.colors) out.colors = { ...(out.colors ?? {}), ...patch.colors };
+  if (patch.spacing) out.spacing = { ...(out.spacing ?? {}), ...patch.spacing };
+  if (patch.radius) out.radius = { ...(out.radius ?? {}), ...patch.radius };
+  if (patch.typography) out.typography = { ...(out.typography ?? {}), ...patch.typography };
+  return out;
 }
