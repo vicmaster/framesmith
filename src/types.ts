@@ -83,11 +83,27 @@ export interface DesignVariables {
   typography?: Record<string, { fontSize: number; fontWeight?: string | number; fontFamily?: string; lineHeight?: number | string }>;
 }
 
+/** Custom font face declaration. Renderer emits a single `@font-face` rule
+ * per entry plus a `<link rel="preconnect">` per unique origin so the browser
+ * can warm the connection before the first font request fires. */
+export interface FontFace {
+  /** Family name used in `fontFamily` (no quotes). */
+  family: string;
+  /** Direct binary URL (.woff2/.woff/.ttf/.otf) — `https://`, `http://`, or
+   * `data:` URIs are accepted. Stylesheet URLs (e.g. fonts.googleapis.com/css2)
+   * are not supported; reference the gstatic.com binary directly. */
+  url: string;
+  weight?: number | string;
+  style?: 'normal' | 'italic';
+}
+
 export interface Canvas {
   id: string;
   name: string;
   root: SceneNode;
   variables: DesignVariables;
+  /** Custom font faces emitted into the rendered document head. */
+  fonts?: FontFace[];
   components: Record<string, SceneNode>;
   createdAt: string;
   lastModified: string;
