@@ -101,9 +101,9 @@ M("nodeId", "newParentId", 0)
 R("nodeId", { type: "text", content: "Replaced" })
 ```
 
-**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `component`, `instance`
+**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `componentId`, `overrides`
 
 ### `screenshot`
 
@@ -393,6 +393,23 @@ I("parent", { type: "icon", icon: "heart", iconSize: 32, iconColor: "#ef4444" })
 ```
 
 Icons render as inline SVGs with configurable size and color.
+
+## SVG Paths
+
+For custom shapes and brand marks beyond the Lucide library, use the `path` node type with a raw SVG `d` attribute:
+
+```
+I("parent", { type: "path", width: 24, height: 24,
+  d: "M 12 2 L 22 22 L 2 22 Z", fill: "#f59e0b" })
+
+# With stroke + viewBox (defaults to `0 0 width height`)
+I("parent", { type: "path", width: 48, height: 48, viewBox: "0 0 24 24",
+  d: "M 12 2 L 22 22 L 2 22 Z",
+  fill: "none", stroke: "#000", strokeWidth: 2,
+  strokeLinecap: "round", strokeLinejoin: "round" })
+```
+
+`fill`/`stroke`/`strokeWidth` apply to the path itself (not the wrapper). `d` and `viewBox` are validated for safe characters — anything that could break out of the attribute is rejected.
 
 ## Components
 
