@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas } from './scene-graph.js';
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
-import { getProject, listProjects, listWorkspaces } from './workspaces.js';
+import { getProject, listProjects, listWorkspaces, getCanvasTokens } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
 
 let runningPort: number | null = null;
@@ -78,7 +78,7 @@ export async function startViewer(port: number): Promise<number> {
       if (htmlMatch) {
         const canvas = getCanvas(htmlMatch[1]);
         if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
-        const resolved = resolveVariables(canvas.root, canvas.variables);
+        const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
         const defaultW = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
         const defaultH = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
         const w = url.searchParams.has('w') ? parseInt(url.searchParams.get('w')!, 10) : defaultW;

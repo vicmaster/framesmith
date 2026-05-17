@@ -7,10 +7,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem } from './workspaces.js';
-import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables } from './types.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens } from './workspaces.js';
+import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { parseAndExecute } from './operations.js';
-import { resolveVariables, setVariables, getVariables, mergeDesignTokens } from './variables.js';
+import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
@@ -26,14 +26,6 @@ const server = new McpServer({
 });
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
-
-/** Phase 9 — merge workspace + project + canvas design tokens with canvas
- * winning. Looked up via the canvas's projectId → workspaceId chain. */
-function tokensFor(canvas: Canvas): DesignVariables {
-  const project = getProject(canvas.projectId);
-  const workspace = project ? getWorkspace(project.workspaceId) : undefined;
-  return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
-}
 
 server.resource(
   'guidelines',
@@ -423,7 +415,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
+    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
     const html = renderToHtml(resolved, w, h, canvas);
@@ -482,7 +474,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
+    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const html = renderToHtml(resolved, w, h, canvas);
@@ -586,7 +578,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
+    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
     const html = renderToHtml(resolved, w, h, canvas);
@@ -624,7 +616,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, tokensFor(canvas));
+    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
     const defaultBreakpoints = [
       { label: 'mobile', width: 390, height: 844 },
       { label: 'tablet', width: 768, height: 1024 },
@@ -672,8 +664,8 @@ server.tool(
     const h = height ?? 900;
     const s = scale ?? 1;
 
-    const resolved1 = resolveVariables(canvas1.root, canvas1.variables);
-    const resolved2 = resolveVariables(canvas2.root, canvas2.variables);
+    const resolved1 = resolveVariables(canvas1.root, getCanvasTokens(canvas1));
+    const resolved2 = resolveVariables(canvas2.root, getCanvasTokens(canvas2));
     const html1 = renderToHtml(resolved1, w, h, canvas1);
     const html2 = renderToHtml(resolved2, w, h, canvas2);
 
@@ -810,7 +802,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 
     if (mode === 'llm') {
       try {
-        const resolved = resolveVariables(canvas.root, tokensFor(canvas));
+        const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
         const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
         const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
         const html = renderToHtml(resolved, w, h, canvas);

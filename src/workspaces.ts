@@ -12,7 +12,8 @@ import { nanoid } from 'nanoid';
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type DesignVariables, type Project, type Workspace } from './types.js';
+import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
+import { mergeDesignTokens } from './variables.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
@@ -200,4 +201,22 @@ function mergeDesignSystem(base: DesignVariables | undefined, patch: Partial<Des
   if (patch.radius) out.radius = { ...(out.radius ?? {}), ...patch.radius };
   if (patch.typography) out.typography = { ...(out.typography ?? {}), ...patch.typography };
   return out;
+}
+
+/**
+ * Resolve the effective design tokens for a canvas by walking the
+ * `canvas → project → workspace` chain and merging with rightmost wins
+ * (`canvas.variables` overrides project, project overrides workspace).
+ *
+ * Every render path (MCP tools, viewer, evaluate, diff) must use this
+ * helper so Phase 9 inheritance is honored end-to-end. Calling
+ * `resolveVariables(canvas.root, canvas.variables)` directly bypasses
+ * inheritance and leaves `$workspace_token` references unresolved as
+ * literal strings, which crashes the renderer with errors like
+ * `node.cornerRadius.map is not a function`.
+ */
+export function getCanvasTokens(canvas: Canvas): DesignVariables {
+  const project = projects.get(canvas.projectId);
+  const workspace = project ? workspaces.get(project.workspaceId) : undefined;
+  return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
 }
