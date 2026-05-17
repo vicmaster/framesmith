@@ -282,7 +282,7 @@ Surfaced during Phase 7 — every item came from a concrete design moment we wan
 - [ ] Custom font loading — `fontFamily` URLs (Google Fonts or hosted .woff2) loaded via `@font-face` in the renderer's `<head>`; canvas-level `fonts` array for declarations
 - [ ] SVG path primitives — `path` node type with `d` attribute support so iconography stops being approximated rectangles
 - [ ] Transitions + animations — `transition` shorthand on nodes, plus a small `@keyframes` library for common patterns (fade-in, slide-up). Useful for the viewer chrome and for designed canvases alike
-- [ ] `position: absolute` foot-gun fix — automatic `position: relative` injection on a frame when any descendant uses `position: absolute` without a positioned ancestor (a real bug that bit the slice 5 mock)
+- [x] `position: absolute` foot-gun fix — automatic `position: relative` injection on a frame when any descendant uses `position: absolute` without a positioned ancestor (a real bug that bit the slice 5 mock)
 - [ ] (Stretch) CSS variables exposed at the node level for token-driven theming inside a canvas (precursor to Phase 9 design systems)
 
 ### Phase 9 — Workspace-level design systems (v0.9)

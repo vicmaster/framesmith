@@ -3,7 +3,7 @@ import { getIconSvg } from './icons.js';
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
   const body = renderNode(root, canvas);
-  const responsiveCss = buildResponsiveStylesheet(root, canvas);
+  const responsiveCss = buildRendererStylesheet(root, canvas);
   // Hoist the root's fill/gradient to <html> so wide viewports show the design
   // background instead of browser-default white on the sidebars.
   const rootBg = rootBackgroundCss(root);
@@ -239,33 +239,74 @@ const FONT_SCALE_MIN = 24;
 // so the tablet preset at exactly 768 stays in the row layout.
 const MOBILE_BREAKPOINT = 767;
 
-function buildResponsiveStylesheet(root: SceneNode, canvas?: Canvas): string {
+function buildRendererStylesheet(root: SceneNode, canvas?: Canvas): string {
   const stackIds: string[] = [];
-  collectResponsiveStackIds(root, canvas, stackIds);
-  if (stackIds.length === 0) return '';
+  const relativeIds = new Set<string>();
+  collectRendererHints(root, [], canvas, stackIds, relativeIds);
 
-  // !important is required because inline styles (flex-direction: row) would
-  // otherwise win over the @media rule regardless of selector specificity.
-  const selectors = stackIds.map((id) => `[data-node-id="${id}"]`).join(', ');
-  return `  @media (max-width: ${MOBILE_BREAKPOINT}px) {
-    ${selectors} { flex-direction: column !important; }
-  }`;
+  const parts: string[] = [];
+
+  if (relativeIds.size > 0) {
+    // Auto-inject position: relative on the nearest container ancestor of any
+    // node with position: absolute that lacks a positioned ancestor. External
+    // CSS only applies when the inline style doesn't set `position`, so this
+    // never overrides an explicit author choice.
+    const sel = [...relativeIds].map((id) => `[data-node-id="${id}"]`).join(', ');
+    parts.push(`  ${sel} { position: relative; }`);
+  }
+
+  if (stackIds.length > 0) {
+    // !important is required because inline styles (flex-direction: row) would
+    // otherwise win over the @media rule regardless of selector specificity.
+    const sel = stackIds.map((id) => `[data-node-id="${id}"]`).join(', ');
+    parts.push(`  @media (max-width: ${MOBILE_BREAKPOINT}px) {
+    ${sel} { flex-direction: column !important; }
+  }`);
+  }
+
+  return parts.join('\n');
 }
 
-function collectResponsiveStackIds(node: SceneNode, canvas: Canvas | undefined, out: string[]): void {
+function collectRendererHints(
+  node: SceneNode,
+  ancestors: SceneNode[],
+  canvas: Canvas | undefined,
+  stackIds: string[],
+  relativeIds: Set<string>,
+): void {
   // Resolve instances so responsive hints inside components are picked up
   const resolved = node.type === 'instance' && node.componentId && canvas
     ? resolveInstance(node, canvas) ?? node
     : node;
 
   if (resolved.responsive === 'stack' && resolved.layout === 'horizontal') {
-    out.push(resolved.id);
+    stackIds.push(resolved.id);
   }
-  if (resolved.children) {
-    for (const child of resolved.children) {
-      collectResponsiveStackIds(child, canvas, out);
+
+  if (resolved.position === 'absolute') {
+    const hasPositionedAncestor = ancestors.some((a) => a.position === 'relative' || a.position === 'absolute');
+    if (!hasPositionedAncestor) {
+      const container = findNearestContainer(ancestors);
+      if (container && !container.position) {
+        relativeIds.add(container.id);
+      }
     }
   }
+
+  if (resolved.children) {
+    const nextAncestors = [...ancestors, resolved];
+    for (const child of resolved.children) {
+      collectRendererHints(child, nextAncestors, canvas, stackIds, relativeIds);
+    }
+  }
+}
+
+function findNearestContainer(ancestors: SceneNode[]): SceneNode | undefined {
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const a = ancestors[i];
+    if (a.type === 'frame' || a.type === 'document' || a.type === 'component') return a;
+  }
+  return undefined;
 }
 
 function responsivePadding(value: number): string {
