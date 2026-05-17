@@ -7,3 +7,6 @@ dist/
 # AI-assistant configs (personal, tool-specific)
 .claude/
 CLAUDE.md
+
+# Launch / promo drafts — kept locally for editing, not part of the repo
+docs/launch/
