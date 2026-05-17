@@ -88,6 +88,26 @@ export interface SceneNode {
   strokeLinecap?: 'butt' | 'round' | 'square';
   strokeLinejoin?: 'miter' | 'round' | 'bevel';
 
+  // CSS animation, referencing a built-in keyframe. The renderer auto-emits
+  // the `@keyframes` block only when any node references the name.
+  animation?: {
+    name: 'fadeIn' | 'slideUp' | 'slideDown' | 'scaleIn';
+    duration?: number;   // ms, default 300
+    delay?: number;      // ms, default 0
+    easing?: 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'linear';
+    iteration?: number | 'infinite';
+  };
+
+  // CSS transition. Note: transitions only fire on state change (hover, focus,
+  // JS-driven property change). Inert in static renders today — included so a
+  // future PR that adds pseudo-class or interactive state has a place to land.
+  transition?: {
+    property?: string;   // e.g. 'all', 'opacity', 'transform'. Identifier chars only.
+    duration: number;    // ms
+    easing?: 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'linear';
+    delay?: number;      // ms
+  };
+
   // Component / Instance
   componentId?: string;
   overrides?: Record<string, Partial<SceneNode>>;

@@ -36,6 +36,9 @@ const FONT_FORMAT_BY_EXT: Array<[RegExp, string]> = [
 
 // Family is interpolated inside `font-family: "..."` — disallow any char that
 // could escape the quoted string or close the declaration.
+const ALLOWED_EASINGS = new Set(['ease', 'ease-in', 'ease-out', 'ease-in-out', 'linear']);
+const CSS_IDENT = /^[a-zA-Z][a-zA-Z0-9-]*$/;
+
 // Permissive but escape-proof: allow standard SVG path data chars
 // (letters that name commands, digits, dots, signs, whitespace, commas)
 // while rejecting anything that could break out of the attribute or inject
@@ -321,6 +324,29 @@ function buildStyles(node: SceneNode): string {
     s.push(`box-shadow: ${node.shadow}`);
   }
   if (node.blur) s.push(`filter: blur(${node.blur}px)`);
+
+  // Animation: emit shorthand only if the keyframe name is in the built-in
+  // library; unknown names are silently ignored (defense in depth on top of
+  // the literal-union type).
+  if (node.animation && isValidKeyframeName(node.animation.name)) {
+    const a = node.animation;
+    const duration = typeof a.duration === 'number' ? a.duration : 300;
+    const delay = typeof a.delay === 'number' ? a.delay : 0;
+    const easing = ALLOWED_EASINGS.has(a.easing ?? '') ? a.easing : 'ease-out';
+    const iter = a.iteration === 'infinite' || typeof a.iteration === 'number' ? a.iteration : 1;
+    s.push(`animation: ${a.name} ${duration}ms ${easing} ${delay}ms ${iter} normal both`);
+  }
+
+  // Transition: validate property name + easing; ignore the field entirely if
+  // anything looks suspicious.
+  if (node.transition && typeof node.transition.duration === 'number') {
+    const t = node.transition;
+    const prop = t.property && CSS_IDENT.test(t.property) ? t.property : 'all';
+    const easing = ALLOWED_EASINGS.has(t.easing ?? '') ? t.easing : 'ease';
+    const delay = typeof t.delay === 'number' ? `${t.delay}ms` : '0ms';
+    s.push(`transition: ${prop} ${t.duration}ms ${easing} ${delay}`);
+  }
+
   const backdrop = composeBackdropFilter(node);
   if (backdrop) {
     // Safari ships the unprefixed property behind a flag; emit both so
@@ -369,12 +395,45 @@ const FONT_SCALE_MIN = 24;
 // so the tablet preset at exactly 768 stays in the row layout.
 const MOBILE_BREAKPOINT = 767;
 
+// Built-in keyframes library. Emitted only when a node references the name.
+// Each ends at opacity:1 + identity transform; pair with `animation-fill-mode:
+// both` (set inline by buildStyles) so the start state applies pre-animation
+// and the end state sticks after.
+const KEYFRAME_LIBRARY: Record<string, string> = {
+  fadeIn: `  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }`,
+  slideUp: `  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }`,
+  slideDown: `  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }`,
+  scaleIn: `  @keyframes scaleIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }`,
+};
+
+export function isValidKeyframeName(name: string): name is keyof typeof KEYFRAME_LIBRARY {
+  return name in KEYFRAME_LIBRARY;
+}
+
 function buildRendererStylesheet(root: SceneNode, canvas?: Canvas): string {
   const stackIds: string[] = [];
   const relativeIds = new Set<string>();
-  collectRendererHints(root, [], canvas, stackIds, relativeIds);
+  const keyframes = new Set<string>();
+  collectRendererHints(root, [], canvas, stackIds, relativeIds, keyframes);
 
   const parts: string[] = [];
+
+  for (const name of keyframes) {
+    const block = KEYFRAME_LIBRARY[name];
+    if (block) parts.push(block);
+  }
 
   if (relativeIds.size > 0) {
     // Auto-inject position: relative on the nearest container ancestor of any
@@ -403,6 +462,7 @@ function collectRendererHints(
   canvas: Canvas | undefined,
   stackIds: string[],
   relativeIds: Set<string>,
+  keyframes: Set<string>,
 ): void {
   // Resolve instances so responsive hints inside components are picked up
   const resolved = node.type === 'instance' && node.componentId && canvas
@@ -411,6 +471,10 @@ function collectRendererHints(
 
   if (resolved.responsive === 'stack' && resolved.layout === 'horizontal') {
     stackIds.push(resolved.id);
+  }
+
+  if (resolved.animation?.name && isValidKeyframeName(resolved.animation.name)) {
+    keyframes.add(resolved.animation.name);
   }
 
   if (resolved.position === 'absolute') {
@@ -426,7 +490,7 @@ function collectRendererHints(
   if (resolved.children) {
     const nextAncestors = [...ancestors, resolved];
     for (const child of resolved.children) {
-      collectRendererHints(child, nextAncestors, canvas, stackIds, relativeIds);
+      collectRendererHints(child, nextAncestors, canvas, stackIds, relativeIds, keyframes);
     }
   }
 }

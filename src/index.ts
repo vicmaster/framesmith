@@ -267,7 +267,7 @@ Use "document" to reference the root node. Bind results to reuse IDs: header=I("
 Concatenate bindings: U(header+"/childId", {...})
 
 Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance
-Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, d, viewBox, strokeLinecap, strokeLinejoin, componentId, overrides, responsive
+Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, d, viewBox, strokeLinecap, strokeLinejoin, animation, transition, componentId, overrides, responsive
 
 Responsive layout (author desktop-first, adapt down):
   - responsive: "stack" — on a horizontal container, flips to vertical below 768px (multi-column layouts that should stack on mobile)
