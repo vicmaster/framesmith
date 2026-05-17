@@ -689,4 +689,6 @@ npm run build
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+Copyright (c) 2026 Victor Velazquez.
