@@ -1,5 +1,6 @@
 import type { Canvas, SceneNode, DesignVariables } from './types.js';
 import { resolveVariables } from './variables.js';
+import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 
@@ -602,8 +603,13 @@ export async function evaluateCanvas(
   canvas: Canvas,
   options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[] },
 ): Promise<EvaluationResult> {
-  // Resolve variables so $tokens become actual values for contrast checks
-  const resolvedRoot = resolveVariables(canvas.root, canvas.variables);
+  // Resolve variables so $tokens become actual values for contrast checks.
+  // Tokens flow through workspace → project → canvas inheritance (Phase 9),
+  // so contrast checks evaluate the actual rendered colors even when the
+  // canvas itself has empty `variables` and inherits everything from the
+  // workspace design system.
+  const mergedTokens = getCanvasTokens(canvas);
+  const resolvedRoot = resolveVariables(canvas.root, mergedTokens);
   const entries = buildTreeContext(resolvedRoot);
   // Also walk the unresolved tree for token usage stats
   const rawEntries = buildTreeContext(canvas.root);
@@ -624,7 +630,7 @@ export async function evaluateCanvas(
 
   // Fast checks (all use JSON tree only)
   if (activeCategories.includes('spacing')) {
-    results.set('spacing', checkSpacing(rawEntries, canvas.variables));
+    results.set('spacing', checkSpacing(rawEntries, mergedTokens));
   }
   if (activeCategories.includes('color')) {
     results.set('color', checkColorContrast(entries));
