@@ -66,6 +66,15 @@ function escapeAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// CSS values can legitimately contain `"` (e.g. font-family: "Inter") and `&`
+// in url() encoded params. Escaping just those two keeps the inline `style`
+// attribute well-formed without mangling legitimate CSS syntax. `<`/`>` are
+// not escaped because they appear in CSS comparison/feature contexts and
+// browsers tolerate them in attribute values.
+function escapeStyleValue(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
 function composeBackdropFilter(node: SceneNode): string | undefined {
   const bf = node.backdropFilter;
   if (bf) {
@@ -166,7 +175,7 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
   }
 
   const styles = buildStyles(node);
-  const styleAttr = styles ? ` style="${styles}"` : '';
+  const styleAttr = styles ? ` style="${escapeStyleValue(styles)}"` : '';
   const dataAttr = ` data-node-id="${node.id}"`;
 
   if (node.type === 'text') {
@@ -175,7 +184,7 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
 
   if (node.type === 'image') {
     const imgStyles = buildImageStyles(node);
-    return `<div${dataAttr}${styleAttr}><img src="${escapeHtml(node.src ?? '')}" style="${imgStyles}" /></div>`;
+    return `<div${dataAttr}${styleAttr}><img src="${escapeHtml(node.src ?? '')}" style="${escapeStyleValue(imgStyles)}" /></div>`;
   }
 
   if (node.type === 'icon') {
@@ -191,7 +200,7 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
-    return `<div${dataAttr} style="${ellipseStyles}">${renderChildren(node, canvas)}</div>`;
+    return `<div${dataAttr} style="${escapeStyleValue(ellipseStyles)}">${renderChildren(node, canvas)}</div>`;
   }
 
   return `<div${dataAttr}${styleAttr}>${renderChildren(node, canvas)}</div>`;
