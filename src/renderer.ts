@@ -36,6 +36,22 @@ const FONT_FORMAT_BY_EXT: Array<[RegExp, string]> = [
 
 // Family is interpolated inside `font-family: "..."` — disallow any char that
 // could escape the quoted string or close the declaration.
+function composeBackdropFilter(node: SceneNode): string | undefined {
+  const bf = node.backdropFilter;
+  if (bf) {
+    const parts: string[] = [];
+    if (typeof bf.blur === 'number') parts.push(`blur(${bf.blur}px)`);
+    if (typeof bf.saturate === 'number') parts.push(`saturate(${bf.saturate}%)`);
+    if (typeof bf.brightness === 'number') parts.push(`brightness(${bf.brightness}%)`);
+    if (typeof bf.contrast === 'number') parts.push(`contrast(${bf.contrast}%)`);
+    if (parts.length) return parts.join(' ');
+  }
+  if (typeof node.backdropBlur === 'number' && node.backdropBlur) {
+    return `blur(${node.backdropBlur}px)`;
+  }
+  return undefined;
+}
+
 function isSafeFamily(value: string): boolean {
   return !/["';{}\n\r<>]/.test(value);
 }
@@ -271,7 +287,13 @@ function buildStyles(node: SceneNode): string {
     s.push(`box-shadow: ${node.shadow}`);
   }
   if (node.blur) s.push(`filter: blur(${node.blur}px)`);
-  if (node.backdropBlur) s.push(`backdrop-filter: blur(${node.backdropBlur}px)`);
+  const backdrop = composeBackdropFilter(node);
+  if (backdrop) {
+    // Safari ships the unprefixed property behind a flag; emit both so
+    // glassmorphism actually renders in Safari/iOS without extra author effort.
+    s.push(`-webkit-backdrop-filter: ${backdrop}`);
+    s.push(`backdrop-filter: ${backdrop}`);
+  }
 
   // Text
   if (node.fontSize) s.push(`font-size: ${responsiveFontSize(node.fontSize)}`);

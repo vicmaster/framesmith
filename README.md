@@ -103,7 +103,7 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `component`, `instance`
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `componentId`, `overrides`
 
 ### `screenshot`
 
@@ -368,9 +368,18 @@ I("parent", { type: "frame", fill: "#fff", shadows: [{x: 0, y: 4, blur: 12, spre
 # Blur filter
 I("parent", { type: "frame", fill: "#3b82f6", blur: 4 })
 
-# Backdrop blur (frosted glass effect)
+# Backdrop blur (single-function shorthand for `blur`)
 I("parent", { type: "frame", fill: "rgba(255,255,255,0.5)", backdropBlur: 8 })
+
+# Glassmorphism (composable backdrop-filter: blur + saturate + brightness + contrast)
+I("parent", {
+  type: "frame",
+  fill: "rgba(255, 255, 255, 0.4)",
+  backdropFilter: { blur: 12, saturate: 180, brightness: 110 }
+})
 ```
+
+The structured `backdropFilter` form takes precedence over `backdropBlur` when both are set. The renderer also emits the `-webkit-backdrop-filter` prefix so glass effects render in Safari/iOS without extra work.
 
 The legacy `shadow` string property still works for simple cases.
 
