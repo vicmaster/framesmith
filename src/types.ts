@@ -159,6 +159,10 @@ export interface Workspace {
   id: string;
   name: string;
   createdAt: string;
+  /** Phase 9 — workspace-level design system inherited by every project +
+   * canvas under it. Resolution order at render is canvas.variables (override)
+   * → project.designSystem → workspace.designSystem → built-in defaults. */
+  designSystem?: DesignVariables;
 }
 
 export interface Project {
@@ -166,6 +170,9 @@ export interface Project {
   workspaceId: string;
   name: string;
   createdAt: string;
+  /** Phase 9 — project-level overrides on top of the parent workspace's design
+   * system. Sits between workspace and canvas in the resolution chain. */
+  designSystem?: DesignVariables;
 }
 
 /** Stable IDs for the built-in defaults so migration is idempotent. */

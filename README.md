@@ -151,6 +151,26 @@ Read and write design tokens (colors, spacing, radius, typography). Use `$tokenN
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm" }`
 
+### `workspace_set_design_system` / `workspace_get_design_system` / `workspace_apply_preset`
+
+Set tokens at the workspace level — every project + canvas under the workspace inherits them. Resolution order at render is `canvas.variables` (override) → `project.designSystem` → `workspace.designSystem` → built-in defaults, with the rightmost layer winning. Per-category merge: setting only `colors` doesn't reset `spacing`.
+
+```json
+workspace_set_design_system({
+  workspaceId: "...",
+  variables: {
+    colors: { primary: "#f59e0b", bg: "#0a0a0a" },
+    spacing: { sm: 8, md: 16, lg: 24 }
+  }
+})
+```
+
+`workspace_apply_preset({ workspaceId, preset })` is a shortcut that copies a named preset (`"dark"`, `"light"`, `"material"`, `"minimal"`) into the workspace.
+
+### `project_set_design_system` / `project_get_design_system` / `project_apply_preset`
+
+Same shape, but at the project layer between workspace and canvas. Use for sub-brand overrides (e.g., a `Marketing` project that overrides one color while inheriting everything else from the workspace).
+
 ### `get_fonts` / `set_fonts`
 
 Register custom font faces on a canvas. The renderer emits `@font-face` blocks in `<head>` plus a `<link rel="preconnect">` for unique remote origins, and declares `font-display: swap` so paint isn't blocked while a font loads.

@@ -81,6 +81,27 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 - **Setting `fontFamily` on every text node.** The renderer defaults to a system sans-serif stack at the body level. Only set `fontFamily` when you want a *different* face — and prefer `system-ui, -apple-system, sans-serif`-style stacks; if you need quoted multi-word names (`'Segoe UI'`), they're supported, but keep them inside the double-quoted value.
 - **Hardcoding pixel font sizes everywhere.** Large sizes get a `clamp()` treatment by the renderer to scale down on small viewports — only set `fontSize` to the *desktop* value and let the renderer handle the rest.
 
+## Design systems (workspace + project inheritance)
+
+Design tokens (colors, spacing, radius, typography) can live at three levels — workspace, project, and canvas. At render time the renderer merges them with **the rightmost layer winning**:
+
+```
+workspace.designSystem ──┐
+                         ├─→ merged tokens used to resolve $name references
+project.designSystem    ──┤
+                         │
+canvas.variables        ──┘  (override layer)
+```
+
+Authoring rules:
+
+- **Reach for workspace tokens before hex codes.** If you're working inside the `Coide` workspace, set the brand palette once via `workspace_set_design_system({ workspaceId, variables: { colors: { primary: "..." } } })`. Every canvas under that workspace can then reference `fill: "$primary"` and resolve to the brand value — no per-canvas redefinition.
+- **Project layer is for sub-brand overrides.** A `Coide → Marketing` project might override `primary` with the marketing accent while inheriting everything else from the workspace.
+- **Canvas-level variables are escape hatches**, not the primary surface. Use them when one canvas legitimately diverges from the design system; otherwise leave them empty and let the workspace tokens flow through.
+- **Presets work at every layer.** `workspace_apply_preset({ workspaceId, preset: "dark" })` copies the dark-preset tokens into the workspace; `project_apply_preset` and the existing `apply_preset` (canvas-level) do the same at their respective layers.
+
+Merge semantics are per-category: a project that only sets `colors` doesn't reset the workspace's `spacing`/`radius`/`typography`. A canvas that only overrides `colors.primary` keeps every other workspace color.
+
 ## Custom fonts
 
 The renderer ships system-stack typography by default. To use a hosted face, attach declarations to the canvas with `set_fonts` — once registered, any node can reference the family via `fontFamily`.
