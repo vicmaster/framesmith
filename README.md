@@ -1,6 +1,10 @@
 # canvas-mcp
 
-An open-source MCP server that gives any AI assistant a visual design canvas. Uses HTML/CSS as the rendering engine — flexbox layout, text wrapping, and styling come for free.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Release](https://img.shields.io/github/v/release/vicmaster/canvas-mcp)](https://github.com/vicmaster/canvas-mcp/releases) [![MCP](https://img.shields.io/badge/MCP-compatible-1f4838)](https://modelcontextprotocol.io)
+
+An open-source MCP server that gives your AI coding agent a visual canvas. Sketch the UI, review it in a browser, agree on the design — before any framework code gets written.
+
+**Contents:** [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
 ![canvas-mcp viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and canvas-mcp workspaces; canvas-mcp organised into Design system, UI, and Releases projects.](docs/canvas-mcp-dashboard.png)
 
@@ -28,27 +32,85 @@ The viewer is purely read-only — every canvas is authored through MCP tool cal
 
 ## Installation
 
-### With Claude Code
+Build the server once, then register it with your MCP client of choice.
 
-```bash
-claude mcp add canvas-mcp -- node /path/to/canvas-mcp/dist/index.js
-```
-
-### With npx (after publishing)
-
-```bash
-npx @canvas-mcp/server
-```
-
-### Manual
+### Build
 
 ```bash
 git clone https://github.com/vicmaster/canvas-mcp.git
 cd canvas-mcp
 npm install
 npm run build
-node dist/index.js
 ```
+
+### Claude Code
+
+```bash
+claude mcp add canvas-mcp -- node /path/to/canvas-mcp/dist/index.js
+```
+
+### Codex
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.canvas-mcp]
+command = "node"
+args = ["/path/to/canvas-mcp/dist/index.js"]
+```
+
+### Cursor
+
+Add to `~/.cursor/mcp.json` (or per-project `.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "canvas-mcp": {
+      "command": "node",
+      "args": ["/path/to/canvas-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "canvas-mcp": {
+      "command": "node",
+      "args": ["/path/to/canvas-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### VS Code + MCP extension
+
+Add to `.vscode/mcp.json` (project-scoped) or your global MCP settings:
+
+```json
+{
+  "servers": {
+    "canvas-mcp": {
+      "command": "node",
+      "args": ["/path/to/canvas-mcp/dist/index.js"]
+    }
+  }
+}
+```
+
+### Any other MCP-compatible client
+
+canvas-mcp speaks standard stdio MCP. Point your client at `node /path/to/canvas-mcp/dist/index.js` using whatever config shape your client expects.
+
+> **Optional:** set `CANVAS_VIEWER_URL=http://localhost:3001` in the MCP server env to pin it to a long-lived standalone viewer process — see [Running the viewer](#running-the-viewer).
+
+> **npm publish:** `@canvas-mcp/server` is not on npm yet. Install via the build steps above; an `npx @canvas-mcp/server` install is on the roadmap for v1.0.
 
 ## Tools
 
@@ -75,6 +137,22 @@ Returns `[{ id, name, createdAt, lastModified, projectId, archived }]`.
 ### `canvas_move` / `canvas_archive` / `canvas_unarchive` / `canvas_delete`
 
 Canvas lifecycle. `canvas_move` reassigns a canvas to a different project. `canvas_archive` sets a soft-delete flag (canvas stays on disk, hidden from default `canvas_list`); `canvas_unarchive` clears it. `canvas_delete` removes the canvas and its file permanently — irreversible.
+
+### `viewer_url`
+
+Get the URL of the live viewer plus per-canvas URLs. Share these with the user so they can open the design in their browser. No params.
+
+```json
+{
+  "url": "http://localhost:3001",
+  "gallery": "http://localhost:3001",
+  "canvases": [
+    { "name": "Login", "viewer": "http://localhost:3001/canvas/abc123" }
+  ]
+}
+```
+
+`canvas_create` already returns the per-canvas viewer URL in its response; reach for `viewer_url` when you want the gallery URL or to enumerate every existing canvas's URL in one call.
 
 ### `workspace_create` / `workspace_list` / `workspace_rename` / `workspace_delete`
 
@@ -478,7 +556,14 @@ Here's a complete session building a login card:
 
 ```
 canvas_create({ name: "Login" })
-→ { canvasId: "abc123" }
+→ {
+    "canvasId": "abc123",
+    "rootId": "xyz789",
+    "name": "Login",
+    "projectId": "default-project",
+    "viewerUrl": "http://localhost:3001/canvas/abc123",
+    "galleryUrl": "http://localhost:3001"
+  }
 
 set_variables({
   canvasId: "abc123",
@@ -525,22 +610,14 @@ batch_design({
 screenshot({ canvasId: "abc123" })
 ```
 
-## Web Viewer
+## Running the viewer
 
-The server includes a built-in web viewer that starts automatically on port **3001** (or the next available port if 3001 is in use — supports multiple sessions).
+The viewer runs in one of two modes — embedded (auto-starts inside the MCP server process) or standalone (long-lived in its own terminal). Standalone is recommended; the embedded mode stops the moment your MCP session ends, so any viewer URL you shared becomes unreachable.
 
-- **Gallery** (`/`) — Browse all canvases as clickable cards with thumbnails
-- **Canvas detail** (`/canvas/:id`) — Full rendered design in an iframe with responsive viewport buttons (Mobile / Tablet / Desktop), fit-to-screen toggle, and JSON inspector
-- **Live auto-refresh** — The viewer polls for changes every 2 seconds. As you `batch_design` via your MCP client, the browser updates automatically
-- **Raw HTML** (`/canvas/:id/html`) — The rendered HTML for embedding or inspection
-- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — Programmatic access
-
-### Standalone Viewer (recommended)
-
-By default, the viewer runs inside the MCP server process — when the Claude session ends, the viewer stops and URLs become unreachable. To keep the viewer alive across sessions, run it as a standalone process:
+### Standalone (recommended)
 
 ```bash
-# In a separate terminal tab (stays alive independently)
+# In a separate terminal tab — stays alive independently of any MCP session
 cd /path/to/canvas-mcp
 npm run viewer
 
@@ -550,18 +627,22 @@ npm run viewer -- 3004
 
 The standalone viewer:
 
-- **Persists across sessions** — URLs keep working after Claude finishes
-- **Shared across projects** — Multiple Claude sessions (from different projects) all use the same viewer
-- **Auto-detects new canvases** — Watches `~/.canvas-mcp/canvases/` for changes and picks them up automatically
-- **Auto-detected by MCP** — When the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
+- **Persists across sessions** — URLs keep working after Claude / Cursor / Windsurf finishes
+- **Shared across projects** — multiple MCP sessions (from different projects) all use the same viewer
+- **Auto-detects new canvases** — watches `~/.canvas-mcp/canvases/` for changes and picks them up immediately
+- **Auto-detected by MCP** — when the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
 
-All canvases are persisted to `~/.canvas-mcp/canvases/` as JSON files, so they survive process restarts.
+### Routes & API
 
-You can also set `CANVAS_VIEWER_URL` in your MCP server environment to explicitly point to a viewer instance:
+- **Gallery** (`/`) — browse all canvases as clickable cards with live thumbnails
+- **Project** (`/project/:id`) — same gallery but scoped to one project
+- **Archive** (`/archive`) — soft-deleted canvases with restore / permadelete actions
+- **Canvas detail** (`/canvas/:id`) — full rendered design with responsive viewport buttons (Mobile / Tablet / Desktop), Compare mode, Fit toggle, and JSON inspector
+- **Raw HTML** (`/canvas/:id/html`) — the rendered HTML for embedding or inspection
+- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
+- **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
 
-```bash
-claude mcp add canvas-mcp -e CANVAS_VIEWER_URL=http://localhost:3004 -- node /path/to/canvas-mcp/dist/index.js
-```
+All canvases persist to `~/.canvas-mcp/canvases/` as JSON files and survive process restarts. Set `CANVAS_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 
 ## Workflow
 
@@ -608,4 +689,6 @@ npm run build
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
+
+Copyright (c) 2026 Victor Velazquez.
