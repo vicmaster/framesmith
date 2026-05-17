@@ -49,6 +49,16 @@ export interface SceneNode {
   }>;
   blur?: number;
   backdropBlur?: number;
+  /** Composable backdrop filter functions. Each field is numeric:
+   * `blur` in px; `saturate`/`brightness`/`contrast` as percentage values
+   * where `100` is the identity (`saturate: 180` → `saturate(180%)`).
+   * If `backdropFilter` is set it takes precedence over `backdropBlur`. */
+  backdropFilter?: {
+    blur?: number;
+    saturate?: number;
+    brightness?: number;
+    contrast?: number;
+  };
 
   // Text
   content?: string;
