@@ -14,7 +14,15 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import puppeteer from 'puppeteer';
 import { renderToHtml } from '../src/renderer.js';
-import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from '../src/types.js';
+import { type Canvas, type SceneNode } from '../src/types.js';
+import {
+  loadPersistedWorkspaces,
+  ensureDefaultWorkspaceAndProject,
+  createWorkspace,
+  listWorkspaces,
+  createProject,
+  listProjects,
+} from '../src/workspaces.js';
 
 // ---- Palette ------------------------------------------------------------
 // Amber-gold direction. Purple/indigo became the default for AI-generated
@@ -424,6 +432,18 @@ const OUTPUT = resolve(here, '..', 'docs', 'viewer-refresh-mock.png');
 // Publish to the local canvas store so the design is reviewable LIVE in the
 // viewer at http://localhost:3001/canvas/viewer-refresh-mock with breakpoints
 // and Compare mode — not just as a flat PNG attached to a PR.
+//
+// Lands in canvas-mcp / UI — internal viewer-chrome specs live alongside the
+// shipped UI patterns, separate from the Releases and Design system projects.
+loadPersistedWorkspaces();
+ensureDefaultWorkspaceAndProject();
+const WORKSPACE_NAME = 'canvas-mcp';
+const PROJECT_NAME = 'UI';
+let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
+if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
+let project = listProjects(workspace.id).find((p) => p.name === PROJECT_NAME);
+if (!project) project = createProject(workspace.id, PROJECT_NAME)!;
+
 const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
 const CANVAS_ID = 'viewer-refresh-mock';
 const now = new Date().toISOString();
@@ -435,7 +455,7 @@ const canvas: Canvas = {
   components: {},
   createdAt: now,
   lastModified: now,
-  projectId: DEFAULT_PROJECT_ID,
+  projectId: project.id,
 };
 
 const html = renderToHtml(root, WIDTH, HEIGHT);

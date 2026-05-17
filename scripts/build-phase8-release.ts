@@ -23,7 +23,15 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import puppeteer from 'puppeteer';
 import { renderToHtml } from '../src/renderer.js';
-import { DEFAULT_PROJECT_ID, type Canvas, type FontFace, type SceneNode } from '../src/types.js';
+import { type Canvas, type FontFace, type SceneNode } from '../src/types.js';
+import {
+  loadPersistedWorkspaces,
+  ensureDefaultWorkspaceAndProject,
+  createWorkspace,
+  listWorkspaces,
+  createProject,
+  listProjects,
+} from '../src/workspaces.js';
 
 // ---- Palette ------------------------------------------------------------
 // Warm-dark amber. No gradients. No purple. (per visual-design-bar memory)
@@ -313,6 +321,18 @@ const SCALE = 2;
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'phase8-release.png');
 
+// Place the release artifact in canvas-mcp / Releases (find-or-create both).
+// Released hero pages live in their own project, separate from the design
+// system foundations and internal specs — see canvas-mcp workspace layout.
+loadPersistedWorkspaces();
+ensureDefaultWorkspaceAndProject();
+const WORKSPACE_NAME = 'canvas-mcp';
+const PROJECT_NAME = 'Releases';
+let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
+if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
+let project = listProjects(workspace.id).find((p) => p.name === PROJECT_NAME);
+if (!project) project = createProject(workspace.id, PROJECT_NAME)!;
+
 const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
 const CANVAS_ID = 'phase8-release';
 const now = new Date().toISOString();
@@ -325,7 +345,7 @@ const canvas: Canvas = {
   fonts: FONTS,
   createdAt: now,
   lastModified: now,
-  projectId: DEFAULT_PROJECT_ID,
+  projectId: project.id,
 };
 
 const html = renderToHtml(root, WIDTH, HEIGHT, canvas);
