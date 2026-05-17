@@ -1,4 +1,4 @@
-export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document';
+export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document' | 'path';
 
 export interface SceneNode {
   id: string;
@@ -80,6 +80,13 @@ export interface SceneNode {
   icon?: string;
   iconSize?: number;
   iconColor?: string;
+
+  // SVG path (only for type: 'path'). Inherits fill/stroke/strokeWidth from
+  // the standard SceneNode fields; viewBox defaults to `0 0 width height`.
+  d?: string;
+  viewBox?: string;
+  strokeLinecap?: 'butt' | 'round' | 'square';
+  strokeLinejoin?: 'miter' | 'round' | 'bevel';
 
   // Component / Instance
   componentId?: string;

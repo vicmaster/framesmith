@@ -280,7 +280,7 @@ Surfaced during Phase 7 — every item came from a concrete design moment we wan
 
 - [x] `backdrop-filter` support — `blur` / `saturate` / `brightness`; enables glassmorphism on cards, modals, sticky toolbars
 - [x] Custom font loading — `fontFamily` URLs (Google Fonts or hosted .woff2) loaded via `@font-face` in the renderer's `<head>`; canvas-level `fonts` array for declarations
-- [ ] SVG path primitives — `path` node type with `d` attribute support so iconography stops being approximated rectangles
+- [x] SVG path primitives — `path` node type with `d` attribute support so iconography stops being approximated rectangles
 - [ ] Transitions + animations — `transition` shorthand on nodes, plus a small `@keyframes` library for common patterns (fade-in, slide-up). Useful for the viewer chrome and for designed canvases alike
 - [x] `position: absolute` foot-gun fix — automatic `position: relative` injection on a frame when any descendant uses `position: absolute` without a positioned ancestor (a real bug that bit the slice 5 mock)
 - [ ] (Stretch) CSS variables exposed at the node level for token-driven theming inside a canvas (precursor to Phase 9 design systems)

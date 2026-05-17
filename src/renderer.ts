@@ -36,6 +36,33 @@ const FONT_FORMAT_BY_EXT: Array<[RegExp, string]> = [
 
 // Family is interpolated inside `font-family: "..."` — disallow any char that
 // could escape the quoted string or close the declaration.
+// Permissive but escape-proof: allow standard SVG path data chars
+// (letters that name commands, digits, dots, signs, whitespace, commas)
+// while rejecting anything that could break out of the attribute or inject
+// SVG/HTML markup.
+const SAFE_PATH_D = /^[a-zA-Z0-9\s.,\-+eE]+$/;
+const SAFE_VIEWBOX = /^[\d\s.\-]+$/;
+
+function renderPathSvg(node: SceneNode): string {
+  if (!node.d || !SAFE_PATH_D.test(node.d)) return '<!-- invalid path d -->';
+  const viewBox = node.viewBox && SAFE_VIEWBOX.test(node.viewBox)
+    ? node.viewBox
+    : `0 0 ${typeof node.width === 'number' ? node.width : 24} ${typeof node.height === 'number' ? node.height : 24}`;
+
+  const pathAttrs: string[] = [`d="${node.d}"`];
+  pathAttrs.push(`fill="${escapeAttr(node.fill ?? 'currentColor')}"`);
+  if (node.stroke) pathAttrs.push(`stroke="${escapeAttr(node.stroke)}"`);
+  if (node.strokeWidth !== undefined) pathAttrs.push(`stroke-width="${node.strokeWidth}"`);
+  if (node.strokeLinecap) pathAttrs.push(`stroke-linecap="${node.strokeLinecap}"`);
+  if (node.strokeLinejoin) pathAttrs.push(`stroke-linejoin="${node.strokeLinejoin}"`);
+
+  return `<svg width="100%" height="100%" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="display: block"><path ${pathAttrs.join(' ')} /></svg>`;
+}
+
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function composeBackdropFilter(node: SceneNode): string | undefined {
   const bf = node.backdropFilter;
   if (bf) {
@@ -154,6 +181,10 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
     return `<div${dataAttr}${styleAttr}>${iconHtml}</div>`;
   }
 
+  if (node.type === 'path') {
+    return `<div${dataAttr}${styleAttr}>${renderPathSvg(node)}</div>`;
+  }
+
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
@@ -256,7 +287,10 @@ function buildStyles(node: SceneNode): string {
   if (node.x !== undefined) s.push(`left: ${node.x}px`);
   if (node.y !== undefined) s.push(`top: ${node.y}px`);
 
-  // Visual
+  // Visual. For path nodes, `fill`/`stroke` are SVG path attributes (applied
+  // in renderPathSvg) — skip the wrapper-level background/border so the path
+  // isn't backed by a colored rectangle.
+  const isPath = node.type === 'path';
   if (node.gradient) {
     const g = node.gradient;
     const stops = g.stops.map((st) => st.position !== undefined ? `${st.color} ${st.position}%` : st.color).join(', ');
@@ -265,10 +299,10 @@ function buildStyles(node: SceneNode): string {
     } else {
       s.push(`background: radial-gradient(${stops})`);
     }
-  } else if (node.fill) {
+  } else if (node.fill && !isPath) {
     s.push(`background-color: ${node.fill}`);
   }
-  if (node.stroke) s.push(`border: ${node.strokeWidth ?? 1}px solid ${node.stroke}`);
+  if (node.stroke && !isPath) s.push(`border: ${node.strokeWidth ?? 1}px solid ${node.stroke}`);
   if (node.cornerRadius !== undefined) {
     if (typeof node.cornerRadius === 'number') {
       s.push(`border-radius: ${node.cornerRadius}px`);
