@@ -419,6 +419,44 @@ server.tool(
   }
 );
 
+// --- get_fonts ---
+server.tool(
+  'get_fonts',
+  'Get the custom font face declarations attached to a canvas.',
+  { canvasId: z.string().describe('Canvas ID') },
+  async ({ canvasId }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    return { content: [{ type: 'text', text: JSON.stringify(canvas.fonts ?? [], null, 2) }] };
+  }
+);
+
+// --- set_fonts ---
+server.tool(
+  'set_fonts',
+  'Replace the custom font face declarations on a canvas. Each entry needs `family` (CSS family name, no quotes) and `url` (https://, http://, or data: URI pointing at a .woff2/.woff/.ttf/.otf binary). Google Fonts CSS stylesheet URLs (fonts.googleapis.com/css2) are NOT supported — use the gstatic.com binary URL directly. Pass an empty array to clear.',
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    fonts: z.array(z.object({
+      family: z.string().min(1).describe('CSS font-family name (no surrounding quotes)'),
+      url: z.string().regex(/^(https?:\/\/|data:)/i).describe('Direct font binary URL'),
+      weight: z.union([z.string(), z.number()]).optional().describe('font-weight (e.g. 400, 700, "bold")'),
+      style: z.enum(['normal', 'italic']).optional(),
+    })).describe('Font declarations. Replaces existing fonts wholesale.'),
+  },
+  async ({ canvasId, fonts }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    const unsafeFamily = /["';{}\n\r<>]/;
+    const unsafeUrl = /["\n\r<>]/;
+    const bad = fonts.find((f) => unsafeFamily.test(f.family) || unsafeUrl.test(f.url));
+    if (bad) return { content: [{ type: 'text', text: `Error: Unsafe characters in font ${JSON.stringify(bad)} — family must not contain quotes/semicolons/braces/angle brackets/newlines; url must not contain quotes/newlines/angle brackets.` }], isError: true };
+    canvas.fonts = fonts;
+    touchCanvas(canvasId);
+    return { content: [{ type: 'text', text: JSON.stringify(canvas.fonts, null, 2) }] };
+  }
+);
+
 // --- export ---
 server.tool(
   'export',

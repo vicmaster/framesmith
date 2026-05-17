@@ -81,6 +81,25 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 - **Setting `fontFamily` on every text node.** The renderer defaults to a system sans-serif stack at the body level. Only set `fontFamily` when you want a *different* face — and prefer `system-ui, -apple-system, sans-serif`-style stacks; if you need quoted multi-word names (`'Segoe UI'`), they're supported, but keep them inside the double-quoted value.
 - **Hardcoding pixel font sizes everywhere.** Large sizes get a `clamp()` treatment by the renderer to scale down on small viewports — only set `fontSize` to the *desktop* value and let the renderer handle the rest.
 
+## Custom fonts
+
+The renderer ships system-stack typography by default. To use a hosted face, attach declarations to the canvas with `set_fonts` — once registered, any node can reference the family via `fontFamily`.
+
+- **Use direct binary URLs.** `set_fonts` expects `.woff2` / `.woff` / `.ttf` / `.otf` URLs (e.g. `https://fonts.gstatic.com/s/inter/v18/...`), **not** Google Fonts CSS stylesheet URLs (`fonts.googleapis.com/css2`). The renderer emits `@font-face` itself and adds `<link rel="preconnect">` per unique origin so the connection warms during HTML parsing.
+- **One family, multiple weights.** Pass one entry per weight/style combination — they share a family name and the browser picks the right face for each text node.
+- **`font-display: swap` is automatic.** Paint isn't blocked on slow fonts; the system stack shows first, then the custom face swaps in. Visible FOUT is the tradeoff for not blocking paint.
+- **Reference the family in nodes.** After registering Inter, set `fontFamily: "Inter, system-ui, sans-serif"` on text nodes. The stack tail is the fallback while the font loads (and the only typeface visible if the URL is unreachable).
+
+```js
+set_fonts({
+  canvasId,
+  fonts: [
+    { family: 'Inter', url: 'https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTc2vU.woff2', weight: 400 },
+    { family: 'Inter', url: 'https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTc2vV.woff2', weight: 700 },
+  ],
+});
+```
+
 ## After designing
 
 - **`canvas_evaluate`** scores the design on 5 categories (spacing, color, typography, structure, consistency) and surfaces actionable issues with `nodeId` references. Use it in a generator-evaluator loop: `batch_design` → `canvas_evaluate` → fix the returned nodeIds.

@@ -151,6 +151,21 @@ Read and write design tokens (colors, spacing, radius, typography). Use `$tokenN
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm" }`
 
+### `get_fonts` / `set_fonts`
+
+Register custom font faces on a canvas. The renderer emits `@font-face` blocks in `<head>` plus a `<link rel="preconnect">` for unique remote origins, and declares `font-display: swap` so paint isn't blocked while a font loads.
+
+```json
+{
+  "fonts": [
+    { "family": "Inter", "url": "https://fonts.gstatic.com/s/inter/v18/...regular.woff2", "weight": 400 },
+    { "family": "Inter", "url": "https://fonts.gstatic.com/s/inter/v18/...bold.woff2",    "weight": 700 }
+  ]
+}
+```
+
+URLs must point at the binary (`.woff2` / `.woff` / `.ttf` / `.otf` or a `data:` URI) — Google Fonts CSS stylesheet URLs (`fonts.googleapis.com/css2`) are not supported, use the gstatic.com binary URL directly. After registering, reference the family on any text node: `fontFamily: "Inter, system-ui, sans-serif"`.
+
 ### `export`
 
 Export a canvas or specific nodes to files on disk.
