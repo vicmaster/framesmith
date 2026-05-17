@@ -2,9 +2,9 @@
 
 An open-source MCP server that gives any AI assistant a visual design canvas. Uses HTML/CSS as the rendering engine — flexbox layout, text wrapping, and styling come for free.
 
-![canvas-mcp dashboard hero — a dark dashboard card showing $48,290 in revenue with a six-bar chart and three stat tiles, all composed via the canvas-mcp scene graph](docs/hero.png)
+![canvas-mcp viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and canvas-mcp workspaces; canvas-mcp organised into Design system, UI, and Releases projects.](docs/canvas-mcp-dashboard.png)
 
-> Above: a dashboard mock composed entirely via `batch_design` — gradients, shadows, a six-bar chart, and a responsive stat row that stacks below 768px.
+> Above: the canvas-mcp viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
 
 ```
 MCP Client → stdio → canvas-mcp server
@@ -15,6 +15,16 @@ MCP Client → stdio → canvas-mcp server
                         ↓
               Puppeteer (headless Chromium → PNG)
 ```
+
+## Viewer
+
+Run `npm run viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
+
+![canvas-mcp canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](docs/canvas-mcp-canvas.png)
+
+> Above: a single canvas in the detail view. The toolbar across the top exposes the breakpoint preview modes, Compare for side-by-side rendering, Fit for max-width, JSON for the raw scene graph, and lifecycle actions.
+
+The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.canvas-mcp/canvases/` so the viewer keeps showing them across sessions.
 
 ## Installation
 
