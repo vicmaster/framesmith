@@ -245,6 +245,18 @@ function projectDotColor(projectId: string): string {
   return DOT_PALETTE[Math.abs(hash) % DOT_PALETTE.length];
 }
 
+/** Canvas-mcp grid logo mark — same SVG path as the build-*.ts dogfood
+ * scripts. Replaces the original amber rounded-square placeholder so the
+ * sidebar wordmark and the viewer favicon share a single brand identity.
+ * Uses `currentColor` so the parent's `color` controls the stroke. */
+const LOGO_SVG_HTML = `<svg class="sidebar-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M 4 4 L 20 4 L 20 20 L 4 20 Z M 4 11 L 20 11 M 11 11 L 11 20"/></svg>`;
+
+/** SVG favicon embedded as a data URI. Inlined so the viewer doesn't need a
+ * separate /favicon.svg route + file. URL-encoded characters: `<` → `%3C`,
+ * `>` → `%3E`, `#` → `%23`. The hex color is the accent token's literal value
+ * because favicons can't reference CSS vars. */
+const FAVICON_HTML = `<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 4 4 L 20 4 L 20 20 L 4 20 Z M 4 11 L 20 11 M 11 11 L 11 20'/%3E%3C/svg%3E">`;
+
 /** Mobile sidebar drawer: at narrow viewports the 248px sidebar swallows most
  *  of the screen. Toggle button (hamburger) sits fixed top-left, sidebar
  *  becomes off-canvas, tapping the backdrop closes it. Injected into both
@@ -351,7 +363,7 @@ function renderSidebar(active: string): string {
 
   return `<aside class="sidebar">
       <div class="sidebar-header">
-        <span class="sidebar-mark"></span>
+        ${LOGO_SVG_HTML}
         <span class="sidebar-logo">Canvas</span>
       </div>
       <nav class="sidebar-nav">${sections}</nav>
@@ -407,6 +419,7 @@ export function renderProjectPage(projectId: string, port: number): string | nul
 <head>
 <meta charset="utf-8">
 <title>${esc(project.name)} — Canvas MCP</title>
+${FAVICON_HTML}
 <style>
   ${THEME_CSS}
   .app { display: flex; min-height: 100vh; }
@@ -414,7 +427,7 @@ export function renderProjectPage(projectId: string, port: number): string | nul
   /* Sidebar */
   .sidebar { width: 248px; flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
   .sidebar-header { padding: 22px 20px; display: flex; align-items: center; gap: 11px; }
-  .sidebar-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); flex-shrink: 0; }
+  .sidebar-mark { width: 22px; height: 22px; color: var(--accent); flex-shrink: 0; display: block; }
   .sidebar-logo { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
   .sidebar-nav { padding: 4px 8px 0; flex: 1; }
   .ws-section { margin-bottom: 18px; padding: 0; }
@@ -555,6 +568,7 @@ export function renderArchivePage(port: number): string {
 <head>
 <meta charset="utf-8">
 <title>Archive — Canvas MCP</title>
+${FAVICON_HTML}
 <style>
   ${THEME_CSS}
   .app { display: flex; min-height: 100vh; }
@@ -562,7 +576,7 @@ export function renderArchivePage(port: number): string {
   /* Sidebar */
   .sidebar { width: 248px; flex-shrink: 0; background: var(--sidebar); border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
   .sidebar-header { padding: 22px 20px; display: flex; align-items: center; gap: 11px; }
-  .sidebar-mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); flex-shrink: 0; }
+  .sidebar-mark { width: 22px; height: 22px; color: var(--accent); flex-shrink: 0; display: block; }
   .sidebar-logo { font-size: 14px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
   .sidebar-nav { padding: 4px 8px 0; flex: 1; }
   .ws-section { margin-bottom: 18px; }
@@ -674,6 +688,7 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
 <head>
 <meta charset="utf-8">
 <title>${esc(canvas.name)} — Canvas MCP</title>
+${FAVICON_HTML}
 <style>
   ${THEME_CSS}
   body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
