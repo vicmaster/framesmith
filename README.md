@@ -49,6 +49,16 @@ npm run build
 claude mcp add canvas-mcp -- node /path/to/canvas-mcp/dist/index.js
 ```
 
+### Codex
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.canvas-mcp]
+command = "node"
+args = ["/path/to/canvas-mcp/dist/index.js"]
+```
+
 ### Cursor
 
 Add to `~/.cursor/mcp.json` (or per-project `.cursor/mcp.json`):
