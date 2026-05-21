@@ -20,16 +20,16 @@ const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
 
 // When repo-bound, the single virtual workspace + its projects come from
-// `.canvas/workspace.json`. We keep the parsed file around so mutations
+// `.framesmith/workspace.json`. We keep the parsed file around so mutations
 // (rename, design-system edits, project create/delete) can be written back to
 // it instead of the global workspaces.json / projects.json indexes.
 let repoWorkspaceFile: RepoWorkspaceFile | null = null;
 
-// `CANVAS_MCP_HOME` lets tests redirect persistence to a tmp dir without
-// touching the real ~/.canvas-mcp tree. Resolved per call so an env var set
+// `FRAMESMITH_HOME` lets tests redirect persistence to a tmp dir without
+// touching the real ~/.framesmith tree. Resolved per call so an env var set
 // after module import (e.g. by a test harness) still takes effect.
 function dataDir(): string {
-  return process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+  return process.env.FRAMESMITH_HOME ?? process.env.CANVAS_MCP_HOME ?? join(homedir(), '.framesmith');
 }
 function workspacesPath(): string { return join(dataDir(), 'workspaces.json'); }
 function projectsPath(): string { return join(dataDir(), 'projects.json'); }
@@ -63,7 +63,7 @@ function persistProjects(): void {
 
 /**
  * Load the virtual workspace + its projects that back a repo-bound session
- * from a parsed `.canvas/workspace.json`. The workspace design system + each
+ * from a parsed `.framesmith/workspace.json`. The workspace design system + each
  * project's overrides are preserved as separate layers so `getCanvasTokens`
  * resolves them exactly as Phase 9 does. Project → subdirectory mappings are
  * registered with the repo store so canvas IO lands in the right subdir.
@@ -116,7 +116,7 @@ export function mergeRepoWorkspace(wf: RepoWorkspaceFile): void {
   }
 }
 
-/** Rewrite `.canvas/workspace.json` from the in-memory virtual workspace + its
+/** Rewrite `.framesmith/workspace.json` from the in-memory virtual workspace + its
  * projects. There is exactly one workspace when bound; its projects keep their
  * stable subdirectories (looked up via the repo store). */
 function persistRepoWorkspaceFile(): void {
@@ -225,7 +225,7 @@ export function createProject(workspaceId: string, name: string): Project | unde
   if (!workspaces.has(workspaceId)) return undefined;
   const p: Project = { id: nanoid(10), workspaceId, name, createdAt: new Date().toISOString() };
   projects.set(p.id, p);
-  // When bound, a new project needs a subdirectory under `.canvas/` before its
+  // When bound, a new project needs a subdirectory under `.framesmith/` before its
   // workspace.json entry (and any future canvas writes) can be persisted.
   if (isRepoBound()) registerProjectDir(p.id, uniqueProjectDir(name));
   persistProjects();

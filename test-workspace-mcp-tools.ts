@@ -2,8 +2,8 @@
 // (archive / unarchive / move / delete), and cascade-refusal protections.
 // Drives the underlying scene-graph / workspaces functions directly — the
 // MCP tool handlers in src/index.ts are thin pass-throughs, covered here by
-// proxy. Runs in a tmp dir via CANVAS_MCP_HOME so it doesn't touch the real
-// ~/.canvas-mcp tree.
+// proxy. Runs in a tmp dir via FRAMESMITH_HOME so it doesn't touch the real
+// ~/.framesmith tree.
 //
 // Usage: npx tsx test-workspace-mcp-tools.ts
 
@@ -11,8 +11,8 @@ import { mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-test-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-test-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const sg = await import('./src/scene-graph.js');
 const ws = await import('./src/workspaces.js');

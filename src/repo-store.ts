@@ -1,13 +1,13 @@
 // Phase 10 — repo-bound canvas storage.
 //
-// When a project tree has a `.canvas/` directory, that directory is the source
+// When a project tree has a `.framesmith/` directory, that directory is the source
 // of truth for a whole workspace: `workspace.json` (the binding + the workspace
 // design system + the list of projects) and one subdirectory per project
 // holding one open-JSON file per canvas (slug-named, full scene graph embedded).
-// The global ~/.canvas-mcp store keeps no copy of a bound canvas — a canvas is
+// The global ~/.framesmith store keeps no copy of a bound canvas — a canvas is
 // either repo-bound or global, never both, so there is nothing to reconcile.
 //
-//   .canvas/
+//   .framesmith/
 //     workspace.json        # workspace + projects[] + flattened design system
 //     design-system/
 //       design-tokens.json
@@ -24,20 +24,20 @@ import { homedir } from 'node:os';
 import type { Canvas, DesignVariables } from './types.js';
 import { externalizeAssets, rehydrateAssets } from './assets.js';
 
-export const REPO_DIR_NAME = '.canvas';
+export const REPO_DIR_NAME = '.framesmith';
 export const WORKSPACE_FILE = 'workspace.json';
 export const SCHEMA_VERSION = 1;
 
 export interface RepoProjectEntry {
   id: string;
   name: string;
-  /** Subdirectory under `.canvas/` holding this project's canvas files. */
+  /** Subdirectory under `.framesmith/` holding this project's canvas files. */
   dir: string;
   /** Project-level token overrides (Phase 9 layer above the canvas). */
   designSystem?: DesignVariables;
 }
 
-/** Binding metadata persisted to `.canvas/workspace.json`. Carries the
+/** Binding metadata persisted to `.framesmith/workspace.json`. Carries the
  * workspace design system + per-project overrides so a fresh clone (with empty
  * global state) resolves tokens identically. */
 export interface RepoWorkspaceFile {
@@ -55,7 +55,7 @@ export type Backend =
 
 let backend: Backend = { kind: 'global' };
 
-// id → path of the canvas file relative to `.canvas/` (e.g. `ui/login.json`),
+// id → path of the canvas file relative to `.framesmith/` (e.g. `ui/login.json`),
 // and projectId → its subdirectory name. Learned on load, assigned on write.
 // One repo per server process, so module-level maps are sufficient.
 const fileById = new Map<string, string>();
@@ -174,14 +174,14 @@ export function readWorkspaceFile(dir: string): RepoWorkspaceFile | null {
 }
 
 /** Forward/back-compat hook for `workspace.json`. Files from an older schema
- * get migrated up here; files from a newer canvas-mcp are read best-effort with
+ * get migrated up here; files from a newer framesmith are read best-effort with
  * a warning. Today there is only v1, so this is a near pass-through — but it is
  * the single place future migrations land. */
 function migrateWorkspaceFile(wf: RepoWorkspaceFile): RepoWorkspaceFile {
   const v = typeof wf.schemaVersion === 'number' ? wf.schemaVersion : 1;
   if (v > SCHEMA_VERSION) {
     process.stderr.write(
-      `Warning: ${WORKSPACE_FILE} schemaVersion ${v} is newer than this canvas-mcp supports (${SCHEMA_VERSION}); reading best-effort.\n`,
+      `Warning: ${WORKSPACE_FILE} schemaVersion ${v} is newer than this framesmith supports (${SCHEMA_VERSION}); reading best-effort.\n`,
     );
   }
   // (future) if (v < 2) { ...migrate v1 → v2... }
@@ -193,7 +193,7 @@ export function writeWorkspaceFile(dir: string, file: RepoWorkspaceFile): void {
   writeAtomic(join(dir, WORKSPACE_FILE), stableStringify(file));
 }
 
-// --- canvas IO (rootDir = the `.canvas/` dir) ---
+// --- canvas IO (rootDir = the `.framesmith/` dir) ---
 export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
   const projectDir = projectDirById.get(canvas.projectId) ?? 'unsorted';
   const targetDir = join(rootDir, projectDir);
@@ -284,8 +284,8 @@ export function readCanvasFile(rootDir: string, id: string): Canvas | null {
 
 // --- Discovery ---
 /** Walk up from `startDir` to the filesystem root, returning the binding for
- * the nearest ancestor that contains `.canvas/workspace.json`, else null. The
- * `workspace.json` marker (not a bare `.canvas` dir) is required so an
+ * the nearest ancestor that contains `.framesmith/workspace.json`, else null. The
+ * `workspace.json` marker (not a bare `.framesmith` dir) is required so an
  * unrelated directory is never mistaken for a binding. */
 export function detectBinding(startDir: string): { root: string; dir: string } | null {
   let dir = startDir;
@@ -310,25 +310,44 @@ export function findRepoRoot(startDir: string): string {
   }
 }
 
-/** Where discovery starts. `CANVAS_MCP_PROJECT_DIR` overrides cwd for MCP
+/** Where discovery starts. `FRAMESMITH_PROJECT_DIR` overrides cwd for MCP
  * clients that don't launch the server in the user's project directory. */
 export function projectStartDir(): string {
-  return process.env.CANVAS_MCP_PROJECT_DIR ?? process.cwd();
+  return process.env.FRAMESMITH_PROJECT_DIR ?? process.env.CANVAS_MCP_PROJECT_DIR ?? process.cwd();
 }
 
 // --- Repo registry (Slice 2) ---
 // The viewer can't scan the filesystem for bound repos, so each binding records
-// its `.canvas/` path in a global registry. The viewer reads the registry on
+// its `.framesmith/` path in a global registry. The viewer reads the registry on
 // load and mirrors those repos into its (read-only) gallery.
 
 function dataDir(): string {
-  return process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+  return process.env.FRAMESMITH_HOME ?? process.env.CANVAS_MCP_HOME ?? join(homedir(), '.framesmith');
 }
 function registryPath(): string {
   return join(dataDir(), 'registry.json');
 }
 
-/** The `.canvas/` directories of every known bound repo. */
+/**
+ * One-time rename of the pre-rebrand global store `~/.canvas-mcp` → `~/.framesmith`.
+ * Runs at server/viewer startup before anything reads the data dir. No-op if an
+ * explicit home env is set, if the new dir already exists, or if there's nothing
+ * to migrate — so it's safe to call on every boot.
+ */
+export function migrateLegacyHome(): void {
+  if (process.env.FRAMESMITH_HOME || process.env.CANVAS_MCP_HOME) return;
+  const oldDir = join(homedir(), '.canvas-mcp');
+  const newDir = join(homedir(), '.framesmith');
+  if (!existsSync(oldDir) || existsSync(newDir)) return;
+  try {
+    renameSync(oldDir, newDir);
+    process.stderr.write(`Migrated global store ${oldDir} → ${newDir}\n`);
+  } catch (err) {
+    process.stderr.write(`Warning: could not migrate ${oldDir} → ${newDir}: ${(err as Error).message}\n`);
+  }
+}
+
+/** The `.framesmith/` directories of every known bound repo. */
 export function readRegistry(): string[] {
   try {
     if (!existsSync(registryPath())) return [];
@@ -339,7 +358,7 @@ export function readRegistry(): string[] {
   }
 }
 
-/** Record a bound repo's `.canvas/` dir in the registry (idempotent). Called on
+/** Record a bound repo's `.framesmith/` dir in the registry (idempotent). Called on
  * bind and whenever a bound server boots, so existing bindings self-register. */
 export function registerRepo(canvasDir: string): void {
   try {

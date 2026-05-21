@@ -1,8 +1,8 @@
 // Renders docs/viewer-refresh-mock.png — the design spec for the Phase 7
-// slice 5 viewer UI refresh. Composed entirely as a canvas-mcp scene graph
+// slice 5 viewer UI refresh. Composed entirely as a framesmith scene graph
 // and screenshotted through the renderer + puppeteer pipeline.
 //
-// Also publishes the canvas to ~/.canvas-mcp/canvases/ so the live spec is
+// Also publishes the canvas to ~/.framesmith/canvases/ so the live spec is
 // reviewable at http://localhost:3001/canvas/viewer-refresh-mock with breakpoint
 // + Compare modes (not just as a flat PNG attached to a PR).
 //
@@ -26,7 +26,7 @@ import {
 
 // ---- Palette ------------------------------------------------------------
 // Amber-gold direction. Purple/indigo became the default for AI-generated
-// "premium dark theme" by 2026 (Linear-inspired everywhere); canvas-mcp's
+// "premium dark theme" by 2026 (Linear-inspired everywhere); framesmith's
 // identity is the opposite of that. Warm near-black surfaces, amber→orange
 // accent that maps to the canvas/paint metaphor of the product, used very
 // sparingly so it reads as a signature rather than as decoration.
@@ -57,7 +57,7 @@ const C = {
   // feel out of the design entirely.
   dot1: '#22c55e', // green
   dot2: '#3b82f6', // blue
-  dot3: '#f59e0b', // amber (matches main accent — it's fine, this is canvas-mcp)
+  dot3: '#f59e0b', // amber (matches main accent — it's fine, this is framesmith)
   dot4: '#ec4899', // pink
   dot5: '#06b6d4', // cyan
   dot6: '#ef4444', // red
@@ -199,9 +199,9 @@ const sidebar: SceneNode = {
       layout: 'vertical', gap: 0, padding: [4, 0, 0, 0],
       width: '100%',
       children: [
-        // Dogfood the example data: canvas-mcp is the active workspace, Viewer
+        // Dogfood the example data: framesmith is the active workspace, Viewer
         // is the active project — i.e. exactly what we're working on right now.
-        wsSection('ws-canvas', 'canvas-mcp', [
+        wsSection('ws-canvas', 'framesmith', [
           projectRow('p-viewer',   'Viewer',          '14', C.dot1, true),
           projectRow('p-renderer', 'Renderer',        '6',  C.dot2),
           projectRow('p-roadmap',  'Roadmap',         '5',  C.dot3),
@@ -235,7 +235,7 @@ const breadcrumb: SceneNode = {
   id: 'breadcrumb', type: 'frame',
   layout: 'horizontal', alignItems: 'center', gap: 8,
   children: [
-    { id: 'bc-ws',   type: 'text', content: 'canvas-mcp', fontSize: 12, fontWeight: 500, color: C.textTertiary },
+    { id: 'bc-ws',   type: 'text', content: 'framesmith', fontSize: 12, fontWeight: 500, color: C.textTertiary },
     { id: 'bc-sep',  type: 'text', content: '/',          fontSize: 12, fontWeight: 500, color: C.textMuted },
     { id: 'bc-proj', type: 'text', content: 'Viewer',     fontSize: 12, fontWeight: 600, color: C.textSecondary },
   ],
@@ -433,18 +433,18 @@ const OUTPUT = resolve(here, '..', 'docs', 'viewer-refresh-mock.png');
 // viewer at http://localhost:3001/canvas/viewer-refresh-mock with breakpoints
 // and Compare mode — not just as a flat PNG attached to a PR.
 //
-// Lands in canvas-mcp / UI — internal viewer-chrome specs live alongside the
+// Lands in framesmith / UI — internal viewer-chrome specs live alongside the
 // shipped UI patterns, separate from the Releases and Design system projects.
 loadPersistedWorkspaces();
 ensureDefaultWorkspaceAndProject();
-const WORKSPACE_NAME = 'canvas-mcp';
+const WORKSPACE_NAME = 'framesmith';
 const PROJECT_NAME = 'UI';
 let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
 if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
 let project = listProjects(workspace.id).find((p) => p.name === PROJECT_NAME);
 if (!project) project = createProject(workspace.id, PROJECT_NAME)!;
 
-const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
+const STORE_DIR = join(process.env.FRAMESMITH_HOME ?? join(homedir(), '.framesmith'), 'canvases');
 const CANVAS_ID = 'viewer-refresh-mock';
 const now = new Date().toISOString();
 const canvas: Canvas = {

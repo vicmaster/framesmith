@@ -8,11 +8,11 @@ import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvas
 const store = new Map<string, Canvas>();
 
 // --- Disk persistence ---
-// `CANVAS_MCP_HOME` lets tests redirect persistence to a tmp dir without
-// touching the real ~/.canvas-mcp tree. Resolved per call so an env var set
+// `FRAMESMITH_HOME` lets tests redirect persistence to a tmp dir without
+// touching the real ~/.framesmith tree. Resolved per call so an env var set
 // after module import still takes effect.
 function dataDir(): string {
-  return process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+  return process.env.FRAMESMITH_HOME ?? process.env.CANVAS_MCP_HOME ?? join(homedir(), '.framesmith');
 }
 function canvasDir(): string {
   return join(dataDir(), 'canvases');
@@ -43,9 +43,9 @@ function removePersistedCanvas(id: string): void {
   purgeGlobalCanvas(id);
 }
 
-/** Delete a canvas file from the global ~/.canvas-mcp store regardless of the
+/** Delete a canvas file from the global ~/.framesmith store regardless of the
  * active backend. Used during bind migration to drop the global copy after the
- * canvas has been written into the repo `.canvas/` dir. */
+ * canvas has been written into the repo `.framesmith/` dir. */
 export function purgeGlobalCanvas(id: string): void {
   try {
     const filePath = join(canvasDir(), `${id}.json`);

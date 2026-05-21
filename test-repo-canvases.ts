@@ -1,12 +1,12 @@
 // Smoke for Phase 10 slice 1: repo-bound canvas storage (workspace-level).
 //
-// Verifies the source-of-truth model: binding a workspace writes a `.canvas/`
+// Verifies the source-of-truth model: binding a workspace writes a `.framesmith/`
 // dir (workspace.json + one subdirectory per project, one open-JSON file per
 // canvas), preserves the workspace/project token layers, drops the global
 // copies, routes subsequent writes to the right project subdir, serializes
 // deterministically, and round-trips through a simulated restart.
 //
-// Uses CANVAS_MCP_HOME for the global store and a separate tmp dir for the repo.
+// Uses FRAMESMITH_HOME for the global store and a separate tmp dir for the repo.
 //
 // Usage: npx tsx test-repo-canvases.ts
 
@@ -14,9 +14,9 @@ import { mkdirSync, mkdtempSync, existsSync, readFileSync, readdirSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const globalHome = mkdtempSync(join(tmpdir(), 'canvas-mcp-global-'));
-const repoRoot = mkdtempSync(join(tmpdir(), 'canvas-mcp-repo-'));
-process.env.CANVAS_MCP_HOME = globalHome;
+const globalHome = mkdtempSync(join(tmpdir(), 'framesmith-global-'));
+const repoRoot = mkdtempSync(join(tmpdir(), 'framesmith-repo-'));
+process.env.FRAMESMITH_HOME = globalHome;
 
 // Import AFTER setting the env var so first reads see it.
 const { createCanvas, getCanvas, listCanvases, loadPersistedCanvases } = await import('./src/scene-graph.js');
@@ -31,7 +31,7 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-const canvasDir = join(repoRoot, '.canvas');
+const canvasDir = join(repoRoot, '.framesmith');
 const globalCanvases = join(globalHome, 'canvases');
 
 // ---- Boot global, build a workspace with two projects + design layers -------
@@ -61,7 +61,7 @@ check('bind reports 2 projects, 3 canvases migrated', result.ok && result.projec
 check('isRepoBound() is true after bind', isRepoBound());
 
 // workspace.json: schemaVersion + workspace design system + project entries
-check('.canvas/workspace.json exists', existsSync(join(canvasDir, WORKSPACE_FILE)));
+check('.framesmith/workspace.json exists', existsSync(join(canvasDir, WORKSPACE_FILE)));
 const wf = readWorkspaceFile(canvasDir);
 check('workspace.json has schemaVersion 1', wf?.schemaVersion === 1, `got ${wf?.schemaVersion}`);
 check('workspace.json carries workspace design system', wf?.designSystem?.colors?.brand === '#e94560');

@@ -1,17 +1,17 @@
-# canvas-mcp
+# framesmith
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Release](https://img.shields.io/github/v/release/vicmaster/canvas-mcp)](https://github.com/vicmaster/canvas-mcp/releases) [![MCP](https://img.shields.io/badge/MCP-compatible-1f4838)](https://modelcontextprotocol.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Release](https://img.shields.io/github/v/release/vicmaster/framesmith)](https://github.com/vicmaster/framesmith/releases) [![MCP](https://img.shields.io/badge/MCP-compatible-1f4838)](https://modelcontextprotocol.io)
 
 An open-source MCP server that gives your AI coding agent a visual canvas. Sketch the UI, review it in a browser, agree on the design — before any framework code gets written.
 
 **Contents:** [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
-![canvas-mcp viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and canvas-mcp workspaces; canvas-mcp organised into Design system, UI, and Releases projects.](https://raw.githubusercontent.com/vicmaster/canvas-mcp/master/docs/canvas-mcp-dashboard.png)
+![framesmith viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and framesmith workspaces; framesmith organised into Design system, UI, and Releases projects.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
 
-> Above: the canvas-mcp viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
+> Above: the framesmith viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
 
 ```
-MCP Client → stdio → canvas-mcp server
+MCP Client → stdio → framesmith server
                         ↓
               Scene Graph (in-memory JSON tree)
                         ↓
@@ -24,11 +24,11 @@ MCP Client → stdio → canvas-mcp server
 
 Run `npm run viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
-![canvas-mcp canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/canvas-mcp/master/docs/canvas-mcp-canvas.png)
+![framesmith canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
 
 > Above: a single canvas in the detail view. The toolbar across the top exposes the breakpoint preview modes, Compare for side-by-side rendering, Fit for max-width, JSON for the raw scene graph, and lifecycle actions.
 
-The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.canvas-mcp/canvases/` so the viewer keeps showing them across sessions.
+The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
 
 ## Installation
 
@@ -37,8 +37,8 @@ Build the server once, then register it with your MCP client of choice.
 ### Build
 
 ```bash
-git clone https://github.com/vicmaster/canvas-mcp.git
-cd canvas-mcp
+git clone https://github.com/vicmaster/framesmith.git
+cd framesmith
 npm install
 npm run build
 ```
@@ -46,7 +46,7 @@ npm run build
 ### Claude Code
 
 ```bash
-claude mcp add canvas-mcp -- node /path/to/canvas-mcp/dist/index.js
+claude mcp add framesmith -- node /path/to/framesmith/dist/index.js
 ```
 
 ### Codex
@@ -54,9 +54,9 @@ claude mcp add canvas-mcp -- node /path/to/canvas-mcp/dist/index.js
 Add to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.canvas-mcp]
+[mcp_servers.framesmith]
 command = "node"
-args = ["/path/to/canvas-mcp/dist/index.js"]
+args = ["/path/to/framesmith/dist/index.js"]
 ```
 
 ### Cursor
@@ -66,9 +66,9 @@ Add to `~/.cursor/mcp.json` (or per-project `.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "canvas-mcp": {
+    "framesmith": {
       "command": "node",
-      "args": ["/path/to/canvas-mcp/dist/index.js"]
+      "args": ["/path/to/framesmith/dist/index.js"]
     }
   }
 }
@@ -81,9 +81,9 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "canvas-mcp": {
+    "framesmith": {
       "command": "node",
-      "args": ["/path/to/canvas-mcp/dist/index.js"]
+      "args": ["/path/to/framesmith/dist/index.js"]
     }
   }
 }
@@ -96,9 +96,9 @@ Add to `.vscode/mcp.json` (project-scoped) or your global MCP settings:
 ```json
 {
   "servers": {
-    "canvas-mcp": {
+    "framesmith": {
       "command": "node",
-      "args": ["/path/to/canvas-mcp/dist/index.js"]
+      "args": ["/path/to/framesmith/dist/index.js"]
     }
   }
 }
@@ -106,11 +106,11 @@ Add to `.vscode/mcp.json` (project-scoped) or your global MCP settings:
 
 ### Any other MCP-compatible client
 
-canvas-mcp speaks standard stdio MCP. Point your client at `node /path/to/canvas-mcp/dist/index.js` using whatever config shape your client expects.
+framesmith speaks standard stdio MCP. Point your client at `node /path/to/framesmith/dist/index.js` using whatever config shape your client expects.
 
-> **Optional:** set `CANVAS_VIEWER_URL=http://localhost:3001` in the MCP server env to pin it to a long-lived standalone viewer process — see [Running the viewer](#running-the-viewer).
+> **Optional:** set `FRAMESMITH_VIEWER_URL=http://localhost:3001` in the MCP server env to pin it to a long-lived standalone viewer process — see [Running the viewer](#running-the-viewer).
 
-> **npm publish:** `@canvas-mcp/server` is not on npm yet. Install via the build steps above; an `npx @canvas-mcp/server` install is on the roadmap for v1.0.
+> **npm publish:** `framesmith` is not on npm yet. Install via the build steps above; an `npx framesmith` install is on the roadmap for v1.0.
 
 ## Tools
 
@@ -164,17 +164,17 @@ Mid-level container CRUD inside a workspace. The built-in `Untitled` project can
 
 ### `canvas_bind`
 
-Bind a workspace to the current project directory so its canvases live **in the repo** as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global `~/.canvas-mcp` store. Run it once per repo.
+Bind a workspace to the current project directory so its canvases live **in the repo** as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global `~/.framesmith` store. Run it once per repo.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `workspaceId` | string? | Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. |
 | `dir` | string? | Directory to bind. Defaults to the nearest git repo root above the server's working directory. |
 
-It creates `.canvas/workspace.json` (the binding plus the design system, so a fresh clone resolves tokens identically) and one subdirectory per project holding one slug-named file per canvas:
+It creates `.framesmith/workspace.json` (the binding plus the design system, so a fresh clone resolves tokens identically) and one subdirectory per project holding one slug-named file per canvas:
 
 ```
-.canvas/
+.framesmith/
   workspace.json     # workspace + projects[] + design system
   design-system/
     design-tokens.json
@@ -183,9 +183,9 @@ It creates `.canvas/workspace.json` (the binding plus the design system, so a fr
     login-form.json
 ```
 
-It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. Afterwards the server auto-detects `.canvas/` on startup (walking up from its working directory). **Commit `.canvas/`** so designs travel with the code and diff cleanly in review.
+It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. Afterwards the server auto-detects `.framesmith/` on startup (walking up from its working directory). **Commit `.framesmith/`** so designs travel with the code and diff cleanly in review.
 
-The bind also records the repo in `~/.canvas-mcp/registry.json`, so the standalone viewer shows bound repos alongside your global workspaces in one gallery (it rebuilds that read-only mirror on launch and whenever the registry changes).
+The bind also records the repo in `~/.framesmith/registry.json`, so the standalone viewer shows bound repos alongside your global workspaces in one gallery (it rebuilds that read-only mirror on launch and whenever the registry changes).
 
 ### `batch_design`
 
@@ -369,7 +369,7 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID to evaluate |
-| `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `CANVAS_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
+| `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`. Defaults to all. |
 
 **Categories and what they check**
@@ -419,7 +419,7 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 }
 ```
 
-Provider selection: `CANVAS_LLM_PROVIDER` env var (`anthropic` | `openai`), else falls back to whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set. Default models: `claude-sonnet-4-6` / `gpt-4.1` (override via `CANVAS_LLM_ANTHROPIC_MODEL` / `CANVAS_LLM_OPENAI_MODEL`). Adding a third provider is one entry in the `judges` table in `src/llm-judge.ts`.
+Provider selection: `FRAMESMITH_LLM_PROVIDER` env var (`anthropic` | `openai`), else falls back to whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set. Default models: `claude-sonnet-4-6` / `gpt-4.1` (override via `FRAMESMITH_LLM_ANTHROPIC_MODEL` / `FRAMESMITH_LLM_OPENAI_MODEL`). Adding a third provider is one entry in the `judges` table in `src/llm-judge.ts`.
 
 **Example generator-evaluator loop**
 
@@ -470,7 +470,7 @@ Apply the ops by joining them with newlines and passing to `batch_design`, then 
 
 ## Resources
 
-- **`canvas-mcp://guidelines`** — markdown authoring guide: width strategies (fixed / percentage / fluid+cap / floor / fit-content), responsive hint semantics (`stack` / `wrap` / `fixed`), common patterns (pricing tiers, two-column hero, tag list, toolbar), and anti-patterns. Source: [`docs/GUIDELINES.md`](docs/GUIDELINES.md).
+- **`framesmith://guidelines`** — markdown authoring guide: width strategies (fixed / percentage / fluid+cap / floor / fit-content), responsive hint semantics (`stack` / `wrap` / `fixed`), common patterns (pricing tiers, two-column hero, tag list, toolbar), and anti-patterns. Source: [`docs/GUIDELINES.md`](docs/GUIDELINES.md).
 
 ## Benchmark
 
@@ -643,7 +643,7 @@ The viewer runs in one of two modes — embedded (auto-starts inside the MCP ser
 
 ```bash
 # In a separate terminal tab — stays alive independently of any MCP session
-cd /path/to/canvas-mcp
+cd /path/to/framesmith
 npm run viewer
 
 # Or on a specific port
@@ -654,7 +654,7 @@ The standalone viewer:
 
 - **Persists across sessions** — URLs keep working after Claude / Cursor / Windsurf finishes
 - **Shared across projects** — multiple MCP sessions (from different projects) all use the same viewer
-- **Auto-detects new canvases** — watches `~/.canvas-mcp/canvases/` for changes and picks them up immediately
+- **Auto-detects new canvases** — watches `~/.framesmith/canvases/` for changes and picks them up immediately
 - **Auto-detected by MCP** — when the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
 
 ### Routes & API
@@ -667,7 +667,7 @@ The standalone viewer:
 - **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
 - **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
 
-All canvases persist to `~/.canvas-mcp/canvases/` as JSON files and survive process restarts. Set `CANVAS_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
+All canvases persist to `~/.framesmith/canvases/` as JSON files and survive process restarts. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 
 ## Workflow
 
@@ -684,8 +684,8 @@ All canvases persist to `~/.canvas-mcp/canvases/` as JSON files and survive proc
 ## Development
 
 ```bash
-git clone https://github.com/vicmaster/canvas-mcp.git
-cd canvas-mcp
+git clone https://github.com/vicmaster/framesmith.git
+cd framesmith
 npm install
 npm run build
 ```
@@ -703,8 +703,8 @@ npm run build
 
 | Variable | Purpose |
 |----------|---------|
-| `CANVAS_VIEWER_URL` | Point the MCP server at an external viewer (skips starting an embedded one). |
-| `CANVAS_VIEWER_PORT` | Override the standalone viewer's port. |
+| `FRAMESMITH_VIEWER_URL` | Point the MCP server at an external viewer (skips starting an embedded one). |
+| `FRAMESMITH_VIEWER_PORT` | Override the standalone viewer's port. |
 
 ### Conventions
 

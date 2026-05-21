@@ -1,6 +1,6 @@
 // Smoke for the viewer logo + favicon swap.
 //
-// - Sidebar shows the canvas-mcp grid path mark (not the old amber square).
+// - Sidebar shows the framesmith grid path mark (not the old amber square).
 // - Every page emits a `<link rel="icon" type="image/svg+xml">` favicon.
 // - .sidebar-mark CSS no longer uses background-color (background is set on
 //   the placeholder span; the new SVG draws via stroke="currentColor").
@@ -11,8 +11,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-logo-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-logo-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } = await import('./src/workspaces.js');
 const { createCanvas } = await import('./src/scene-graph.js');

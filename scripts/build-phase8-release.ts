@@ -88,7 +88,7 @@ const header: SceneNode = {
   gap: 12,
   children: [
     logoMark,
-    { id: 'wordmark', type: 'text', content: 'canvas-mcp', fontSize: 18, fontWeight: 600, color: C.textPrimary, fontFamily: FONT_STACK },
+    { id: 'wordmark', type: 'text', content: 'framesmith', fontSize: 18, fontWeight: 600, color: C.textPrimary, fontFamily: FONT_STACK },
   ],
 };
 
@@ -321,19 +321,19 @@ const SCALE = 2;
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'phase8-release.png');
 
-// Place the release artifact in canvas-mcp / Releases (find-or-create both).
+// Place the release artifact in framesmith / Releases (find-or-create both).
 // Released hero pages live in their own project, separate from the design
-// system foundations and internal specs — see canvas-mcp workspace layout.
+// system foundations and internal specs — see framesmith workspace layout.
 loadPersistedWorkspaces();
 ensureDefaultWorkspaceAndProject();
-const WORKSPACE_NAME = 'canvas-mcp';
+const WORKSPACE_NAME = 'framesmith';
 const PROJECT_NAME = 'Releases';
 let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
 if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
 let project = listProjects(workspace.id).find((p) => p.name === PROJECT_NAME);
 if (!project) project = createProject(workspace.id, PROJECT_NAME)!;
 
-const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
+const STORE_DIR = join(process.env.FRAMESMITH_HOME ?? join(homedir(), '.framesmith'), 'canvases');
 const CANVAS_ID = 'phase8-release';
 const now = new Date().toISOString();
 const canvas: Canvas = {

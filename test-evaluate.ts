@@ -163,7 +163,7 @@ async function testEmptyCanvas() {
 }
 
 async function main() {
-  console.log('Canvas MCP — Evaluate Tests\n===========================');
+  console.log('Framesmith — Evaluate Tests\n===========================');
 
   await testBadDesign();
   await testGoodDesign();

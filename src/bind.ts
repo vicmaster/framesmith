@@ -5,7 +5,7 @@
 // keeping it importable by the smoke test without booting the MCP server. None
 // of the layers below import this file, so there is no import cycle.
 //
-// A repo binds a whole workspace: every project under it becomes a `.canvas/`
+// A repo binds a whole workspace: every project under it becomes a `.framesmith/`
 // subdirectory, every canvas an open-JSON file inside it.
 
 import { existsSync } from 'node:fs';
@@ -24,7 +24,7 @@ export type BindResult =
   | { ok: true; root: string; dir: string; workspace: string; projects: number; migrated: number }
   | { ok: false; error: string };
 
-/** Create a `.canvas/` binding for a workspace: migrate all of its projects +
+/** Create a `.framesmith/` binding for a workspace: migrate all of its projects +
  * canvases into the repo, then switch the live session to the repo backend. */
 export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResult {
   if (isRepoBound()) {
@@ -33,9 +33,9 @@ export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResu
   }
   const start = opts.dir ?? projectStartDir();
   const root = findRepoRoot(start);
-  const dir = join(root, '.canvas');
+  const dir = join(root, '.framesmith');
   if (existsSync(join(dir, 'workspace.json'))) {
-    return { ok: false, error: `A .canvas/ binding already exists at ${dir}. Restart the server in this directory to use it.` };
+    return { ok: false, error: `A .framesmith/ binding already exists at ${dir}. Restart the server in this directory to use it.` };
   }
   const srcWsId = opts.workspaceId ?? DEFAULT_WORKSPACE_ID;
   const srcWs = getWorkspace(srcWsId);

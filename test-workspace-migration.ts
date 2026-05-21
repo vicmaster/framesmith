@@ -3,8 +3,8 @@
 // project at load time, the rewrite is one-shot per canvas, and the default
 // workspace/project files must materialize on disk.
 //
-// Uses CANVAS_MCP_HOME to redirect persistence to a tmp dir so we don't
-// pollute the real ~/.canvas-mcp tree.
+// Uses FRAMESMITH_HOME to redirect persistence to a tmp dir so we don't
+// pollute the real ~/.framesmith tree.
 //
 // Usage: npx tsx test-workspace-migration.ts
 
@@ -13,8 +13,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-test-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-test-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 // Import AFTER setting the env var so the modules' first reads see it.
 const { loadPersistedCanvases, getCanvas } = await import('./src/scene-graph.js');

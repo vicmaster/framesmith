@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
-import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo } from './repo-store.js';
+import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome } from './repo-store.js';
 import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
@@ -23,7 +23,7 @@ import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
 import type { SceneNode } from './types.js';
 
 const server = new McpServer({
-  name: 'canvas-mcp',
+  name: 'framesmith',
   version: '1.0.0',
 });
 
@@ -31,7 +31,7 @@ const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', '
 
 server.resource(
   'guidelines',
-  'canvas-mcp://guidelines',
+  'framesmith://guidelines',
   { description: 'Authoring guidelines: when to use fluid widths, responsive hints, and common patterns vs. anti-patterns.', mimeType: 'text/markdown' },
   async (uri) => ({
     contents: [{ uri: uri.href, mimeType: 'text/markdown', text: await readFile(GUIDELINES_PATH, 'utf-8') }],
@@ -381,7 +381,7 @@ Responsive layout (author desktop-first, adapt down):
   - responsive: "fixed" — never reflows (toolbars, fixed-position headers)
 Prefer fluid widths (percentages, "fit-content") + a "responsive" hint over hardcoded pixel widths. width/minWidth/maxWidth accept numbers (px) or strings ("100%", "50vw", "fit-content"). Combine a percentage width with a maxWidth ceiling for content that fills the row but caps on wide screens (e.g. width: "100%", maxWidth: 600).
 
-Read the canvas-mcp://guidelines resource for common patterns (pricing tiers, two-column hero, tag list, toolbar), anti-patterns, and width-strategy guidance.`,
+Read the framesmith://guidelines resource for common patterns (pricing tiers, two-column hero, tag list, toolbar), anti-patterns, and width-strategy guidance.`,
   {
     canvasId: z.string().describe('Canvas ID'),
     operations: z.string().describe('Operations to execute, one per line'),
@@ -790,7 +790,7 @@ server.tool(
   `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores (spacing, color, typography, structure, consistency), and actionable issues referencing specific node IDs. Modes:
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
-  - "llm": fast-mode heuristics plus a vision-model critique (provider picked from CANVAS_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field with { score, summary, strengths, weaknesses, suggestions }. Cost: one paid API call per invocation.
+  - "llm": fast-mode heuristics plus a vision-model critique (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field with { score, summary, strengths, weaknesses, suggestions }. Cost: one paid API call per invocation.
 Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset).`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
@@ -891,7 +891,7 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global ~/.canvas-mcp store. Creates `.canvas/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.canvas/` on startup. Commit the `.canvas/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
   {
     workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
@@ -909,7 +909,7 @@ server.tool(
           workspace: result.workspace,
           projectsMigrated: result.projects,
           canvasesMigrated: result.migrated,
-          note: 'Repo is now the source of truth. Commit the .canvas/ directory to share these designs.',
+          note: 'Repo is now the source of truth. Commit the .framesmith/ directory to share these designs.',
         }, null, 2),
       }],
     };
@@ -944,7 +944,10 @@ async function probeViewer(port: number): Promise<boolean> {
 }
 
 async function main() {
-  // Phase 10: if the working directory (or an ancestor) carries a `.canvas/`
+  // One-time migration of the pre-rebrand global store (~/.canvas-mcp → ~/.framesmith).
+  migrateLegacyHome();
+
+  // Phase 10: if the working directory (or an ancestor) carries a `.framesmith/`
   // binding, the repo is the source of truth — load its virtual workspace +
   // project and canvases from there, never touching the global store.
   const binding = detectBinding(projectStartDir());
@@ -954,7 +957,7 @@ async function main() {
     loadRepoWorkspace(repoFile);
     loadPersistedCanvases();
     registerRepo(binding.dir); // self-register so the standalone viewer mirrors this repo
-    process.stderr.write(`canvas-mcp bound to repo: ${binding.dir}\n`);
+    process.stderr.write(`framesmith bound to repo: ${binding.dir}\n`);
   } else {
     // Phase 7 boot order matters: workspaces+projects load first so the default
     // workspace/project exist, then canvas migration can assign DEFAULT_PROJECT_ID
@@ -964,14 +967,14 @@ async function main() {
     loadPersistedCanvases();
   }
 
-  // If CANVAS_VIEWER_URL is set, use that external viewer (skip starting our own)
-  const externalUrl = process.env.CANVAS_VIEWER_URL;
+  // If FRAMESMITH_VIEWER_URL is set, use that external viewer (skip starting our own)
+  const externalUrl = process.env.FRAMESMITH_VIEWER_URL ?? process.env.CANVAS_VIEWER_URL;
   if (externalUrl) {
     setExternalViewerUrl(externalUrl.replace(/\/$/, ''));
     process.stderr.write(`Using external viewer at ${externalUrl}\n`);
   } else {
     // Check common ports for a standalone viewer already running
-    const viewerPort = parseInt(process.env.CANVAS_VIEWER_PORT ?? '0', 10);
+    const viewerPort = parseInt(process.env.FRAMESMITH_VIEWER_PORT ?? process.env.CANVAS_VIEWER_PORT ?? '0', 10);
     const portsToProbe = viewerPort > 0 ? [viewerPort] : Array.from({ length: 20 }, (_, i) => 3001 + i);
 
     let foundExisting = false;
@@ -1008,6 +1011,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Failed to start canvas-mcp:', err);
+  console.error('Failed to start framesmith:', err);
   process.exit(1);
 });

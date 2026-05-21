@@ -1,4 +1,4 @@
-# Canvas MCP — Open-Source Visual Design Server for AI
+# Framesmith — Open-Source Visual Design Server for AI
 
 An MCP server that gives any AI assistant a visual canvas. Send JSON operations, get screenshots back. Works with Claude Code, Cursor, Windsurf, VS Code + Copilot, or any MCP-compatible client.
 
@@ -22,7 +22,7 @@ An MCP server that gives any AI assistant a visual canvas. Send JSON operations,
 └────────────────┬────────────────────────────┘
                  │ MCP (stdio or http)
 ┌────────────────▼────────────────────────────┐
-│  Canvas MCP Server (Node.js)                │
+│  Framesmith Server (Node.js)                │
 │                                             │
 │  ┌──────────────┐  ┌─────────────────────┐  │
 │  │ Scene Graph   │  │ Operation Engine    │  │
@@ -186,7 +186,7 @@ Reference in nodes: `"color": "$text-primary"`, `"gap": "$spacing.md"`
 | Rendering | Puppeteer + inline CSS (Flexbox) |
 | Icons | Lucide (1,900+ icons via lucide-static) |
 | Schema | TypeScript types + JSON Schema for validation |
-| Package | `@canvas-mcp/server` on npm |
+| Package | `framesmith` on npm |
 | License | MIT |
 
 ---
@@ -258,7 +258,7 @@ Authoring model: **desktop-first, adapt down.** Responsive behavior is expressed
 
 ### Phase 7 — Workspace UI overhaul (v0.7)
 
-A flat dashboard of every canvas works at 5–10 canvases; it breaks down at 20+. Users will run more than one project through canvas-mcp, and today there's no way to group, archive, or visually separate work across projects. Plus the viewer chrome doesn't match the polish of the designs it renders. This phase introduces a `Workspace > Project > Canvas` hierarchy on the MCP side (so the AI can organise work), a Figma-style sidebar in the viewer, and a UI refresh that brings the chrome up to the level of the content.
+A flat dashboard of every canvas works at 5–10 canvases; it breaks down at 20+. Users will run more than one project through framesmith, and today there's no way to group, archive, or visually separate work across projects. Plus the viewer chrome doesn't match the polish of the designs it renders. This phase introduces a `Workspace > Project > Canvas` hierarchy on the MCP side (so the AI can organise work), a Figma-style sidebar in the viewer, and a UI refresh that brings the chrome up to the level of the content.
 
 Authoring intent: **the AI is the primary author**, so hierarchy lands as MCP tools first; the viewer becomes the secondary client that reflects those tools' state.
 
@@ -297,30 +297,30 @@ Design tokens already live on `Canvas.variables` (colors / spacing / radius / ty
 
 ### Phase 10 — Canvases that live in the repo (v1.0)
 
-Today every canvas lives in `~/.canvas-mcp/canvases/`, keyed by ID and decoupled from the code it designs for. A design can't travel with the repo, get reviewed in a PR, or be opened by a teammate who clones the project. Proprietary tools solve this with an encrypted project file dropped into the working directory; canvas-mcp can do it better — an open, human-readable, git-committable file checked in alongside the code. Shipping this as the v1.0 headline makes "your design lives in your repo" the story of the 1.0 release.
+Today every canvas lives in `~/.framesmith/canvases/`, keyed by ID and decoupled from the code it designs for. A design can't travel with the repo, get reviewed in a PR, or be opened by a teammate who clones the project. Proprietary tools solve this with an encrypted project file dropped into the working directory; framesmith can do it better — an open, human-readable, git-committable file checked in alongside the code. Shipping this as the v1.0 headline makes "your design lives in your repo" the story of the 1.0 release.
 
 Authoring intent: this is the open-JSON differentiator made tangible — **design lives in your repo**, diffable in review, not locked in a separate encrypted store. The file **embeds the full scene graph** so a clone is self-contained.
 
-**Source-of-truth rule (decided):** a canvas is *either* repo-bound *or* global, never both — so there is nothing to "reconcile." When a repo has `.canvas/`, it is authoritative; `~/.canvas-mcp` holds no competing copy of a bound canvas.
+**Source-of-truth rule (decided):** a canvas is *either* repo-bound *or* global, never both — so there is nothing to "reconcile." When a repo has `.framesmith/`, it is authoritative; `~/.framesmith` holds no competing copy of a bound canvas.
 
-_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard + asset externalization (`.canvas/assets/`) + viewer lifecycle write-back. **Phase 10 complete.**_
+_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard + asset externalization (`.framesmith/assets/`) + viewer lifecycle write-back. **Phase 10 complete.**_
 
-A repo binds a whole **workspace** (not a single project): `.canvas/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
+A repo binds a whole **workspace** (not a single project): `.framesmith/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
 
-- [x] `.canvas/` dir at the repo root is the source of truth — `workspace.json` (binding + projects[] + `schemaVersion`) and per-project subdirs of slug-named canvas files (full scene graph embedded)
+- [x] `.framesmith/` dir at the repo root is the source of truth — `workspace.json` (binding + projects[] + `schemaVersion`) and per-project subdirs of slug-named canvas files (full scene graph embedded)
 - [x] Self-contained clones — `workspace.json` carries the workspace design system + per-project token overrides so a fresh clone with empty global state resolves tokens identically
-- [x] Auto-bind by project-root walk-up — server finds the nearest `.canvas/` / `.git` from cwd and scopes to that virtual workspace; bound entities never register in global `workspaces.json` / `projects.json`
-- [x] Global store becomes a read-only cache + repo registry — bound repos record their `.canvas/` in `registry.json`; the standalone viewer rebuilds a read-only mirror of every registered repo on load (and on registry change), keeping its unified cross-project gallery. The cache is derived, never authoritative; the MCP server's own store stays scoped to its context
+- [x] Auto-bind by project-root walk-up — server finds the nearest `.framesmith/` / `.git` from cwd and scopes to that virtual workspace; bound entities never register in global `workspaces.json` / `projects.json`
+- [x] Global store becomes a read-only cache + repo registry — bound repos record their `.framesmith/` in `registry.json`; the standalone viewer rebuilds a read-only mirror of every registered repo on load (and on registry change), keeping its unified cross-project gallery. The cache is derived, never authoritative; the MCP server's own store stays scoped to its context
 - [x] Deterministic, text-only serialization — sorted keys / stable indent / trailing newline so diffs stay reviewable and git merges conflict only on the *same* canvas
-- [x] Asset externalization — inline `data:` images are extracted to `.canvas/assets/<content-hash>.<ext>` on write (deduped by content) and rehydrated on read, so committed canvas JSON stays small and diff-friendly while the in-memory canvas keeps inline images
+- [x] Asset externalization — inline `data:` images are extracted to `.framesmith/assets/<content-hash>.<ext>` on write (deduped by content) and rehydrated on read, so committed canvas JSON stays small and diff-friendly while the in-memory canvas keeps inline images
 - [x] External-change safety — `ensureFresh` reloads a canvas from disk before mutation when its mtime changed (git pull / branch switch / hand-edit), so the agent never clobbers an external edit; a vanished target node then surfaces a not-found error; deleted files drop from the store. `schemaVersion` forward-compat guard on `workspace.json` load (newer files read best-effort with a warning; migration hook in place)
 - [x] Round-trip — clone the repo, open the viewer, see the same canvases; the file diffs cleanly in code review
-- [x] Viewer lifecycle write-back — archive / delete on a mirrored repo canvas writes to its `.canvas/` file (not the global store), survives reload, and cross-process edits are caught by external-change safety
+- [x] Viewer lifecycle write-back — archive / delete on a mirrored repo canvas writes to its `.framesmith/` file (not the global store), survives reload, and cross-process edits are caught by external-change safety
 - [x] Sharpen the Pencil contrast — open JSON you own in the repo vs an encrypted project file
 
 ### Phase 11 — Design variety & anti-sameness (v1.1)
 
-Left to their own devices, AI assistants converge on the same handful of layouts — a centered hero, a three-card row, a dark surface with one accent. canvas-mcp hands the agent primitives but no sense of *structure* to choose from, and no memory of what it built last time, so every session drifts toward the same shape. Two levers fix this: a library of named page structures (layout scaffolds the agent stamps down and fills, distinct from color presets), and a per-project build log that records what was made so the next canvas is nudged to differ.
+Left to their own devices, AI assistants converge on the same handful of layouts — a centered hero, a three-card row, a dark surface with one accent. framesmith hands the agent primitives but no sense of *structure* to choose from, and no memory of what it built last time, so every session drifts toward the same shape. Two levers fix this: a library of named page structures (layout scaffolds the agent stamps down and fills, distinct from color presets), and a per-project build log that records what was made so the next canvas is nudged to differ.
 
 Authoring intent: structures are scene-graph data, not prompt text — the agent applies one, then **renders and verifies** it, an advantage code-only tooling doesn't have.
 
@@ -333,7 +333,7 @@ Authoring intent: structures are scene-graph data, not prompt text — the agent
 
 ### Phase 12 — Cliché & craft guardrails (v1.2)
 
-`canvas_evaluate` (Phase 6) scores *craft* — contrast, spacing scale, type scale, structure. It says nothing about *cliché*: the visual tells that mark a design as machine-made. Several of these are mechanically detectable on the scene graph, and because canvas-mcp renders, it can confirm them instead of guessing. Add a `cliche` category alongside the craft checks, plus an honest-content rule so mockups stop shipping invented data.
+`canvas_evaluate` (Phase 6) scores *craft* — contrast, spacing scale, type scale, structure. It says nothing about *cliché*: the visual tells that mark a design as machine-made. Several of these are mechanically detectable on the scene graph, and because framesmith renders, it can confirm them instead of guessing. Add a `cliche` category alongside the craft checks, plus an honest-content rule so mockups stop shipping invented data.
 
 - [ ] `cliche` evaluation category in `canvas_evaluate` — flags the recurring machine-made tells
 - [ ] Detectable tells (scene-graph + render): default purple / indigo accent hue, gradient / glow overuse, fake browser / phone / IDE chrome (traffic-light-dot frames), the hanging "tag-left / heading-right" header
@@ -367,10 +367,10 @@ The LLM-judge mode (Phase 6) returns a 0–100 score and free-text strengths / w
 
 ```bash
 # npm
-npx @canvas-mcp/server
+npx framesmith
 
 # Claude Code
-claude mcp add canvas-mcp npx @canvas-mcp/server
+claude mcp add framesmith npx framesmith
 
 # Cursor / other MCP clients
 # Add to .mcp.json:
@@ -378,7 +378,7 @@ claude mcp add canvas-mcp npx @canvas-mcp/server
   "mcpServers": {
     "canvas": {
       "command": "npx",
-      "args": ["@canvas-mcp/server"]
+      "args": ["framesmith"]
     }
   }
 }
@@ -388,7 +388,7 @@ claude mcp add canvas-mcp npx @canvas-mcp/server
 
 ## Differentiators vs Pencil
 
-| | Canvas MCP | Pencil |
+| | Framesmith | Pencil |
 |---|---|---|
 | Open source | MIT | Proprietary |
 | Works with any AI | Any MCP client | Claude Code only* |

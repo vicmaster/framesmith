@@ -1,5 +1,5 @@
 // Renders docs/bloom-landing.png — a standalone product-landing showcase
-// using a fresh design system (NOT the canvas-mcp amber-dark identity).
+// using a fresh design system (NOT the framesmith amber-dark identity).
 //
 // Demonstrates the renderer's range:
 //   - Two custom font families via @font-face (Fraunces serif + DM Sans)
@@ -9,7 +9,7 @@
 //   - Soft shadow primitives, SVG path icons
 //   - Tokens at the canvas level (overrides any workspace tokens)
 //
-// Lives in canvas-mcp / UI — this is a design demonstration, not a
+// Lives in framesmith / UI — this is a design demonstration, not a
 // version-tagged release artifact.
 //
 // Usage: npx tsx scripts/build-bloom-landing.ts
@@ -35,7 +35,7 @@ import type { Canvas, DesignVariables, FontFace, SceneNode } from '../src/types.
 loadPersistedWorkspaces();
 ensureDefaultWorkspaceAndProject();
 
-const WORKSPACE_NAME = 'canvas-mcp';
+const WORKSPACE_NAME = 'framesmith';
 const PROJECT_NAME = 'UI';
 let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
 if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
@@ -43,9 +43,9 @@ let project = listProjects(workspace.id).find((p) => p.name === PROJECT_NAME);
 if (!project) project = createProject(workspace.id, PROJECT_NAME)!;
 
 // ---- Bloom design tokens (set at canvas level so they override the
-// canvas-mcp workspace tokens this canvas would otherwise inherit) ---------
+// framesmith workspace tokens this canvas would otherwise inherit) ---------
 // Light theme — warm cream + near-black + deep forest green. Avoids amber
-// (canvas-mcp brand) and purple/indigo (AI defaults per visual-design-bar).
+// (framesmith brand) and purple/indigo (AI defaults per visual-design-bar).
 const BLOOM: DesignVariables = {
   colors: {
     bg: '#FAF7F2',
@@ -367,7 +367,7 @@ const root: SceneNode = {
 // ---- Build ---------------------------------------------------------------
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'bloom-landing.png');
-const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
+const STORE_DIR = join(process.env.FRAMESMITH_HOME ?? join(homedir(), '.framesmith'), 'canvases');
 const CANVAS_ID = 'bloom-landing';
 const now = new Date().toISOString();
 const canvas: Canvas = {
@@ -375,7 +375,7 @@ const canvas: Canvas = {
   name: 'Bloom landing (renderer capabilities showcase)',
   root,
   // Canvas-level tokens override anything inherited from the workspace
-  // (this design intentionally uses a different system from canvas-mcp's
+  // (this design intentionally uses a different system from framesmith's
   // amber-dark identity).
   variables: BLOOM,
   components: {},

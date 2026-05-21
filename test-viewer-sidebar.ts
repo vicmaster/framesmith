@@ -9,8 +9,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-test-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-test-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const ws = await import('./src/workspaces.js');
 const sg = await import('./src/scene-graph.js');
@@ -46,7 +46,7 @@ sg.archiveCanvas(archivedOne.id);
 const htmlDefault = viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001)!;
 
 // ---- 1. Sidebar tree structure ------------------------------------------
-check('sidebar: contains "Canvas MCP" logo', htmlDefault.includes('sidebar-logo'));
+check('sidebar: contains "Framesmith" logo', htmlDefault.includes('sidebar-logo'));
 check('sidebar: contains "Personal" workspace label', htmlDefault.includes('>Personal<'));
 check('sidebar: contains "Acme" workspace label', htmlDefault.includes('>Acme<'));
 check('sidebar: contains "Untitled" project link', /\/project\/default-project[^"]*"[^>]*class="project[^"]*"[\s\S]*?<span class="project-name">Untitled/.test(htmlDefault));

@@ -8,8 +8,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-test-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-test-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const ws = await import('./src/workspaces.js');
 const sg = await import('./src/scene-graph.js');

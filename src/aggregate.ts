@@ -1,7 +1,7 @@
 // Phase 10 Slice 2 — viewer aggregation.
 //
 // The standalone viewer shows a unified gallery of every canvas: the global
-// ~/.canvas-mcp store plus every registered repo's `.canvas/`. The repo content
+// ~/.framesmith store plus every registered repo's `.framesmith/`. The repo content
 // is a read-only mirror, rebuilt from disk on each call (viewer launch / reload)
 // — repos stay the source of truth; reads never write back. Repos that have
 // moved or been deleted are skipped.

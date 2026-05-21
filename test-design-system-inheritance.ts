@@ -11,15 +11,15 @@
 //   - mergeDesignTokens semantics (per-category union, rightmost wins keys)
 //
 // Usage:
-//   CANVAS_MCP_HOME=/tmp/canvas-mcp-test-$$ npx tsx test-design-system-inheritance.ts
-//   (the script sets CANVAS_MCP_HOME itself so it's safe to run directly)
+//   FRAMESMITH_HOME=/tmp/framesmith-test-$$ npx tsx test-design-system-inheritance.ts
+//   (the script sets FRAMESMITH_HOME itself so it's safe to run directly)
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-phase9-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-phase9-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const {
   loadPersistedWorkspaces,

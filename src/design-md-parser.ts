@@ -3,7 +3,7 @@ import type { Preset } from './presets.js';
 
 /**
  * Parses a DESIGN.md file (Google Stitch / awesome-design-md format)
- * and extracts design tokens into canvas-mcp's DesignVariables format.
+ * and extracts design tokens into framesmith's DesignVariables format.
  */
 export function parseDesignMd(content: string, name?: string): Preset {
   const systemName = name ?? extractName(content);

@@ -55,11 +55,11 @@ function check(name: string, cond: boolean, extra?: string) {
 // ---- 5. pickProvider: env-var priority ---------------------------------
 {
   // Clean slate per case — process.env mutations are scoped to this test.
-  const savedForced = process.env.CANVAS_LLM_PROVIDER;
+  const savedForced = process.env.FRAMESMITH_LLM_PROVIDER;
   const savedAnth = process.env.ANTHROPIC_API_KEY;
   const savedOAI = process.env.OPENAI_API_KEY;
 
-  delete process.env.CANVAS_LLM_PROVIDER;
+  delete process.env.FRAMESMITH_LLM_PROVIDER;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
   check('pickProvider: no keys → null', pickProvider() === null);
@@ -70,13 +70,13 @@ function check(name: string, cond: boolean, extra?: string) {
   process.env.ANTHROPIC_API_KEY = 'sk-test';
   check('pickProvider: both keys → anthropic (priority)', pickProvider() === 'anthropic');
 
-  process.env.CANVAS_LLM_PROVIDER = 'openai';
+  process.env.FRAMESMITH_LLM_PROVIDER = 'openai';
   check('pickProvider: forced openai overrides priority', pickProvider() === 'openai');
 
-  process.env.CANVAS_LLM_PROVIDER = savedForced ?? '';
+  process.env.FRAMESMITH_LLM_PROVIDER = savedForced ?? '';
   if (savedAnth === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedAnth;
   if (savedOAI === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedOAI;
-  if (!savedForced) delete process.env.CANVAS_LLM_PROVIDER;
+  if (!savedForced) delete process.env.FRAMESMITH_LLM_PROVIDER;
 }
 
 // ---- 6. judgeCanvas: dispatches via `judges` table; stub provider ------
@@ -107,10 +107,10 @@ function check(name: string, cond: boolean, extra?: string) {
 
 // ---- 7. judgeCanvas: no provider + no keys → typed error --------------
 {
-  const savedForced = process.env.CANVAS_LLM_PROVIDER;
+  const savedForced = process.env.FRAMESMITH_LLM_PROVIDER;
   const savedAnth = process.env.ANTHROPIC_API_KEY;
   const savedOAI = process.env.OPENAI_API_KEY;
-  delete process.env.CANVAS_LLM_PROVIDER;
+  delete process.env.FRAMESMITH_LLM_PROVIDER;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
 
@@ -118,7 +118,7 @@ function check(name: string, cond: boolean, extra?: string) {
   try { await judgeCanvas('PNG'); } catch (e) { caught = e; }
   check('unavailable: throws LLMJudgeUnavailableError', (caught as Error)?.name === 'LLMJudgeUnavailableError');
 
-  if (savedForced) process.env.CANVAS_LLM_PROVIDER = savedForced;
+  if (savedForced) process.env.FRAMESMITH_LLM_PROVIDER = savedForced;
   if (savedAnth) process.env.ANTHROPIC_API_KEY = savedAnth;
   if (savedOAI) process.env.OPENAI_API_KEY = savedOAI;
 }

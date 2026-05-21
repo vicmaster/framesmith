@@ -1,6 +1,6 @@
 # Authoring Guidelines
 
-How to design with canvas-mcp so the result holds up across breakpoints.
+How to design with framesmith so the result holds up across breakpoints.
 
 ## Organizing work
 

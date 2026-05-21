@@ -20,8 +20,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const tmp = mkdtempSync(join(tmpdir(), 'canvas-mcp-viewer-tokens-'));
-process.env.CANVAS_MCP_HOME = tmp;
+const tmp = mkdtempSync(join(tmpdir(), 'framesmith-viewer-tokens-'));
+process.env.FRAMESMITH_HOME = tmp;
 
 const {
   loadPersistedWorkspaces,

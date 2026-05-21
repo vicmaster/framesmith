@@ -1,8 +1,8 @@
 // Phase 10 — asset externalization.
 //
 // Base64 `data:` URIs (images) inlined in a canvas bloat the committed JSON and
-// wreck its diff. When writing to a repo `.canvas/`, we extract each `data:`
-// payload to `.canvas/assets/<content-hash>.<ext>` and replace the value with a
+// wreck its diff. When writing to a repo `.framesmith/`, we extract each `data:`
+// payload to `.framesmith/assets/<content-hash>.<ext>` and replace the value with a
 // compact `asset:<file>` reference. On read we rehydrate the reference back to a
 // `data:` URI, so the in-memory canvas is always fully inline — the renderer,
 // evaluator, and viewer never need to know assets exist. Externalization is
