@@ -24,7 +24,7 @@ import type { SceneNode } from './types.js';
 
 const server = new McpServer({
   name: 'canvas-mcp',
-  version: '0.9.0',
+  version: '1.0.0',
 });
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');

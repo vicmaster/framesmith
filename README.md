@@ -6,7 +6,7 @@ An open-source MCP server that gives your AI coding agent a visual canvas. Sketc
 
 **Contents:** [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
-![canvas-mcp viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and canvas-mcp workspaces; canvas-mcp organised into Design system, UI, and Releases projects.](docs/canvas-mcp-dashboard.png)
+![canvas-mcp viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and canvas-mcp workspaces; canvas-mcp organised into Design system, UI, and Releases projects.](https://raw.githubusercontent.com/vicmaster/canvas-mcp/master/docs/canvas-mcp-dashboard.png)
 
 > Above: the canvas-mcp viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
 
@@ -24,7 +24,7 @@ MCP Client → stdio → canvas-mcp server
 
 Run `npm run viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
-![canvas-mcp canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](docs/canvas-mcp-canvas.png)
+![canvas-mcp canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/canvas-mcp/master/docs/canvas-mcp-canvas.png)
 
 > Above: a single canvas in the detail view. The toolbar across the top exposes the breakpoint preview modes, Compare for side-by-side rendering, Fit for max-width, JSON for the raw scene graph, and lifecycle actions.
 

@@ -10,3 +10,7 @@ CLAUDE.md
 
 # Launch / promo drafts — kept locally for editing, not part of the repo
 docs/launch/
+
+# Local editor / OS cruft
+.DS_Store
+.obsidian/
