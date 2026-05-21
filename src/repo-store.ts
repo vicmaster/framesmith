@@ -20,6 +20,7 @@
 
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, renameSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 import type { Canvas, DesignVariables } from './types.js';
 
 export const REPO_DIR_NAME = '.canvas';
@@ -246,4 +247,67 @@ export function findRepoRoot(startDir: string): string {
  * clients that don't launch the server in the user's project directory. */
 export function projectStartDir(): string {
   return process.env.CANVAS_MCP_PROJECT_DIR ?? process.cwd();
+}
+
+// --- Repo registry (Slice 2) ---
+// The viewer can't scan the filesystem for bound repos, so each binding records
+// its `.canvas/` path in a global registry. The viewer reads the registry on
+// load and mirrors those repos into its (read-only) gallery.
+
+function dataDir(): string {
+  return process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp');
+}
+function registryPath(): string {
+  return join(dataDir(), 'registry.json');
+}
+
+/** The `.canvas/` directories of every known bound repo. */
+export function readRegistry(): string[] {
+  try {
+    if (!existsSync(registryPath())) return [];
+    const parsed = JSON.parse(readFileSync(registryPath(), 'utf-8')) as { repos?: unknown };
+    return Array.isArray(parsed.repos) ? parsed.repos.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Record a bound repo's `.canvas/` dir in the registry (idempotent). Called on
+ * bind and whenever a bound server boots, so existing bindings self-register. */
+export function registerRepo(canvasDir: string): void {
+  try {
+    const repos = readRegistry();
+    if (repos.includes(canvasDir)) return;
+    repos.push(canvasDir);
+    mkdirSync(dataDir(), { recursive: true });
+    writeAtomic(registryPath(), stableStringify({ repos }));
+  } catch (err) {
+    process.stderr.write(`Warning: could not update repo registry: ${(err as Error).message}\n`);
+  }
+}
+
+/** Read a bound repo's canvases without touching module state (backend /
+ * fileById / projectDirById). Used by the viewer to mirror repos read-only;
+ * never call this on the server's own bound store — use the backend path. */
+export function readRepoCanvases(canvasDir: string): Canvas[] {
+  const wf = readWorkspaceFile(canvasDir);
+  if (!wf) return [];
+  const out: Canvas[] = [];
+  for (const proj of wf.projects) {
+    const abs = join(canvasDir, proj.dir);
+    if (!existsSync(abs)) continue;
+    let files: string[];
+    try {
+      files = readdirSync(abs).filter((f) => f.endsWith('.json'));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      try {
+        const data = JSON.parse(readFileSync(join(abs, file), 'utf-8')) as Canvas;
+        if (data.id && data.root) out.push(data);
+      } catch {}
+    }
+  }
+  return out;
 }

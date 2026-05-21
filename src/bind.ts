@@ -14,9 +14,9 @@ import { nanoid } from 'nanoid';
 import {
   isRepoBound, getBackend, projectStartDir, findRepoRoot, setRepoBackend,
   writeWorkspaceFile, writeCanvasToDir, registerProjectDir, uniqueProjectDir,
-  SCHEMA_VERSION, type RepoWorkspaceFile, type RepoProjectEntry,
+  registerRepo, SCHEMA_VERSION, type RepoWorkspaceFile, type RepoProjectEntry,
 } from './repo-store.js';
-import { getWorkspace, listProjects, loadRepoWorkspace } from './workspaces.js';
+import { getWorkspace, listProjects, loadRepoWorkspace, deleteProject, deleteWorkspace } from './workspaces.js';
 import { listCanvases, getCanvas, purgeGlobalCanvas, loadPersistedCanvases } from './scene-graph.js';
 import { DEFAULT_WORKSPACE_ID } from './types.js';
 
@@ -77,10 +77,21 @@ export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResu
     purgeGlobalCanvas(canvas.id);
   }
 
+  // The source workspace's content now lives in the repo — drop the emptied
+  // source workspace + projects from the global indexes so the viewer doesn't
+  // show a duplicate empty shell beside the repo. The built-in Personal
+  // workspace is protected (deleteWorkspace/deleteProject refuse it), so a bind
+  // of Personal leaves the global default intact.
+  if (srcWsId !== DEFAULT_WORKSPACE_ID) {
+    for (const p of srcProjects) deleteProject(p.id);
+    deleteWorkspace(srcWsId);
+  }
+
   // Switch the live session to the repo and reload the store from disk.
   setRepoBackend(root, dir);
   loadRepoWorkspace(wf);
   loadPersistedCanvases();
+  registerRepo(dir); // so the viewer can mirror this repo
 
   return { ok: true, root, dir, workspace: wf.workspaceName, projects: projectEntries.length, migrated: toMigrate.length };
 }

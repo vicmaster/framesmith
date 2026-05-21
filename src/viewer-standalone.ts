@@ -8,13 +8,13 @@
  *   canvas-viewer 3004         # use a specific port
  *   CANVAS_VIEWER_PORT=3004 canvas-viewer
  *
- * This watches ~/.canvas-mcp/canvases/ for changes and serves them
- * via the same viewer UI. Run this in a terminal tab and it stays alive
+ * This watches ~/.canvas-mcp/ for changes and serves them via the same viewer
+ * UI, showing the global store plus every repo bound with `canvas_bind`
+ * (registered in registry.json). Run it in a terminal tab and it stays alive
  * regardless of whether a Claude Code session is active.
  */
 
-import { loadPersistedCanvases } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } from './workspaces.js';
+import { loadGlobalAndRegisteredRepos } from './aggregate.js';
 import { startViewer, getViewerUrl } from './viewer.js';
 import { watch } from 'node:fs';
 import { join } from 'node:path';
@@ -30,11 +30,8 @@ async function main() {
   // Ensure directory exists
   mkdirSync(CANVAS_DIR, { recursive: true });
 
-  // Boot order matches src/index.ts: workspaces first so the default
-  // project exists before canvas migration assigns it.
-  loadPersistedWorkspaces();
-  ensureDefaultWorkspaceAndProject();
-  loadPersistedCanvases();
+  // Load the global store plus every registered repo's `.canvas/` (read-only).
+  loadGlobalAndRegisteredRepos();
 
   // Determine port
   const portArg = process.argv[2];
@@ -47,18 +44,22 @@ async function main() {
 
   const url = getViewerUrl();
   console.log(`\n  Canvas MCP Viewer is running at: ${url}\n`);
-  console.log(`  Watching ${CANVAS_DIR} for changes...\n`);
+  console.log(`  Watching ${DATA_DIR} for changes...\n`);
   console.log(`  Press Ctrl+C to stop.\n`);
 
-  // Watch for new/updated canvas files and reload
+  // Re-aggregate (global + registered repos) on any change. Debounced.
   let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-  watch(CANVAS_DIR, (_eventType, filename) => {
-    if (!filename?.endsWith('.json')) return;
-    // Debounce rapid writes
+  const reload = () => {
     if (reloadTimer) clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => {
-      loadPersistedCanvases();
-    }, 500);
+    reloadTimer = setTimeout(() => loadGlobalAndRegisteredRepos(), 500);
+  };
+  // Global canvas writes.
+  watch(CANVAS_DIR, (_eventType, filename) => {
+    if (filename?.endsWith('.json')) reload();
+  });
+  // New / removed repo bindings (registry.json lives at the data-dir root).
+  watch(DATA_DIR, (_eventType, filename) => {
+    if (filename === 'registry.json') reload();
   });
 
   // Keep process alive
