@@ -3,6 +3,7 @@ import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas }
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces, getCanvasTokens } from './workspaces.js';
+import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
 
 let runningPort: number | null = null;
@@ -132,26 +133,31 @@ export async function startViewer(port: number): Promise<number> {
       // through an MCP client.
       const archiveApi = path.match(/^\/api\/canvas\/([^/]+)\/archive$/);
       if (archiveApi && req.method === 'POST') {
-        const result = archiveCanvas(archiveApi[1]);
+        const id = archiveApi[1];
+        // Repo-mirrored canvases write back to their `.canvas/` file; global
+        // canvases use the in-memory + global-store path.
+        const result = getRepoLocation(id) ? archiveRepoCanvas(id, true) : !!archiveCanvas(id);
         if (!result) { res.writeHead(404); res.end('Not found'); return; }
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, canvasId: archiveApi[1], archived: true }));
+        res.end(JSON.stringify({ ok: true, canvasId: id, archived: true }));
         return;
       }
       const unarchiveApi = path.match(/^\/api\/canvas\/([^/]+)\/unarchive$/);
       if (unarchiveApi && req.method === 'POST') {
-        const result = unarchiveCanvas(unarchiveApi[1]);
+        const id = unarchiveApi[1];
+        const result = getRepoLocation(id) ? archiveRepoCanvas(id, false) : !!unarchiveCanvas(id);
         if (!result) { res.writeHead(404); res.end('Not found'); return; }
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, canvasId: unarchiveApi[1], archived: false }));
+        res.end(JSON.stringify({ ok: true, canvasId: id, archived: false }));
         return;
       }
       const deleteApi = path.match(/^\/api\/canvas\/([^/]+)$/);
       if (deleteApi && req.method === 'DELETE') {
-        if (!getCanvas(deleteApi[1])) { res.writeHead(404); res.end('Not found'); return; }
-        deleteCanvas(deleteApi[1]);
+        const id = deleteApi[1];
+        if (!getCanvas(id)) { res.writeHead(404); res.end('Not found'); return; }
+        if (getRepoLocation(id)) deleteRepoCanvas(id); else deleteCanvas(id);
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ ok: true, canvasId: deleteApi[1], deleted: true }));
+        res.end(JSON.stringify({ ok: true, canvasId: id, deleted: true }));
         return;
       }
 

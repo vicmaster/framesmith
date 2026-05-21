@@ -353,13 +353,14 @@ export function registerRepo(canvasDir: string): void {
   }
 }
 
-/** Read a bound repo's canvases without touching module state (backend /
- * fileById / projectDirById). Used by the viewer to mirror repos read-only;
- * never call this on the server's own bound store — use the backend path. */
-export function readRepoCanvases(canvasDir: string): Canvas[] {
+/** Read a bound repo's canvases (rehydrated) together with each one's absolute
+ * file path, without touching module state (backend / fileById / projectDirById).
+ * Used by the viewer to mirror repos read-only and to write lifecycle changes
+ * (archive/delete) back to the right file. */
+export function readRepoCanvasEntries(canvasDir: string): Array<{ canvas: Canvas; absFile: string }> {
   const wf = readWorkspaceFile(canvasDir);
   if (!wf) return [];
-  const out: Canvas[] = [];
+  const out: Array<{ canvas: Canvas; absFile: string }> = [];
   for (const proj of wf.projects) {
     const abs = join(canvasDir, proj.dir);
     if (!existsSync(abs)) continue;
@@ -370,11 +371,31 @@ export function readRepoCanvases(canvasDir: string): Canvas[] {
       continue;
     }
     for (const file of files) {
+      const full = join(abs, file);
       try {
-        const data = JSON.parse(readFileSync(join(abs, file), 'utf-8')) as Canvas;
-        if (data.id && data.root) out.push(rehydrateAssets(canvasDir, data));
+        const data = JSON.parse(readFileSync(full, 'utf-8')) as Canvas;
+        if (data.id && data.root) out.push({ canvas: rehydrateAssets(canvasDir, data), absFile: full });
       } catch {}
     }
   }
   return out;
+}
+
+/** Convenience: just the canvases (the viewer's read-only mirror). */
+export function readRepoCanvases(canvasDir: string): Canvas[] {
+  return readRepoCanvasEntries(canvasDir).map((e) => e.canvas);
+}
+
+/** Write one canvas to a specific repo file (externalizing assets), targeting
+ * an absolute path rather than the active backend. Used by the viewer to write
+ * a lifecycle change back to a mirrored repo canvas. */
+export function writeCanvasFileAt(canvasDir: string, absFile: string, canvas: Canvas): void {
+  writeAtomic(absFile, stableStringify(externalizeAssets(canvasDir, canvas)));
+}
+
+/** Delete one repo canvas file by absolute path. */
+export function deleteCanvasFileAt(absFile: string): void {
+  try {
+    if (existsSync(absFile)) unlinkSync(absFile);
+  } catch {}
 }
