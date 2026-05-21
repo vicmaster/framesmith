@@ -98,6 +98,15 @@ export function loadPersistedCanvases(): number {
   }
 }
 
+/** Add canvases to the in-memory store without clearing it (Slice 2). Used by
+ * the viewer to mirror repo-bound canvases on top of the global store. These
+ * are read-only mirrors — never persisted back through this path. */
+export function ingestCanvases(canvases: Canvas[]): void {
+  for (const c of canvases) {
+    if (c.id && c.root) store.set(c.id, c);
+  }
+}
+
 export function createCanvas(name?: string, projectId: string = DEFAULT_PROJECT_ID): Canvas {
   const id = nanoid(10);
   const canvas: Canvas = {

@@ -92,6 +92,30 @@ export function loadRepoWorkspace(wf: RepoWorkspaceFile): void {
   }
 }
 
+/**
+ * Additively merge a repo's virtual workspace + projects into the in-memory
+ * maps without clearing them or touching backend state (Slice 2). Used by the
+ * viewer to show registered repos alongside the global store. Repo ids are
+ * `repo-ws-*` / `repo-proj-*`, so they never collide with global entries.
+ */
+export function mergeRepoWorkspace(wf: RepoWorkspaceFile): void {
+  workspaces.set(wf.workspaceId, {
+    id: wf.workspaceId,
+    name: wf.workspaceName,
+    createdAt: wf.boundAt,
+    designSystem: wf.designSystem,
+  });
+  for (const p of wf.projects) {
+    projects.set(p.id, {
+      id: p.id,
+      workspaceId: wf.workspaceId,
+      name: p.name,
+      createdAt: wf.boundAt,
+      designSystem: p.designSystem,
+    });
+  }
+}
+
 /** Rewrite `.canvas/workspace.json` from the in-memory virtual workspace + its
  * projects. There is exactly one workspace when bound; its projects keep their
  * stable subdirectories (looked up via the repo store). */

@@ -185,6 +185,8 @@ It creates `.canvas/workspace.json` (the binding plus the design system, so a fr
 
 It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. Afterwards the server auto-detects `.canvas/` on startup (walking up from its working directory). **Commit `.canvas/`** so designs travel with the code and diff cleanly in review.
 
+The bind also records the repo in `~/.canvas-mcp/registry.json`, so the standalone viewer shows bound repos alongside your global workspaces in one gallery (it rebuilds that read-only mirror on launch and whenever the registry changes).
+
 ### `batch_design`
 
 Execute operations on the scene graph. Operations are line-separated strings:

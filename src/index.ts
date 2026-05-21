@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
-import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend } from './repo-store.js';
+import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo } from './repo-store.js';
 import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
@@ -950,6 +950,7 @@ async function main() {
     setRepoBackend(binding.root, binding.dir);
     loadRepoWorkspace(repoFile);
     loadPersistedCanvases();
+    registerRepo(binding.dir); // self-register so the standalone viewer mirrors this repo
     process.stderr.write(`canvas-mcp bound to repo: ${binding.dir}\n`);
   } else {
     // Phase 7 boot order matters: workspaces+projects load first so the default
