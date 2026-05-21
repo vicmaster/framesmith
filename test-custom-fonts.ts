@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 8 item: custom font loading.
 // The renderer must:
 //   - emit `@font-face` blocks in <head> for `canvas.fonts` entries

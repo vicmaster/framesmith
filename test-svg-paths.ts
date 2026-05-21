@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 8 item: SVG path primitives.
 // The renderer must:
 //   - emit a <svg><path/></svg> for type:'path' nodes

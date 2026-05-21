@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke test for Phase 5 item #3: fluid widths via minWidth / maxWidth.
 // Runs the renderer + puppeteer directly so it does not depend on the long-
 // running MCP server (which holds dist/ in Node memory until restarted).

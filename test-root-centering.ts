@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 5 item #4: root document centers horizontally and the root
 // fill/gradient extends to the full viewport (no dead white sidebars on wide
 // screens).

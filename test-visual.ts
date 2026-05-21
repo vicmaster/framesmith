@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Visual smoke test — generates screenshots you can actually look at.
  * Run with: npx tsx test-visual.ts

@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * DESIGN.md parser smoke test — colors-map filter + component extraction.
  * Run: npx tsx test-design-md.ts

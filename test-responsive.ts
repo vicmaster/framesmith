@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Responsive padding + font scaling smoke test.
  * Builds a design with large padding (120px) and headline (64px),

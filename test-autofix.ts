@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 6c canvas_autofix. Asserts:
 //   1. Spacing off-scale values emit a fix op snapping to the nearest scale value.
 //   2. Padding given as an array does NOT emit a fix (ambiguous which index).

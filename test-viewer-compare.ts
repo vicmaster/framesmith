@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 5 item #7: viewer detail page exposes a side-by-side
 // "Compare" view with three iframes (mobile / tablet / desktop) that point at
 // the same per-breakpoint render route added in PR #13. Renders the detail page

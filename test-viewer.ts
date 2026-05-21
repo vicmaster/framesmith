@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Test the web viewer HTTP server.
  * Run with: npx tsx test-viewer.ts

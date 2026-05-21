@@ -1,3 +1,4 @@
+import './test-env.js';
 // Regression smoke for the inline-style attribute escape bug found while
 // dogfooding the Phase 8 release page.
 //
