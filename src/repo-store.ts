@@ -22,6 +22,7 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, exists
 import { basename, dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Canvas, DesignVariables } from './types.js';
+import { externalizeAssets, rehydrateAssets } from './assets.js';
 
 export const REPO_DIR_NAME = '.canvas';
 export const WORKSPACE_FILE = 'workspace.json';
@@ -203,7 +204,9 @@ export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
     fileById.set(canvas.id, rel);
   }
   const abs = join(rootDir, rel);
-  writeAtomic(abs, stableStringify(canvas));
+  // Extract inline data: images into assets/ so the committed JSON stays small
+  // and diff-friendly. The in-memory canvas keeps its inline data.
+  writeAtomic(abs, stableStringify(externalizeAssets(rootDir, canvas)));
   const m = fileMtime(abs);
   if (m !== null) mtimeById.set(canvas.id, m);
 }
@@ -243,7 +246,7 @@ export function loadCanvasesFromDir(rootDir: string): Canvas[] {
           fileById.set(data.id, join(projectDir, file));
           const m = fileMtime(full);
           if (m !== null) mtimeById.set(data.id, m);
-          out.push(data);
+          out.push(rehydrateAssets(rootDir, data));
         }
       } catch {}
     }
@@ -273,7 +276,7 @@ export function readCanvasFile(rootDir: string, id: string): Canvas | null {
     if (!data.id || !data.root) return null;
     const m = fileMtime(p);
     if (m !== null) mtimeById.set(id, m);
-    return data;
+    return rehydrateAssets(rootDir, data);
   } catch {
     return null;
   }
@@ -369,7 +372,7 @@ export function readRepoCanvases(canvasDir: string): Canvas[] {
     for (const file of files) {
       try {
         const data = JSON.parse(readFileSync(join(abs, file), 'utf-8')) as Canvas;
-        if (data.id && data.root) out.push(data);
+        if (data.id && data.root) out.push(rehydrateAssets(canvasDir, data));
       } catch {}
     }
   }
