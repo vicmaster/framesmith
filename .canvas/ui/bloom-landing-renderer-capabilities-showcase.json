@@ -1,0 +1,854 @@
+{
+  "components": {},
+  "createdAt": "2026-05-17T16:47:49.966Z",
+  "fonts": [
+    {
+      "family": "Fraunces",
+      "url": "https://fonts.bunny.net/fraunces/files/fraunces-latin-600-normal.woff2",
+      "weight": 600
+    },
+    {
+      "family": "DM Sans",
+      "url": "https://fonts.bunny.net/dm-sans/files/dm-sans-latin-400-normal.woff2",
+      "weight": 400
+    },
+    {
+      "family": "DM Sans",
+      "url": "https://fonts.bunny.net/dm-sans/files/dm-sans-latin-500-normal.woff2",
+      "weight": 500
+    },
+    {
+      "family": "DM Sans",
+      "url": "https://fonts.bunny.net/dm-sans/files/dm-sans-latin-600-normal.woff2",
+      "weight": 600
+    }
+  ],
+  "id": "bloom-landing",
+  "lastModified": "2026-05-17T16:47:49.966Z",
+  "name": "Bloom landing (renderer capabilities showcase)",
+  "projectId": "repo-proj-SvwJaf2w",
+  "root": {
+    "children": [
+      {
+        "alignItems": "center",
+        "children": [
+          {
+            "color": "$textPrimary",
+            "content": "Bloom",
+            "fontFamily": "'Fraunces', Georgia, 'Times New Roman', serif",
+            "fontSize": 24,
+            "fontWeight": 600,
+            "id": "wordmark",
+            "letterSpacing": -0.4,
+            "type": "text"
+          },
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "color": "$textSecondary",
+                "content": "Product",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 14,
+                "fontWeight": 500,
+                "id": "nav-product",
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "Practice",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 14,
+                "fontWeight": 500,
+                "id": "nav-practice",
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "Pricing",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 14,
+                "fontWeight": 500,
+                "id": "nav-pricing",
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "About",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 14,
+                "fontWeight": 500,
+                "id": "nav-about",
+                "type": "text"
+              }
+            ],
+            "gap": "$xl",
+            "id": "nav-center",
+            "layout": "horizontal",
+            "type": "frame"
+          },
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "color": "$textPrimary",
+                "content": "Sign in",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 14,
+                "fontWeight": 500,
+                "id": "signin",
+                "type": "text"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "color": "$onAccent",
+                    "content": "Start free",
+                    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                    "fontSize": 13,
+                    "fontWeight": 600,
+                    "id": "cta-nav-text",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": "$pill",
+                "fill": "$accent",
+                "id": "cta-nav",
+                "layout": "horizontal",
+                "padding": [
+                  12,
+                  18
+                ],
+                "type": "frame"
+              }
+            ],
+            "gap": "$lg",
+            "id": "nav-right",
+            "layout": "horizontal",
+            "type": "frame"
+          }
+        ],
+        "fill": "$bg",
+        "height": 72,
+        "id": "topnav",
+        "justifyContent": "space-between",
+        "layout": "horizontal",
+        "padding": [
+          16,
+          88
+        ],
+        "type": "frame",
+        "width": 1440
+      },
+      {
+        "alignItems": "center",
+        "children": [
+          {
+            "animation": {
+              "duration": 600,
+              "easing": "ease-out",
+              "name": "slideUp"
+            },
+            "children": [
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "cornerRadius": "$pill",
+                    "fill": "$accent",
+                    "height": 6,
+                    "id": "eyebrow-dot",
+                    "type": "frame",
+                    "width": 6
+                  },
+                  {
+                    "color": "$accent",
+                    "content": "A DAILY JOURNALING PRACTICE",
+                    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                    "fontSize": 12,
+                    "fontWeight": 600,
+                    "id": "eyebrow",
+                    "letterSpacing": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "gap": "$sm",
+                "id": "eyebrow-row",
+                "layout": "horizontal",
+                "type": "frame"
+              },
+              {
+                "color": "$textPrimary",
+                "content": "Five minutes a day to notice what matters.",
+                "fontFamily": "'Fraunces', Georgia, 'Times New Roman', serif",
+                "fontSize": 72,
+                "fontWeight": 600,
+                "id": "headline",
+                "letterSpacing": -2,
+                "lineHeight": 1.02,
+                "maxWidth": 560,
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "Bloom is a quiet space for the questions that move you forward — not the inbox that pulls you back. One prompt, every morning. No streaks, no badges, no noise.",
+                "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                "fontSize": 18,
+                "fontWeight": 400,
+                "id": "subhead",
+                "lineHeight": 1.55,
+                "maxWidth": 520,
+                "type": "text"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$onAccent",
+                        "content": "Start your free trial",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 15,
+                        "fontWeight": 600,
+                        "id": "cta-primary-text",
+                        "type": "text"
+                      },
+                      {
+                        "d": "M 5 12 H 19 M 13 6 L 19 12 L 13 18",
+                        "fill": "none",
+                        "height": 16,
+                        "id": "cta-arrow",
+                        "stroke": "$onAccent",
+                        "strokeLinecap": "round",
+                        "strokeLinejoin": "round",
+                        "strokeWidth": 1.6,
+                        "type": "path",
+                        "viewBox": "0 0 24 24",
+                        "width": 16
+                      }
+                    ],
+                    "cornerRadius": "$pill",
+                    "fill": "$accent",
+                    "gap": "$sm",
+                    "id": "cta-primary",
+                    "layout": "horizontal",
+                    "padding": [
+                      14,
+                      28
+                    ],
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "d": "M 8 5 L 19 12 L 8 19 Z",
+                        "fill": "none",
+                        "height": 14,
+                        "id": "play-icon",
+                        "stroke": "$textPrimary",
+                        "strokeLinecap": "round",
+                        "strokeLinejoin": "round",
+                        "strokeWidth": 1.6,
+                        "type": "path",
+                        "viewBox": "0 0 24 24",
+                        "width": 14
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "See how it works",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 15,
+                        "fontWeight": 500,
+                        "id": "cta-secondary-text",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 6,
+                    "id": "cta-secondary",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$lg",
+                "id": "cta-row",
+                "layout": "horizontal",
+                "padding": [
+                  "$sm",
+                  0,
+                  0,
+                  0
+                ],
+                "type": "frame"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "color": "$accent",
+                    "content": "★★★★★",
+                    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                    "fontSize": 14,
+                    "fontWeight": 500,
+                    "id": "trust-stars",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$textMuted",
+                    "content": "4.9 · 12,400 quiet mornings",
+                    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                    "fontSize": 13,
+                    "fontWeight": 400,
+                    "id": "trust-text",
+                    "type": "text"
+                  }
+                ],
+                "gap": "$md",
+                "id": "trust-row",
+                "layout": "horizontal",
+                "padding": [
+                  "$xl",
+                  0,
+                  0,
+                  0
+                ],
+                "type": "frame"
+              }
+            ],
+            "gap": "$lg",
+            "id": "hero-left",
+            "layout": "vertical",
+            "type": "frame",
+            "width": 600
+          },
+          {
+            "children": [
+              {
+                "animation": {
+                  "delay": 200,
+                  "duration": 500,
+                  "name": "fadeIn"
+                },
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$textMuted",
+                        "content": "TUE · MAY 17",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 11,
+                        "fontWeight": 600,
+                        "id": "card-journal-date",
+                        "letterSpacing": 1,
+                        "type": "text"
+                      },
+                      {
+                        "height": 1,
+                        "id": "card-journal-spacer",
+                        "type": "frame",
+                        "width": 1
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 5,
+                            "id": "card-tag-dot",
+                            "type": "frame",
+                            "width": 5
+                          },
+                          {
+                            "color": "$accentDeep",
+                            "content": "Reflection",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 11,
+                            "fontWeight": 600,
+                            "id": "card-tag-text",
+                            "type": "text"
+                          }
+                        ],
+                        "cornerRadius": "$pill",
+                        "fill": "$accentSoft",
+                        "gap": 4,
+                        "id": "card-journal-tag",
+                        "layout": "horizontal",
+                        "padding": [
+                          3,
+                          8
+                        ],
+                        "type": "frame"
+                      }
+                    ],
+                    "gap": "$sm",
+                    "id": "card-journal-header",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "color": "$textPrimary",
+                    "content": "What did today’s quiet moment make space for?",
+                    "fontFamily": "'Fraunces', Georgia, 'Times New Roman', serif",
+                    "fontSize": 26,
+                    "fontWeight": 600,
+                    "id": "card-journal-prompt",
+                    "letterSpacing": -0.5,
+                    "lineHeight": 1.15,
+                    "type": "text"
+                  },
+                  {
+                    "color": "$textSecondary",
+                    "content": "Walked the long way to the studio and noticed the linden trees are out. The whole block smells like honey by 8 a.m. — I forgot how short that window is.",
+                    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                    "fontSize": 14,
+                    "fontWeight": 400,
+                    "id": "card-journal-body",
+                    "lineHeight": 1.6,
+                    "type": "text"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "d": "M 12 6 V 12 L 16 14 M 12 3 a 9 9 0 1 0 0 18 a 9 9 0 0 0 0 -18 z",
+                        "fill": "none",
+                        "height": 14,
+                        "id": "time-icon",
+                        "stroke": "$textMuted",
+                        "strokeLinecap": "round",
+                        "strokeLinejoin": "round",
+                        "strokeWidth": 1.6,
+                        "type": "path",
+                        "viewBox": "0 0 24 24",
+                        "width": 14
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "4 min · 218 words",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 12,
+                        "fontWeight": 500,
+                        "id": "card-time",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$sm",
+                    "id": "card-journal-footer",
+                    "layout": "horizontal",
+                    "padding": [
+                      "$md",
+                      0,
+                      0,
+                      0
+                    ],
+                    "type": "frame"
+                  }
+                ],
+                "cornerRadius": "$lg",
+                "fill": "$surface",
+                "gap": "$md",
+                "height": 320,
+                "id": "card-journal",
+                "layout": "vertical",
+                "padding": "$lg",
+                "position": "absolute",
+                "shadows": [
+                  {
+                    "blur": 2,
+                    "color": "rgba(28, 26, 24, 0.04)",
+                    "spread": 0,
+                    "x": 0,
+                    "y": 1
+                  },
+                  {
+                    "blur": 36,
+                    "color": "rgba(28, 26, 24, 0.08)",
+                    "spread": -4,
+                    "x": 0,
+                    "y": 12
+                  }
+                ],
+                "type": "frame",
+                "width": 380,
+                "x": 0,
+                "y": 20
+              },
+              {
+                "animation": {
+                  "delay": 360,
+                  "duration": 500,
+                  "name": "fadeIn"
+                },
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "This week",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 12,
+                        "fontWeight": 600,
+                        "id": "streak-title",
+                        "letterSpacing": 0.3,
+                        "type": "text"
+                      },
+                      {
+                        "height": 1,
+                        "id": "streak-spacer",
+                        "type": "frame",
+                        "width": 1
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "6 of 7",
+                        "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                        "fontSize": 11,
+                        "fontWeight": 500,
+                        "id": "streak-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$sm",
+                    "id": "streak-header",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-mon-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "M",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-mon-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-mon",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-tue-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "T",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-tue-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-tue",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-wed-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "W",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-wed-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-wed",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-thu-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "T",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-thu-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-thu",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$surfaceTint",
+                            "height": 14,
+                            "id": "day-fri-dot",
+                            "stroke": "$border",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "F",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-fri-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-fri",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-sat-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "S",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-sat-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-sat",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "cornerRadius": "$pill",
+                            "fill": "$accent",
+                            "height": 14,
+                            "id": "day-sun-dot",
+                            "stroke": "none",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 14
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "S",
+                            "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 500,
+                            "id": "day-sun-label",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": 6,
+                        "id": "day-sun",
+                        "layout": "vertical",
+                        "type": "frame"
+                      }
+                    ],
+                    "id": "streak-days",
+                    "justifyContent": "space-between",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  }
+                ],
+                "cornerRadius": "$md",
+                "fill": "$surface",
+                "gap": "$sm",
+                "id": "card-streak",
+                "layout": "vertical",
+                "padding": "$md",
+                "position": "absolute",
+                "shadows": [
+                  {
+                    "blur": 2,
+                    "color": "rgba(28, 26, 24, 0.04)",
+                    "spread": 0,
+                    "x": 0,
+                    "y": 1
+                  },
+                  {
+                    "blur": 40,
+                    "color": "rgba(28, 26, 24, 0.10)",
+                    "spread": -4,
+                    "x": 0,
+                    "y": 16
+                  }
+                ],
+                "type": "frame",
+                "width": 280,
+                "x": 220,
+                "y": 290
+              }
+            ],
+            "height": 460,
+            "id": "hero-right",
+            "type": "frame",
+            "width": 540
+          }
+        ],
+        "gap": 80,
+        "id": "hero-section",
+        "layout": "horizontal",
+        "padding": [
+          60,
+          88,
+          88,
+          88
+        ],
+        "responsive": "stack",
+        "type": "frame",
+        "width": 1440
+      }
+    ],
+    "fill": "$bg",
+    "fontFamily": "'DM Sans', system-ui, -apple-system, sans-serif",
+    "height": 900,
+    "id": "doc",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#1F4838",
+      "accentDeep": "#163428",
+      "accentSoft": "#DDE7E1",
+      "bg": "#FAF7F2",
+      "border": "#E8E2D6",
+      "borderSubtle": "#EFEBE2",
+      "onAccent": "#F7F4EE",
+      "surface": "#FFFFFF",
+      "surfaceTint": "#F3EFE7",
+      "swatchClay": "#D5BFA3",
+      "swatchMoss": "#8FA989",
+      "swatchSand": "#E8DDC6",
+      "textMuted": "#9B958C",
+      "textPrimary": "#1C1A18",
+      "textSecondary": "#56524C"
+    },
+    "radius": {
+      "lg": 20,
+      "md": 14,
+      "pill": 9999,
+      "sm": 8
+    },
+    "spacing": {
+      "lg": 24,
+      "md": 16,
+      "sm": 10,
+      "xl": 36,
+      "xs": 6,
+      "xxl": 56
+    },
+    "typography": {
+      "body": {
+        "fontSize": 14,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "cardTitle": {
+        "fontSize": 17,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "cta": {
+        "fontSize": 15,
+        "fontWeight": 600,
+        "lineHeight": 1
+      },
+      "eyebrow": {
+        "fontSize": 12,
+        "fontWeight": 600,
+        "lineHeight": 1.4
+      },
+      "headline": {
+        "fontSize": 72,
+        "fontWeight": 600,
+        "lineHeight": 1.02
+      },
+      "label": {
+        "fontSize": 12,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "subhead": {
+        "fontSize": 18,
+        "fontWeight": 400,
+        "lineHeight": 1.55
+      }
+    }
+  }
+}

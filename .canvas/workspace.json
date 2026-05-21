@@ -1,0 +1,96 @@
+{
+  "boundAt": "2026-05-21T12:33:56.560Z",
+  "designSystem": {
+    "colors": {
+      "bg": "#09070a",
+      "border": "#2a241a",
+      "borderSubtle": "#1f1b13",
+      "chartBar1": "#f59e0b",
+      "chartBar2": "#fde68a",
+      "chartTrack": "#231d13",
+      "danger": "#ef4444",
+      "glassRim": "rgba(255, 255, 255, 0.06)",
+      "info": "#3b82f6",
+      "primary": "#f59e0b",
+      "primaryDeep": "#b45309",
+      "primarySoft": "#fde68a",
+      "success": "#22c55e",
+      "surface": "#14110c",
+      "surfaceElevated": "#1f1a12",
+      "surfaceHover": "#251f15",
+      "textMuted": "#4f4a3e",
+      "textPrimary": "#fafaf5",
+      "textSecondary": "#b8b3a6",
+      "textTertiary": "#7a7464"
+    },
+    "radius": {
+      "lg": 14,
+      "md": 10,
+      "sm": 6
+    },
+    "spacing": {
+      "lg": 24,
+      "md": 16,
+      "sm": 10,
+      "xl": 32,
+      "xs": 6
+    },
+    "typography": {
+      "body": {
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "h1": {
+        "fontSize": 26,
+        "fontWeight": 700,
+        "lineHeight": 1.15
+      },
+      "h2": {
+        "fontSize": 15,
+        "fontWeight": 600,
+        "lineHeight": 1.4
+      },
+      "kpi": {
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1
+      },
+      "label": {
+        "fontSize": 11,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "mono": {
+        "fontSize": 13,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "tabular": {
+        "fontSize": 12,
+        "fontWeight": 500,
+        "lineHeight": 1.2
+      }
+    }
+  },
+  "projects": [
+    {
+      "dir": "design-system",
+      "id": "repo-proj-1sffZuUo",
+      "name": "Design system"
+    },
+    {
+      "dir": "ui",
+      "id": "repo-proj-SvwJaf2w",
+      "name": "UI"
+    },
+    {
+      "dir": "releases",
+      "id": "repo-proj-bTSbHvdQ",
+      "name": "Releases"
+    }
+  ],
+  "schemaVersion": 1,
+  "workspaceId": "repo-ws-R71a_aPz",
+  "workspaceName": "canvas-mcp"
+}

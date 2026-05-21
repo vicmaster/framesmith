@@ -1,0 +1,1110 @@
+{
+  "components": {},
+  "createdAt": "2026-05-17T15:36:31.894Z",
+  "fonts": [
+    {
+      "family": "Inter",
+      "url": "https://fonts.bunny.net/inter/files/inter-latin-400-normal.woff2",
+      "weight": 400
+    },
+    {
+      "family": "Inter",
+      "url": "https://fonts.bunny.net/inter/files/inter-latin-600-normal.woff2",
+      "weight": 600
+    },
+    {
+      "family": "Inter",
+      "url": "https://fonts.bunny.net/inter/files/inter-latin-700-normal.woff2",
+      "weight": 700
+    }
+  ],
+  "id": "phase9-design-system",
+  "lastModified": "2026-05-17T15:36:31.894Z",
+  "name": "canvas-mcp design tokens (v0.9.0)",
+  "projectId": "repo-proj-1sffZuUo",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "d": "M 4 4 L 20 4 L 20 20 L 4 20 Z M 4 11 L 20 11 M 11 11 L 11 20",
+                "fill": "none",
+                "height": 32,
+                "id": "logo-mark",
+                "stroke": "$primary",
+                "strokeLinecap": "round",
+                "strokeLinejoin": "round",
+                "strokeWidth": 1.8,
+                "type": "path",
+                "viewBox": "0 0 24 24",
+                "width": 32
+              },
+              {
+                "color": "$textPrimary",
+                "content": "canvas-mcp / Design system",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": 18,
+                "fontWeight": 600,
+                "id": "workspace-name",
+                "type": "text"
+              },
+              {
+                "height": 1,
+                "id": "spacer",
+                "type": "frame",
+                "width": 1
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "cornerRadius": "$lg",
+                    "fill": "$primary",
+                    "height": 6,
+                    "id": "pill-dot",
+                    "type": "frame",
+                    "width": 6
+                  },
+                  {
+                    "color": "$textSecondary",
+                    "content": "workspace design system",
+                    "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                    "fontSize": "$label",
+                    "fontWeight": 600,
+                    "id": "pill-text",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": "$lg",
+                "fill": "$surfaceElevated",
+                "gap": "$xs",
+                "id": "version-pill",
+                "layout": "horizontal",
+                "padding": "$xs",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame"
+              }
+            ],
+            "gap": "$md",
+            "id": "header",
+            "layout": "horizontal",
+            "type": "frame"
+          },
+          {
+            "animation": {
+              "duration": 500,
+              "easing": "ease-out",
+              "name": "slideUp"
+            },
+            "children": [
+              {
+                "color": "$primary",
+                "content": "v0.9.0 — DESIGN SYSTEM INHERITANCE",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": 13,
+                "fontWeight": 600,
+                "id": "eyebrow",
+                "letterSpacing": 1.2,
+                "type": "text"
+              },
+              {
+                "color": "$textPrimary",
+                "content": "Tokens declared once,\ninherited everywhere.",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$h1",
+                "fontWeight": 700,
+                "id": "headline",
+                "letterSpacing": -1.5,
+                "lineHeight": 1.05,
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "canvas-mcp declares its design system once on the workspace. Every canvas under it references tokens by name — this page itself contains zero hex codes.",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$body",
+                "id": "subhead",
+                "maxWidth": 640,
+                "type": "text"
+              }
+            ],
+            "gap": "$md",
+            "id": "hero",
+            "layout": "vertical",
+            "type": "frame"
+          },
+          {
+            "children": [
+              {
+                "color": "$primary",
+                "content": "01 · COLORS",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$label",
+                "fontWeight": 600,
+                "id": "colors-title",
+                "letterSpacing": 1.2,
+                "type": "text"
+              },
+              {
+                "children": [
+                  {
+                    "animation": {
+                      "delay": 80,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$bg",
+                        "height": 56,
+                        "id": "swatch-bg-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "bg",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-bg-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#09070a",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-bg-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-bg",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 120,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$surface",
+                        "height": 56,
+                        "id": "swatch-surface-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "surface",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-surface-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#1a160f",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-surface-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-surface",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 160,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$primary",
+                        "height": 56,
+                        "id": "swatch-primary-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "primary",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-primary-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#f59e0b",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-primary-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-primary",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 200,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$primarySoft",
+                        "height": 56,
+                        "id": "swatch-primarySoft-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "primarySoft",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-primarySoft-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#fde68a",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-primarySoft-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-primarySoft",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 240,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$primaryDeep",
+                        "height": 56,
+                        "id": "swatch-primaryDeep-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "primaryDeep",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-primaryDeep-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#b45309",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-primaryDeep-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-primaryDeep",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 280,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$textPrimary",
+                        "height": 56,
+                        "id": "swatch-textPrimary-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "textPrimary",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-textPrimary-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#fafaf5",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-textPrimary-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-textPrimary",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 320,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$textSecondary",
+                        "height": 56,
+                        "id": "swatch-textSecondary-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "textSecondary",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-textSecondary-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#b8b3a6",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-textSecondary-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-textSecondary",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 360,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$success",
+                        "height": 56,
+                        "id": "swatch-success-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "success",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-success-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#22c55e",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-success-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-success",
+                    "layout": "vertical",
+                    "type": "frame"
+                  },
+                  {
+                    "animation": {
+                      "delay": 400,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "cornerRadius": "$md",
+                        "fill": "$info",
+                        "height": 56,
+                        "id": "swatch-info-chip",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "frame",
+                        "width": 96
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "info",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "swatch-info-label",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "#3b82f6",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "swatch-info-value",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$xs",
+                    "id": "swatch-info",
+                    "layout": "vertical",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$md",
+                "id": "colors-grid",
+                "layout": "horizontal",
+                "type": "frame",
+                "wrap": true
+              }
+            ],
+            "gap": "$md",
+            "id": "section-colors",
+            "layout": "vertical",
+            "type": "frame"
+          },
+          {
+            "children": [
+              {
+                "color": "$primary",
+                "content": "02 · SPACING",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$label",
+                "fontWeight": 600,
+                "id": "spacing-title",
+                "letterSpacing": 1.2,
+                "type": "text"
+              },
+              {
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "animation": {
+                      "delay": 200,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "xs",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "space-xs-label",
+                        "type": "text",
+                        "width": 48
+                      },
+                      {
+                        "cornerRadius": "$sm",
+                        "fill": "$primary",
+                        "height": 8,
+                        "id": "space-xs-bar",
+                        "type": "frame",
+                        "width": 8
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "8px",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "space-xs-px",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "space-xs",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "animation": {
+                      "delay": 250,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "sm",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "space-sm-label",
+                        "type": "text",
+                        "width": 48
+                      },
+                      {
+                        "cornerRadius": "$sm",
+                        "fill": "$primary",
+                        "height": 8,
+                        "id": "space-sm-bar",
+                        "type": "frame",
+                        "width": 12
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "12px",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "space-sm-px",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "space-sm",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "animation": {
+                      "delay": 300,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "md",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "space-md-label",
+                        "type": "text",
+                        "width": 48
+                      },
+                      {
+                        "cornerRadius": "$sm",
+                        "fill": "$primary",
+                        "height": 8,
+                        "id": "space-md-bar",
+                        "type": "frame",
+                        "width": 20
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "20px",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "space-md-px",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "space-md",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "animation": {
+                      "delay": 350,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "lg",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "space-lg-label",
+                        "type": "text",
+                        "width": 48
+                      },
+                      {
+                        "cornerRadius": "$sm",
+                        "fill": "$primary",
+                        "height": 8,
+                        "id": "space-lg-bar",
+                        "type": "frame",
+                        "width": 32
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "32px",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "space-lg-px",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "space-lg",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  },
+                  {
+                    "alignItems": "center",
+                    "animation": {
+                      "delay": 400,
+                      "duration": 350,
+                      "name": "fadeIn"
+                    },
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "xl",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$label",
+                        "fontWeight": 600,
+                        "id": "space-xl-label",
+                        "type": "text",
+                        "width": 48
+                      },
+                      {
+                        "cornerRadius": "$sm",
+                        "fill": "$primary",
+                        "height": 8,
+                        "id": "space-xl-bar",
+                        "type": "frame",
+                        "width": 48
+                      },
+                      {
+                        "color": "$textMuted",
+                        "content": "48px",
+                        "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                        "fontSize": "$mono",
+                        "id": "space-xl-px",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "space-xl",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$sm",
+                "id": "spacing-rows",
+                "layout": "vertical",
+                "type": "frame"
+              }
+            ],
+            "gap": "$md",
+            "id": "section-spacing",
+            "layout": "vertical",
+            "type": "frame"
+          },
+          {
+            "alignItems": "start",
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "$primary",
+                    "content": "03 · RADIUS",
+                    "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                    "fontSize": "$label",
+                    "fontWeight": 600,
+                    "id": "radius-title",
+                    "letterSpacing": 1.2,
+                    "type": "text"
+                  },
+                  {
+                    "children": [
+                      {
+                        "alignItems": "center",
+                        "animation": {
+                          "delay": 400,
+                          "duration": 350,
+                          "name": "scaleIn"
+                        },
+                        "children": [
+                          {
+                            "cornerRadius": "$sm",
+                            "fill": "$surfaceElevated",
+                            "height": 64,
+                            "id": "radius-sm-box",
+                            "stroke": "$border",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 64
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "sm",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "radius-sm-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "6px",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$mono",
+                            "id": "radius-sm-px",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "radius-sm",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "animation": {
+                          "delay": 460,
+                          "duration": 350,
+                          "name": "scaleIn"
+                        },
+                        "children": [
+                          {
+                            "cornerRadius": "$md",
+                            "fill": "$surfaceElevated",
+                            "height": 64,
+                            "id": "radius-md-box",
+                            "stroke": "$border",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 64
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "md",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "radius-md-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "12px",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$mono",
+                            "id": "radius-md-px",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "radius-md",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "alignItems": "center",
+                        "animation": {
+                          "delay": 520,
+                          "duration": 350,
+                          "name": "scaleIn"
+                        },
+                        "children": [
+                          {
+                            "cornerRadius": "$lg",
+                            "fill": "$surfaceElevated",
+                            "height": 64,
+                            "id": "radius-lg-box",
+                            "stroke": "$border",
+                            "strokeWidth": 1,
+                            "type": "frame",
+                            "width": 64
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "lg",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "radius-lg-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textMuted",
+                            "content": "18px",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$mono",
+                            "id": "radius-lg-px",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "radius-lg",
+                        "layout": "vertical",
+                        "type": "frame"
+                      }
+                    ],
+                    "gap": "$lg",
+                    "id": "radius-grid",
+                    "layout": "horizontal",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$md",
+                "id": "section-radius",
+                "layout": "vertical",
+                "type": "frame"
+              },
+              {
+                "children": [
+                  {
+                    "color": "$primary",
+                    "content": "04 · TYPOGRAPHY",
+                    "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                    "fontSize": "$label",
+                    "fontWeight": 600,
+                    "id": "type-title",
+                    "letterSpacing": 1.2,
+                    "type": "text"
+                  },
+                  {
+                    "children": [
+                      {
+                        "animation": {
+                          "delay": 600,
+                          "duration": 350,
+                          "name": "fadeIn"
+                        },
+                        "children": [
+                          {
+                            "color": "$primary",
+                            "content": "h1",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "type-h1-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "Display headline",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$h1",
+                            "id": "type-h1-sample",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "type-h1",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "animation": {
+                          "delay": 650,
+                          "duration": 350,
+                          "name": "fadeIn"
+                        },
+                        "children": [
+                          {
+                            "color": "$primary",
+                            "content": "h2",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "type-h2-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "Section heading",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$h2",
+                            "id": "type-h2-sample",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "type-h2",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "animation": {
+                          "delay": 700,
+                          "duration": 350,
+                          "name": "fadeIn"
+                        },
+                        "children": [
+                          {
+                            "color": "$primary",
+                            "content": "body",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "type-body-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "Body paragraph with a complete sentence.",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$body",
+                            "id": "type-body-sample",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "type-body",
+                        "layout": "vertical",
+                        "type": "frame"
+                      },
+                      {
+                        "animation": {
+                          "delay": 750,
+                          "duration": 350,
+                          "name": "fadeIn"
+                        },
+                        "children": [
+                          {
+                            "color": "$primary",
+                            "content": "label",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "fontWeight": 600,
+                            "id": "type-label-label",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "LABEL · UPPERCASE TAG",
+                            "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                            "fontSize": "$label",
+                            "id": "type-label-sample",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$xs",
+                        "id": "type-label",
+                        "layout": "vertical",
+                        "type": "frame"
+                      }
+                    ],
+                    "gap": "$md",
+                    "id": "type-list",
+                    "layout": "vertical",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$md",
+                "id": "section-typography",
+                "layout": "vertical",
+                "type": "frame"
+              }
+            ],
+            "gap": "$xl",
+            "id": "two-up",
+            "layout": "horizontal",
+            "responsive": "stack",
+            "type": "frame"
+          },
+          {
+            "alignItems": "center",
+            "animation": {
+              "delay": 800,
+              "duration": 400,
+              "name": "fadeIn"
+            },
+            "children": [
+              {
+                "color": "$primarySoft",
+                "content": "`fill: \"$primary\"`",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$mono",
+                "fontWeight": 600,
+                "id": "footer-mono-key",
+                "type": "text"
+              },
+              {
+                "color": "$textSecondary",
+                "content": "→ resolved via workspace.designSystem.colors.primary. No hex codes in this canvas — change the workspace tokens and the whole page updates.",
+                "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+                "fontSize": "$body",
+                "id": "footer-body",
+                "type": "text"
+              }
+            ],
+            "cornerRadius": "$lg",
+            "fill": "$surface",
+            "gap": "$md",
+            "id": "footer",
+            "layout": "horizontal",
+            "padding": "$md",
+            "stroke": "$border",
+            "strokeWidth": 1,
+            "type": "frame"
+          }
+        ],
+        "gap": "$xl",
+        "id": "body",
+        "layout": "vertical",
+        "padding": "$xl",
+        "type": "frame"
+      }
+    ],
+    "fill": "$bg",
+    "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
+    "height": 1280,
+    "id": "doc",
+    "type": "document",
+    "width": 1280
+  },
+  "variables": {}
+}
