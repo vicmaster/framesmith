@@ -22,7 +22,7 @@ MCP Client → stdio → framesmith server
 
 ## Viewer
 
-Run `npm run viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
+Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
 ![framesmith canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
 
@@ -642,12 +642,13 @@ The viewer runs in one of two modes — embedded (auto-starts inside the MCP ser
 
 ```bash
 # In a separate terminal tab — stays alive independently of any MCP session
-cd /path/to/framesmith
-npm run viewer
+npx -p framesmith framesmith-viewer
 
 # Or on a specific port
-npm run viewer -- 3004
+npx -p framesmith framesmith-viewer 3004
 ```
+
+> Working from a clone instead of npm? Run `npm run viewer` (or `npm run viewer -- 3004`) from the repo root — same standalone viewer, run from source.
 
 The standalone viewer:
 
@@ -670,7 +671,7 @@ All canvases persist to `~/.framesmith/canvases/` as JSON files and survive proc
 
 ## Workflow
 
-1. Start the standalone viewer in a terminal tab: `npm run viewer`
+1. Start the standalone viewer in a terminal tab: `npx -p framesmith framesmith-viewer`
 2. `canvas_create` → get canvas ID
 3. Open the viewer URL in your browser for live preview
 4. `apply_preset` or `set_variables` → set up design tokens
