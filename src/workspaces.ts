@@ -14,9 +14,16 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
 import { mergeDesignTokens } from './variables.js';
+import { isRepoBound, repoDir, writeProjectFile, type RepoProjectFile } from './repo-store.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
+
+// When repo-bound, the single virtual workspace + project come from
+// `.canvas/project.json`. We keep the parsed file around so mutations
+// (rename, design-system edits) can be written back to it instead of the
+// global workspaces.json / projects.json indexes.
+let repoProjectFile: RepoProjectFile | null = null;
 
 // `CANVAS_MCP_HOME` lets tests redirect persistence to a tmp dir without
 // touching the real ~/.canvas-mcp tree. Resolved per call so an env var set
@@ -37,6 +44,7 @@ function writeAtomic(path: string, content: string): void {
 }
 
 function persistWorkspaces(): void {
+  if (isRepoBound()) { persistRepoProjectFile(); return; }
   try {
     writeAtomic(workspacesPath(), JSON.stringify([...workspaces.values()], null, 2));
   } catch (err) {
@@ -45,10 +53,54 @@ function persistWorkspaces(): void {
 }
 
 function persistProjects(): void {
+  if (isRepoBound()) { persistRepoProjectFile(); return; }
   try {
     writeAtomic(projectsPath(), JSON.stringify([...projects.values()], null, 2));
   } catch (err) {
     process.stderr.write(`Warning: Could not persist projects: ${(err as Error).message}\n`);
+  }
+}
+
+/**
+ * Load the single virtual workspace + project that back a repo-bound session
+ * from a parsed `.canvas/project.json`. The flattened design system lives on
+ * the virtual project so `getCanvasTokens` resolves it without a workspace
+ * layer. Virtual entries never reach the global indexes — they are written
+ * back only via `persistRepoProjectFile`.
+ */
+export function loadRepoWorkspaceProject(pf: RepoProjectFile): void {
+  workspaces.clear();
+  projects.clear();
+  repoProjectFile = pf;
+  workspaces.set(pf.workspaceId, { id: pf.workspaceId, name: pf.workspaceName, createdAt: pf.boundAt });
+  projects.set(pf.projectId, {
+    id: pf.projectId,
+    workspaceId: pf.workspaceId,
+    name: pf.projectName,
+    createdAt: pf.boundAt,
+    designSystem: pf.designSystem,
+  });
+}
+
+/** Rewrite `.canvas/project.json` from the in-memory virtual workspace +
+ * project. There is exactly one of each when bound. A workspace-level design
+ * system (if one is ever set while bound) is folded into the flattened
+ * snapshot so the file stays self-contained. */
+function persistRepoProjectFile(): void {
+  if (!isRepoBound() || !repoProjectFile) return;
+  const ws = [...workspaces.values()][0];
+  const proj = [...projects.values()][0];
+  if (ws) repoProjectFile.workspaceName = ws.name;
+  if (proj) {
+    repoProjectFile.projectName = proj.name;
+    repoProjectFile.designSystem = ws?.designSystem
+      ? mergeDesignTokens(ws.designSystem, proj.designSystem)
+      : proj.designSystem;
+  }
+  try {
+    writeProjectFile(repoDir(), repoProjectFile);
+  } catch (err) {
+    process.stderr.write(`Warning: Could not persist repo project file: ${(err as Error).message}\n`);
   }
 }
 

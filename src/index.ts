@@ -7,8 +7,10 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens } from './workspaces.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspaceProject } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
+import { detectBinding, projectStartDir, readProjectFile, setRepoBackend } from './repo-store.js';
+import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
@@ -883,6 +885,34 @@ server.tool(
   }
 );
 
+// --- canvas_bind (Phase 10) ---
+server.tool(
+  'canvas_bind',
+  "Bind the current project directory to canvas-mcp so its canvases live in the repo as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global ~/.canvas-mcp store. Creates `.canvas/project.json` (binding + a flattened design-system snapshot) plus one slug-named file per canvas, migrates the chosen project's canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.canvas/` on startup. Commit the `.canvas/` directory so designs travel with the code and diff in review.",
+  {
+    projectId: z.string().optional().describe('Project whose canvases migrate into the repo. Defaults to the built-in Untitled project.'),
+    dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
+  },
+  async ({ projectId, dir }) => {
+    const result = bindRepo({ projectId, dir });
+    if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          bound: true,
+          repoRoot: result.root,
+          canvasDir: result.dir,
+          workspace: result.workspace,
+          project: result.project,
+          canvasesMigrated: result.migrated,
+          note: 'Repo is now the source of truth. Commit the .canvas/ directory to share these designs.',
+        }, null, 2),
+      }],
+    };
+  }
+);
+
 // --- Helpers ---
 function trimDepth(node: SceneNode, maxDepth: number, currentDepth = 0): SceneNode {
   const copy = { ...node };
@@ -911,12 +941,24 @@ async function probeViewer(port: number): Promise<boolean> {
 }
 
 async function main() {
-  // Phase 7 boot order matters: workspaces+projects load first so the default
-  // workspace/project exist, then canvas migration can assign DEFAULT_PROJECT_ID
-  // to any pre-Phase-7 canvases that lack a projectId.
-  loadPersistedWorkspaces();
-  ensureDefaultWorkspaceAndProject();
-  loadPersistedCanvases();
+  // Phase 10: if the working directory (or an ancestor) carries a `.canvas/`
+  // binding, the repo is the source of truth — load its virtual workspace +
+  // project and canvases from there, never touching the global store.
+  const binding = detectBinding(projectStartDir());
+  const repoFile = binding ? readProjectFile(binding.dir) : null;
+  if (binding && repoFile) {
+    setRepoBackend(binding.root, binding.dir);
+    loadRepoWorkspaceProject(repoFile);
+    loadPersistedCanvases();
+    process.stderr.write(`canvas-mcp bound to repo: ${binding.dir}\n`);
+  } else {
+    // Phase 7 boot order matters: workspaces+projects load first so the default
+    // workspace/project exist, then canvas migration can assign DEFAULT_PROJECT_ID
+    // to any pre-Phase-7 canvases that lack a projectId.
+    loadPersistedWorkspaces();
+    ensureDefaultWorkspaceAndProject();
+    loadPersistedCanvases();
+  }
 
   // If CANVAS_VIEWER_URL is set, use that external viewer (skip starting our own)
   const externalUrl = process.env.CANVAS_VIEWER_URL;
