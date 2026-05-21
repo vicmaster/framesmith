@@ -303,7 +303,7 @@ Authoring intent: this is the open-JSON differentiator made tangible — **desig
 
 **Source-of-truth rule (decided):** a canvas is *either* repo-bound *or* global, never both — so there is nothing to "reconcile." When a repo has `.canvas/`, it is authoritative; `~/.canvas-mcp` holds no competing copy of a bound canvas.
 
-_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard + asset externalization (`.canvas/assets/`). Remaining: viewer lifecycle wiring on mirrored repo canvases._
+_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard + asset externalization (`.canvas/assets/`) + viewer lifecycle write-back. **Phase 10 complete.**_
 
 A repo binds a whole **workspace** (not a single project): `.canvas/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
 
@@ -315,6 +315,7 @@ A repo binds a whole **workspace** (not a single project): `.canvas/workspace.js
 - [x] Asset externalization — inline `data:` images are extracted to `.canvas/assets/<content-hash>.<ext>` on write (deduped by content) and rehydrated on read, so committed canvas JSON stays small and diff-friendly while the in-memory canvas keeps inline images
 - [x] External-change safety — `ensureFresh` reloads a canvas from disk before mutation when its mtime changed (git pull / branch switch / hand-edit), so the agent never clobbers an external edit; a vanished target node then surfaces a not-found error; deleted files drop from the store. `schemaVersion` forward-compat guard on `workspace.json` load (newer files read best-effort with a warning; migration hook in place)
 - [x] Round-trip — clone the repo, open the viewer, see the same canvases; the file diffs cleanly in code review
+- [x] Viewer lifecycle write-back — archive / delete on a mirrored repo canvas writes to its `.canvas/` file (not the global store), survives reload, and cross-process edits are caught by external-change safety
 - [x] Sharpen the Pencil contrast — open JSON you own in the repo vs an encrypted project file
 
 ### Phase 11 — Design variety & anti-sameness (v1.1)
