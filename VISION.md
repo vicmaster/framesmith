@@ -295,7 +295,62 @@ Design tokens already live on `Canvas.variables` (colors / spacing / radius / ty
 - [x] Preset migration: existing presets are workspace/project-installable via `*_apply_preset` tools
 - [x] Guidelines update: when authoring, reach for workspace tokens instead of literal hex codes
 
-### Phase 10 — Ecosystem (v1.0)
+### Phase 10 — Canvases that live in the repo (v1.0)
+
+Today every canvas lives in `~/.canvas-mcp/canvases/`, keyed by ID and decoupled from the code it designs for. A design can't travel with the repo, get reviewed in a PR, or be opened by a teammate who clones the project. Proprietary tools solve this with an encrypted project file dropped into the working directory; canvas-mcp can do it better — an open, human-readable, git-committable file checked in alongside the code. Shipping this as the v1.0 headline makes "your design lives in your repo" the story of the 1.0 release.
+
+Authoring intent: this is the open-JSON differentiator made tangible — **design lives in your repo**, diffable in review, not locked in a separate encrypted store. The file **embeds the full scene graph** so a clone is self-contained.
+
+**Source-of-truth rule (decided):** a canvas is *either* repo-bound *or* global, never both — so there is nothing to "reconcile." When a repo has `.canvas/`, it is authoritative; `~/.canvas-mcp` holds no competing copy of a bound canvas.
+
+_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2: viewer cache + registry. Slice 3: external-change safety + asset externalization._
+
+A repo binds a whole **workspace** (not a single project): `.canvas/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
+
+- [x] `.canvas/` dir at the repo root is the source of truth — `workspace.json` (binding + projects[] + `schemaVersion`) and per-project subdirs of slug-named canvas files (full scene graph embedded)
+- [x] Self-contained clones — `workspace.json` carries the workspace design system + per-project token overrides so a fresh clone with empty global state resolves tokens identically
+- [x] Auto-bind by project-root walk-up — server finds the nearest `.canvas/` / `.git` from cwd and scopes to that virtual workspace; bound entities never register in global `workspaces.json` / `projects.json`
+- [ ] Global store becomes a read-only cache + repo registry — rebuilt from known repos on load so the viewer keeps its unified cross-project gallery; the cache is derived, never authoritative
+- [x] Deterministic, text-only serialization — sorted keys / stable indent / trailing newline (binaries → `.canvas/assets/` still pending) so diffs stay reviewable and git merges conflict only on the *same* canvas
+- [ ] External-change safety — detect via mtime, reload before writing, error (never clobber) if the agent's target node vanished; `schemaVersion` + load-time migration for forward compat
+- [ ] Round-trip — clone the repo, open the viewer, see the same canvases; the file diffs cleanly in code review
+- [x] Sharpen the Pencil contrast — open JSON you own in the repo vs an encrypted project file
+
+### Phase 11 — Design variety & anti-sameness (v1.1)
+
+Left to their own devices, AI assistants converge on the same handful of layouts — a centered hero, a three-card row, a dark surface with one accent. canvas-mcp hands the agent primitives but no sense of *structure* to choose from, and no memory of what it built last time, so every session drifts toward the same shape. Two levers fix this: a library of named page structures (layout scaffolds the agent stamps down and fills, distinct from color presets), and a per-project build log that records what was made so the next canvas is nudged to differ.
+
+Authoring intent: structures are scene-graph data, not prompt text — the agent applies one, then **renders and verifies** it, an advantage code-only tooling doesn't have.
+
+- [ ] Layout scaffold library — named page structures (e.g. marquee hero, bento grid, stat-led, editorial long-form, split workbench, catalogue) as partial scene trees with placeholder children; distinct from color/token presets
+- [ ] `list_structures` / `apply_structure` tools — agent picks a structure, gets a filled-in skeleton to populate, then renders + verifies it
+- [ ] Structure taxonomy — each scaffold tagged on independent axes (hero treatment, density, rhythm, alignment) so "differs from last" is computable, not a vibe
+- [ ] Per-project build log — record structure + preset + key axes for each canvas authored under a project
+- [ ] Diversification signal — on `canvas_create`, surface the last N log entries and steer the agent to differ on ≥ 1 axis from recent work
+- [ ] Provenance stamp — canvas metadata records which structure / preset / seed produced it (feeds the log; surfaced in the viewer)
+
+### Phase 12 — Cliché & craft guardrails (v1.2)
+
+`canvas_evaluate` (Phase 6) scores *craft* — contrast, spacing scale, type scale, structure. It says nothing about *cliché*: the visual tells that mark a design as machine-made. Several of these are mechanically detectable on the scene graph, and because canvas-mcp renders, it can confirm them instead of guessing. Add a `cliche` category alongside the craft checks, plus an honest-content rule so mockups stop shipping invented data.
+
+- [ ] `cliche` evaluation category in `canvas_evaluate` — flags the recurring machine-made tells
+- [ ] Detectable tells (scene-graph + render): default purple / indigo accent hue, gradient / glow overuse, fake browser / phone / IDE chrome (traffic-light-dot frames), the hanging "tag-left / heading-right" header
+- [ ] Honest-content check — flag fabricated-looking metrics / testimonials / logos in placeholder copy; suggest a labeled placeholder convention ("metric to confirm" + neutral block) instead
+- [ ] Auto-fix ops where mechanical (swap a default-accent hue, replace a fake-chrome frame), consistent with Phase 6 `canvas_autofix`
+- [ ] Genre-aware loosening — some tells are intentional in some styles; let the active preset / design system relax specific gates
+- [ ] Guidelines update — tool descriptions steer authoring away from the tells up front, not just catch them after
+
+### Phase 13 — Structured critique & auto-revision (v1.3)
+
+The LLM-judge mode (Phase 6) returns a 0–100 score and free-text strengths / weaknesses — a vibe check, not a reproducible rubric, and nothing closes the loop automatically. Move the judge to a fixed multi-axis rubric with a per-axis floor, and let a low axis trigger a revision pass rather than just reporting it.
+
+- [ ] Fixed critique rubric — score named axes (e.g. hierarchy, execution, specificity, restraint, variety), each 1–5, instead of one opaque number
+- [ ] Revision threshold — any axis below a floor flags the canvas as needs-revision, naming the specific axis
+- [ ] Closed loop — optional auto-revise pass that feeds the failing axis back as targeted `batch_design` guidance, then re-judges
+- [ ] Stamp the verdict — store the rubric result in canvas metadata / provenance so quality is auditable over time and across the build log
+- [ ] Keep the rubric pluggable alongside the existing heuristic categories (don't lose the deterministic signal)
+
+### Phase 14 — Ecosystem (v1.4)
 - [x] Web-based canvas viewer (read-only UI to browse designs)
 - [ ] Image generation integration (placeholder images via AI)
 - [ ] HTTP transport for remote access

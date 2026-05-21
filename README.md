@@ -162,6 +162,29 @@ Top-level container CRUD. The built-in `Personal` workspace cannot be deleted, a
 
 Mid-level container CRUD inside a workspace. The built-in `Untitled` project cannot be deleted. `project_delete` refuses if the project still contains any canvases (archived ones still count — move or delete them first).
 
+### `canvas_bind`
+
+Bind a workspace to the current project directory so its canvases live **in the repo** as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global `~/.canvas-mcp` store. Run it once per repo.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `workspaceId` | string? | Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. |
+| `dir` | string? | Directory to bind. Defaults to the nearest git repo root above the server's working directory. |
+
+It creates `.canvas/workspace.json` (the binding plus the design system, so a fresh clone resolves tokens identically) and one subdirectory per project holding one slug-named file per canvas:
+
+```
+.canvas/
+  workspace.json     # workspace + projects[] + design system
+  design-system/
+    design-tokens.json
+  ui/
+    bloom-landing.json
+    login-form.json
+```
+
+It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. Afterwards the server auto-detects `.canvas/` on startup (walking up from its working directory). **Commit `.canvas/`** so designs travel with the code and diff cleanly in review.
+
 ### `batch_design`
 
 Execute operations on the scene graph. Operations are line-separated strings:

@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
+import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir } from './repo-store.js';
 
 const store = new Map<string, Canvas>();
 
@@ -23,6 +24,10 @@ function ensureDir(): void {
 
 function persistCanvas(canvas: Canvas): void {
   try {
+    if (isRepoBound()) {
+      writeCanvasToDir(repoDir(), canvas);
+      return;
+    }
     ensureDir();
     writeFileSync(join(canvasDir(), `${canvas.id}.json`), JSON.stringify(canvas, null, 2));
   } catch (err) {
@@ -31,6 +36,17 @@ function persistCanvas(canvas: Canvas): void {
 }
 
 function removePersistedCanvas(id: string): void {
+  if (isRepoBound()) {
+    removeCanvasFromDir(repoDir(), id);
+    return;
+  }
+  purgeGlobalCanvas(id);
+}
+
+/** Delete a canvas file from the global ~/.canvas-mcp store regardless of the
+ * active backend. Used during bind migration to drop the global copy after the
+ * canvas has been written into the repo `.canvas/` dir. */
+export function purgeGlobalCanvas(id: string): void {
   try {
     const filePath = join(canvasDir(), `${id}.json`);
     if (existsSync(filePath)) unlinkSync(filePath);
@@ -45,6 +61,14 @@ function removePersistedCanvas(id: string): void {
  */
 export function loadPersistedCanvases(): number {
   store.clear();
+  if (isRepoBound()) {
+    const canvases = loadCanvasesFromDir(repoDir());
+    for (const c of canvases) store.set(c.id, c);
+    if (canvases.length > 0) {
+      process.stderr.write(`Loaded ${canvases.length} repo canvas(es) from ${repoDir()}\n`);
+    }
+    return canvases.length;
+  }
   try {
     ensureDir();
     const files = readdirSync(canvasDir()).filter(f => f.endsWith('.json'));
