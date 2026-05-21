@@ -18,7 +18,7 @@
 // and workspaces.ts can both call into it without an import cycle. Higher-level
 // orchestration (which workspace to migrate, how tokens layer) lives in bind.ts.
 
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, renameSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, renameSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { Canvas, DesignVariables } from './types.js';
@@ -59,6 +59,9 @@ let backend: Backend = { kind: 'global' };
 // One repo per server process, so module-level maps are sufficient.
 const fileById = new Map<string, string>();
 const projectDirById = new Map<string, string>();
+// id → mtimeMs of the canvas file as the server last wrote/read it. Used to
+// detect external edits (git pull, branch switch, hand-edit) before a write.
+const mtimeById = new Map<string, number>();
 
 export function getBackend(): Backend { return backend; }
 export function isRepoBound(): boolean { return backend.kind === 'repo'; }
@@ -78,6 +81,7 @@ export function setGlobalBackend(): void {
 export function resetRepoState(): void {
   fileById.clear();
   projectDirById.clear();
+  mtimeById.clear();
   backend = { kind: 'global' };
 }
 
@@ -148,15 +152,39 @@ function writeAtomic(path: string, content: string): void {
   renameSync(tmp, path);
 }
 
+function fileMtime(path: string): number | null {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 // --- workspace.json ---
 export function readWorkspaceFile(dir: string): RepoWorkspaceFile | null {
   const p = join(dir, WORKSPACE_FILE);
   if (!existsSync(p)) return null;
   try {
-    return JSON.parse(readFileSync(p, 'utf-8')) as RepoWorkspaceFile;
+    const wf = JSON.parse(readFileSync(p, 'utf-8')) as RepoWorkspaceFile;
+    return migrateWorkspaceFile(wf);
   } catch {
     return null;
   }
+}
+
+/** Forward/back-compat hook for `workspace.json`. Files from an older schema
+ * get migrated up here; files from a newer canvas-mcp are read best-effort with
+ * a warning. Today there is only v1, so this is a near pass-through — but it is
+ * the single place future migrations land. */
+function migrateWorkspaceFile(wf: RepoWorkspaceFile): RepoWorkspaceFile {
+  const v = typeof wf.schemaVersion === 'number' ? wf.schemaVersion : 1;
+  if (v > SCHEMA_VERSION) {
+    process.stderr.write(
+      `Warning: ${WORKSPACE_FILE} schemaVersion ${v} is newer than this canvas-mcp supports (${SCHEMA_VERSION}); reading best-effort.\n`,
+    );
+  }
+  // (future) if (v < 2) { ...migrate v1 → v2... }
+  return wf;
 }
 
 export function writeWorkspaceFile(dir: string, file: RepoWorkspaceFile): void {
@@ -174,7 +202,10 @@ export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
     rel = join(projectDir, uniqueFilename(projectDir, canvas.name));
     fileById.set(canvas.id, rel);
   }
-  writeAtomic(join(rootDir, rel), stableStringify(canvas));
+  const abs = join(rootDir, rel);
+  writeAtomic(abs, stableStringify(canvas));
+  const m = fileMtime(abs);
+  if (m !== null) mtimeById.set(canvas.id, m);
 }
 
 export function removeCanvasFromDir(rootDir: string, id: string): void {
@@ -185,6 +216,7 @@ export function removeCanvasFromDir(rootDir: string, id: string): void {
     if (existsSync(p)) unlinkSync(p);
   } catch {}
   fileById.delete(id);
+  mtimeById.delete(id);
 }
 
 /** Read every canvas file across all registered project subdirectories,
@@ -192,6 +224,7 @@ export function removeCanvasFromDir(rootDir: string, id: string): void {
  * populated (from `workspace.json`) before this is called. */
 export function loadCanvasesFromDir(rootDir: string): Canvas[] {
   fileById.clear();
+  mtimeById.clear();
   const out: Canvas[] = [];
   for (const projectDir of projectDirById.values()) {
     const abs = join(rootDir, projectDir);
@@ -203,16 +236,47 @@ export function loadCanvasesFromDir(rootDir: string): Canvas[] {
       continue;
     }
     for (const file of files) {
+      const full = join(abs, file);
       try {
-        const data = JSON.parse(readFileSync(join(abs, file), 'utf-8')) as Canvas;
+        const data = JSON.parse(readFileSync(full, 'utf-8')) as Canvas;
         if (data.id && data.root) {
           fileById.set(data.id, join(projectDir, file));
+          const m = fileMtime(full);
+          if (m !== null) mtimeById.set(data.id, m);
           out.push(data);
         }
       } catch {}
     }
   }
   return out;
+}
+
+/** True if the canvas file changed on disk since the server last wrote/read it
+ * (external git pull / branch switch / hand-edit), or if it was deleted. */
+export function externallyModified(rootDir: string, id: string): boolean {
+  const rel = fileById.get(id);
+  if (!rel) return false;
+  const current = fileMtime(join(rootDir, rel));
+  if (current === null) return true; // file removed on disk
+  const recorded = mtimeById.get(id);
+  return recorded !== undefined && current !== recorded;
+}
+
+/** Re-read a single canvas file from disk, refreshing its recorded mtime.
+ * Returns null if the file is gone or unreadable. */
+export function readCanvasFile(rootDir: string, id: string): Canvas | null {
+  const rel = fileById.get(id);
+  if (!rel) return null;
+  const p = join(rootDir, rel);
+  try {
+    const data = JSON.parse(readFileSync(p, 'utf-8')) as Canvas;
+    if (!data.id || !data.root) return null;
+    const m = fileMtime(p);
+    if (m !== null) mtimeById.set(id, m);
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 // --- Discovery ---
