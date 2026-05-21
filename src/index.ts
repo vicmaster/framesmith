@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo } from './repo-store.js';
@@ -387,6 +387,7 @@ Read the canvas-mcp://guidelines resource for common patterns (pricing tiers, tw
     operations: z.string().describe('Operations to execute, one per line'),
   },
   async ({ canvasId, operations }) => {
+    ensureFresh(canvasId); // reload if the file changed on disk (git pull / hand-edit) before we mutate
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
@@ -517,6 +518,7 @@ server.tool(
     }).describe('Design variables to set'),
   },
   async ({ canvasId, variables }) => {
+    ensureFresh(canvasId);
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = setVariables(canvas, variables);
@@ -551,6 +553,7 @@ server.tool(
     })).describe('Font declarations. Replaces existing fonts wholesale.'),
   },
   async ({ canvasId, fonts }) => {
+    ensureFresh(canvasId);
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const unsafeFamily = /["';{}\n\r<>]/;

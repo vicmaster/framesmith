@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
-import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir } from './repo-store.js';
+import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile } from './repo-store.js';
 
 const store = new Map<string, Canvas>();
 
@@ -144,6 +144,27 @@ export function getCanvas(id: string): Canvas | undefined {
   return store.get(id);
 }
 
+/**
+ * When repo-bound, reload a canvas from disk if its file changed externally
+ * (git pull / branch switch / hand-edit) since the server last touched it — so
+ * the caller mutates the current version instead of clobbering it. If the file
+ * was deleted externally, drop it from the store (the caller's not-found path
+ * then surfaces a clear error rather than re-creating it). No-op on the global
+ * backend. Call this before any mutation + persist.
+ */
+export function ensureFresh(id: string): void {
+  if (!isRepoBound()) return;
+  if (!externallyModified(repoDir(), id)) return;
+  const fresh = readCanvasFile(repoDir(), id);
+  if (fresh) {
+    store.set(id, fresh);
+    process.stderr.write(`canvas ${id} reloaded from disk (external change detected)\n`);
+  } else {
+    store.delete(id);
+    process.stderr.write(`canvas ${id} removed (deleted on disk externally)\n`);
+  }
+}
+
 export interface CanvasSummary {
   id: string;
   name: string;
@@ -170,6 +191,7 @@ export function deleteCanvas(id: string): boolean {
 }
 
 export function archiveCanvas(id: string): Canvas | undefined {
+  ensureFresh(id);
   const canvas = store.get(id);
   if (!canvas) return undefined;
   canvas.archived = true;
@@ -180,6 +202,7 @@ export function archiveCanvas(id: string): Canvas | undefined {
 }
 
 export function unarchiveCanvas(id: string): Canvas | undefined {
+  ensureFresh(id);
   const canvas = store.get(id);
   if (!canvas) return undefined;
   canvas.archived = false;
@@ -190,6 +213,7 @@ export function unarchiveCanvas(id: string): Canvas | undefined {
 }
 
 export function moveCanvas(id: string, projectId: string): Canvas | undefined {
+  ensureFresh(id);
   const canvas = store.get(id);
   if (!canvas) return undefined;
   canvas.projectId = projectId;
