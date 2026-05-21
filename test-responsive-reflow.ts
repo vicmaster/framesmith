@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 5 item #6: screenshot_responsive renders HTML per breakpoint
 // so the body scaffold (max-width / min-height) matches each viewport, not the
 // largest breakpoint. Asserts the runtime body box at each breakpoint matches

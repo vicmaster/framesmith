@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 6a llm-judge module. Exercises parse + provider-selection +
 // the dispatch path through `judges` without hitting any real API. The MCP
 // tool wiring in src/index.ts uses the same `judgeCanvas` entry, so this

@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 8 final item: animations + transitions.
 // The renderer must:
 //   - emit a built-in @keyframes block ONLY when referenced

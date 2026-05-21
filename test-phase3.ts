@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Smoke test for Phase 3 features.
  * Run with: npx tsx test-phase3.ts

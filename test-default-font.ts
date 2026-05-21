@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for the renderer default font-family. Asserts that a text node with no
 // `fontFamily` set inherits the sans-serif stack from the body rule (not the
 // browser's default serif), and that explicit per-node `fontFamily` still wins.

@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for batch_design's operations parser. Targets the recently-fixed bug
 // where embedded single quotes inside double-quoted strings were clobbered
 // (e.g. `fontFamily: "system-ui, 'Segoe UI', sans-serif"`), plus regression

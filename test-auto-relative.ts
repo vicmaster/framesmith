@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 8 item: auto position: relative injection.
 // When a descendant uses `position: absolute` without a positioned ancestor,
 // the renderer must inject `position: relative` on the nearest container

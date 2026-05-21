@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Test the canvas_evaluate tool with intentionally good and bad designs.
  * Run with: npx tsx test-evaluate.ts

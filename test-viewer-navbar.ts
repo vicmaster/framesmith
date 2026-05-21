@@ -1,3 +1,4 @@
+import './test-env.js';
 /**
  * Visual check: detail-page toolbar wraps on narrow viewports.
  * Requires the standalone viewer running (npm run viewer).

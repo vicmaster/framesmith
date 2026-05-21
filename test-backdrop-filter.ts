@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for Phase 8 item: backdrop-filter support.
 // The renderer must:
 //   - compose blur + saturate + brightness + contrast into a single

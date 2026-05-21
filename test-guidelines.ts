@@ -1,3 +1,4 @@
+import './test-env.js';
 // Smoke for the canvas-mcp://guidelines MCP resource:
 //   1. Recomputes the path the server resolves at startup (dist/index.js → ../docs/GUIDELINES.md)
 //      and asserts the file is there.
