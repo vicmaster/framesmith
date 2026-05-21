@@ -303,7 +303,7 @@ Authoring intent: this is the open-JSON differentiator made tangible — **desig
 
 **Source-of-truth rule (decided):** a canvas is *either* repo-bound *or* global, never both — so there is nothing to "reconcile." When a repo has `.canvas/`, it is authoritative; `~/.canvas-mcp` holds no competing copy of a bound canvas.
 
-_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard. Remaining: asset externalization (`.canvas/assets/`) + viewer lifecycle wiring on mirrored repo canvases._
+_Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2 (shipped): repo registry + viewer aggregation (global + every bound repo). Slice 3 (shipped): external-change safety (mtime reload, no clobber) + `schemaVersion` forward-compat guard + asset externalization (`.canvas/assets/`). Remaining: viewer lifecycle wiring on mirrored repo canvases._
 
 A repo binds a whole **workspace** (not a single project): `.canvas/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
 
@@ -311,7 +311,8 @@ A repo binds a whole **workspace** (not a single project): `.canvas/workspace.js
 - [x] Self-contained clones — `workspace.json` carries the workspace design system + per-project token overrides so a fresh clone with empty global state resolves tokens identically
 - [x] Auto-bind by project-root walk-up — server finds the nearest `.canvas/` / `.git` from cwd and scopes to that virtual workspace; bound entities never register in global `workspaces.json` / `projects.json`
 - [x] Global store becomes a read-only cache + repo registry — bound repos record their `.canvas/` in `registry.json`; the standalone viewer rebuilds a read-only mirror of every registered repo on load (and on registry change), keeping its unified cross-project gallery. The cache is derived, never authoritative; the MCP server's own store stays scoped to its context
-- [x] Deterministic, text-only serialization — sorted keys / stable indent / trailing newline (binaries → `.canvas/assets/` still pending) so diffs stay reviewable and git merges conflict only on the *same* canvas
+- [x] Deterministic, text-only serialization — sorted keys / stable indent / trailing newline so diffs stay reviewable and git merges conflict only on the *same* canvas
+- [x] Asset externalization — inline `data:` images are extracted to `.canvas/assets/<content-hash>.<ext>` on write (deduped by content) and rehydrated on read, so committed canvas JSON stays small and diff-friendly while the in-memory canvas keeps inline images
 - [x] External-change safety — `ensureFresh` reloads a canvas from disk before mutation when its mtime changed (git pull / branch switch / hand-edit), so the agent never clobbers an external edit; a vanished target node then surfaces a not-found error; deleted files drop from the store. `schemaVersion` forward-compat guard on `workspace.json` load (newer files read best-effort with a warning; migration hook in place)
 - [x] Round-trip — clone the repo, open the viewer, see the same canvases; the file diffs cleanly in code review
 - [x] Sharpen the Pencil contrast — open JSON you own in the repo vs an encrypted project file
