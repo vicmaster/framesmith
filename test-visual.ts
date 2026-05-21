@@ -2,7 +2,7 @@ import './test-env.js';
 /**
  * Visual smoke test — generates screenshots you can actually look at.
  * Run with: npx tsx test-visual.ts
- * Then open /tmp/canvas-mcp-visual/ to see the results.
+ * Then open /tmp/framesmith-visual/ to see the results.
  */
 
 import { createCanvas } from './src/scene-graph.js';
@@ -14,7 +14,7 @@ import { getPreset } from './src/presets.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const OUT = '/tmp/canvas-mcp-visual';
+const OUT = '/tmp/framesmith-visual';
 
 async function saveBase64Png(data: string, name: string) {
   await writeFile(join(OUT, name), Buffer.from(data, 'base64'));
@@ -34,7 +34,7 @@ page=I("document", {type: "frame", width: 1440, height: 900, fill: "$bg-primary"
 
 nav=I(page, {type: "frame", width: "100%", height: 64, fill: "$bg-surface", layout: "horizontal", alignItems: "center", padding: [0, 32, 0, 32], gap: 16})
 I(nav, {type: "icon", icon: "layout-dashboard", iconSize: 24, iconColor: "$accent"})
-I(nav, {type: "text", content: "Canvas MCP Dashboard", fontSize: 18, fontWeight: 600, color: "$text-primary"})
+I(nav, {type: "text", content: "Framesmith Dashboard", fontSize: 18, fontWeight: 600, color: "$text-primary"})
 
 body=I(page, {type: "frame", width: "100%", height: "100%", layout: "horizontal", padding: 32, gap: 24})
 

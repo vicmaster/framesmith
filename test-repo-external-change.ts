@@ -11,9 +11,9 @@ import { mkdtempSync, writeFileSync, unlinkSync, utimesSync, readFileSync, exist
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const globalHome = mkdtempSync(join(tmpdir(), 'canvas-mcp-global-'));
-const repoRoot = mkdtempSync(join(tmpdir(), 'canvas-mcp-repo-'));
-process.env.CANVAS_MCP_HOME = globalHome;
+const globalHome = mkdtempSync(join(tmpdir(), 'framesmith-global-'));
+const repoRoot = mkdtempSync(join(tmpdir(), 'framesmith-repo-'));
+process.env.FRAMESMITH_HOME = globalHome;
 
 const sg = await import('./src/scene-graph.js');
 const ws = await import('./src/workspaces.js');
@@ -27,7 +27,7 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-const canvasDir = join(repoRoot, '.canvas');
+const canvasDir = join(repoRoot, '.framesmith');
 const bump = (p: string) => utimesSync(p, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
 
 // ---- Bind a workspace with one canvas ---------------------------------------

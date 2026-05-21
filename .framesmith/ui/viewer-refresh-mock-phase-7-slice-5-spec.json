@@ -49,7 +49,7 @@
                     "children": [
                       {
                         "color": "#4f4a3e",
-                        "content": "canvas-mcp",
+                        "content": "framesmith",
                         "fontSize": 10,
                         "fontWeight": 600,
                         "id": "ws-canvas-label",
@@ -516,7 +516,7 @@
                         "children": [
                           {
                             "color": "#807965",
-                            "content": "canvas-mcp",
+                            "content": "framesmith",
                             "fontSize": 12,
                             "fontWeight": 500,
                             "id": "bc-ws",

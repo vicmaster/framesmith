@@ -27,7 +27,7 @@ function assert(condition: boolean, label: string) {
 }
 
 async function main() {
-  console.log('Canvas MCP — Viewer Tests\n========================\n');
+  console.log('Framesmith — Viewer Tests\n========================\n');
 
   // Start viewer on random free port
   PORT = await startViewer(0);
@@ -74,7 +74,7 @@ I(page, {type: "text", content: "Clean and minimal design", fontSize: 15, color:
   const galleryRes = await fetch(`http://localhost:${PORT}/`);
   assert(galleryRes.status === 200, `GET / returns 200`);
   const galleryHtml = await galleryRes.text();
-  assert(galleryHtml.includes('Canvas MCP'), 'Gallery contains title');
+  assert(galleryHtml.includes('Framesmith'), 'Gallery contains title');
   assert(galleryHtml.includes('Dashboard'), 'Gallery contains Dashboard canvas');
   assert(galleryHtml.includes('Login Page'), 'Gallery contains Login Page canvas');
   assert(galleryHtml.includes('3 canvases'), 'Gallery shows correct count');

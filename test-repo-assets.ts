@@ -2,7 +2,7 @@ import './test-env.js';
 // Smoke for Phase 10: asset externalization.
 //
 // Inline data: image URIs bloat the committed JSON. When written to a repo
-// `.canvas/`, each is extracted to `.canvas/assets/<hash>.<ext>` and replaced
+// `.framesmith/`, each is extracted to `.framesmith/assets/<hash>.<ext>` and replaced
 // with a compact `asset:<file>` ref; on read it rehydrates to the data: URI so
 // the in-memory canvas stays inline. Identical images dedupe to one file.
 //
@@ -12,7 +12,7 @@ import { mkdtempSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const repoRoot = mkdtempSync(join(tmpdir(), 'canvas-mcp-repo-'));
+const repoRoot = mkdtempSync(join(tmpdir(), 'framesmith-repo-'));
 
 const sg = await import('./src/scene-graph.js');
 const ws = await import('./src/workspaces.js');
@@ -42,14 +42,14 @@ parseAndExecute(canvas.root, [
 
 check('bind succeeded', bindRepo({ workspaceId: w.id, dir: repoRoot }).ok);
 
-const canvasDir = join(repoRoot, '.canvas');
+const canvasDir = join(repoRoot, '.framesmith');
 const file = join(canvasDir, 'ui', 'hero.json');
 const raw = readFileSync(file, 'utf-8');
 
 check('committed JSON contains NO base64 data URI', !raw.includes('data:image'), raw.includes('data:image') ? 'still inline' : '');
 check('committed JSON references asset:', raw.includes('asset:'));
 const assetsDir = join(canvasDir, 'assets');
-check('.canvas/assets/ dir created', existsSync(assetsDir));
+check('.framesmith/assets/ dir created', existsSync(assetsDir));
 const assetFiles = existsSync(assetsDir) ? readdirSync(assetsDir).filter((f) => !f.endsWith('.tmp')) : [];
 check('two identical images dedupe to one asset file', assetFiles.length === 1, assetFiles.join(','));
 check('asset file is a .png', assetFiles[0]?.endsWith('.png') === true, assetFiles[0]);

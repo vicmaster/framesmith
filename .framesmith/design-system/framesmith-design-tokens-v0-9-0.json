@@ -20,7 +20,7 @@
   ],
   "id": "phase9-design-system",
   "lastModified": "2026-05-17T15:36:31.894Z",
-  "name": "canvas-mcp design tokens (v0.9.0)",
+  "name": "framesmith design tokens (v0.9.0)",
   "projectId": "repo-proj-1sffZuUo",
   "root": {
     "children": [
@@ -44,7 +44,7 @@
               },
               {
                 "color": "$textPrimary",
-                "content": "canvas-mcp / Design system",
+                "content": "framesmith / Design system",
                 "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
                 "fontSize": 18,
                 "fontWeight": 600,
@@ -124,7 +124,7 @@
               },
               {
                 "color": "$textSecondary",
-                "content": "canvas-mcp declares its design system once on the workspace. Every canvas under it references tokens by name — this page itself contains zero hex codes.",
+                "content": "framesmith declares its design system once on the workspace. Every canvas under it references tokens by name — this page itself contains zero hex codes.",
                 "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
                 "fontSize": "$body",
                 "id": "subhead",

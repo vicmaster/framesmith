@@ -6,7 +6,7 @@ import './test-env.js';
  * so you can inspect the clamp() output.
  *
  * Run: npx tsx test-responsive.ts
- * Output: /tmp/canvas-mcp-responsive/
+ * Output: /tmp/framesmith-responsive/
  */
 
 import { writeFile, mkdir } from 'node:fs/promises';
@@ -18,7 +18,7 @@ import { renderToHtml } from './src/renderer.js';
 import { takeResponsiveScreenshots, shutdown } from './src/screenshot.js';
 import { getPreset } from './src/presets.js';
 
-const OUT = '/tmp/canvas-mcp-responsive';
+const OUT = '/tmp/framesmith-responsive';
 
 async function main() {
   await mkdir(OUT, { recursive: true });

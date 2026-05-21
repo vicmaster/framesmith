@@ -2,7 +2,7 @@ import './test-env.js';
 // Smoke for Phase 10 closeout: viewer lifecycle on mirrored repo canvases.
 //
 // Archive/delete on a repo-bound canvas (shown in the viewer via the registry
-// mirror) must write back to the repo `.canvas/` file — not mis-write to the
+// mirror) must write back to the repo `.framesmith/` file — not mis-write to the
 // global store — and survive a re-aggregation.
 //
 // Usage: npx tsx test-viewer-repo-lifecycle.ts
@@ -11,9 +11,9 @@ import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 
-const globalHome = mkdtempSync(join(tmpdir(), 'canvas-mcp-global-'));
-const repoRoot = mkdtempSync(join(tmpdir(), 'canvas-mcp-repo-'));
-process.env.CANVAS_MCP_HOME = globalHome;
+const globalHome = mkdtempSync(join(tmpdir(), 'framesmith-global-'));
+const repoRoot = mkdtempSync(join(tmpdir(), 'framesmith-repo-'));
+process.env.FRAMESMITH_HOME = globalHome;
 
 const sg = await import('./src/scene-graph.js');
 const ws = await import('./src/workspaces.js');
@@ -27,7 +27,7 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-const canvasDir = join(repoRoot, '.canvas');
+const canvasDir = join(repoRoot, '.framesmith');
 const archivedOnDisk = (rel: string): boolean | undefined =>
   existsSync(join(canvasDir, rel)) ? JSON.parse(readFileSync(join(canvasDir, rel), 'utf-8')).archived : undefined;
 
@@ -71,8 +71,8 @@ loadGlobalAndRegisteredRepos();
 check('about stays gone after viewer reload', sg.getCanvas(about.id) === undefined);
 check('home still present after reload', !!sg.getCanvas(home.id));
 
-// safety: nothing leaked into the real ~/.canvas-mcp (CANVAS_MCP_HOME is tmp)
-check('global home is the tmp dir (isolation holds)', globalHome.startsWith(tmpdir()) && globalHome !== join(homedir(), '.canvas-mcp'));
+// safety: nothing leaked into the real ~/.framesmith (FRAMESMITH_HOME is tmp)
+check('global home is the tmp dir (isolation holds)', globalHome.startsWith(tmpdir()) && globalHome !== join(homedir(), '.framesmith'));
 
 console.log(allPass ? '\nALL PASS' : '\nSOME FAILED');
 process.exit(allPass ? 0 : 1);

@@ -47,7 +47,7 @@
                   },
                   {
                     "color": "#fafaf5",
-                    "content": "canvas-mcp",
+                    "content": "framesmith",
                     "fontFamily": "'Inter', system-ui, -apple-system, sans-serif",
                     "fontSize": 18,
                     "fontWeight": 600,

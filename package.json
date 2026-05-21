@@ -1,11 +1,11 @@
 {
-  "name": "@canvas-mcp/server",
+  "name": "framesmith",
   "version": "1.0.0",
   "description": "MCP server that gives any AI assistant a visual design canvas",
   "type": "module",
   "bin": {
-    "canvas-mcp": "./dist/index.js",
-    "canvas-viewer": "./dist/viewer-standalone.js"
+    "framesmith": "./dist/index.js",
+    "framesmith-viewer": "./dist/viewer-standalone.js"
   },
   "main": "./dist/index.js",
   "files": [

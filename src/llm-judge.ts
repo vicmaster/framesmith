@@ -31,7 +31,7 @@ Be specific. Reference what you see in the image. Do not assume context that isn
 const USER_PROMPT = `Evaluate this rendered design. Return the JSON object only.`;
 
 export function pickProvider(): Provider | null {
-  const forced = process.env.CANVAS_LLM_PROVIDER;
+  const forced = process.env.FRAMESMITH_LLM_PROVIDER;
   if (forced === 'anthropic' || forced === 'openai') return forced;
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
   if (process.env.OPENAI_API_KEY) return 'openai';
@@ -49,7 +49,7 @@ export async function judgeCanvas(screenshotPngBase64: string, providerOverride?
   const provider = providerOverride ?? pickProvider();
   if (!provider) {
     throw new LLMJudgeUnavailableError(
-      'No LLM provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY (or CANVAS_LLM_PROVIDER=anthropic|openai to pick one explicitly).',
+      'No LLM provider configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY (or FRAMESMITH_LLM_PROVIDER=anthropic|openai to pick one explicitly).',
     );
   }
   const judge = judges[provider];
@@ -60,10 +60,10 @@ export async function judgeCanvas(screenshotPngBase64: string, providerOverride?
 
 async function judgeWithAnthropic(screenshotPngBase64: string): Promise<LLMJudgeResult> {
   // Dynamic import keeps the SDK out of the critical path for users who never
-  // call llm-mode evaluation (the rest of canvas-mcp works without it).
+  // call llm-mode evaluation (the rest of framesmith works without it).
   const { default: Anthropic } = await import('@anthropic-ai/sdk');
   const client = new Anthropic();
-  const model = process.env.CANVAS_LLM_ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
+  const model = process.env.FRAMESMITH_LLM_ANTHROPIC_MODEL ?? 'claude-sonnet-4-6';
   const response = await client.messages.create({
     model,
     max_tokens: 1024,
@@ -89,7 +89,7 @@ async function judgeWithAnthropic(screenshotPngBase64: string): Promise<LLMJudge
 async function judgeWithOpenAI(screenshotPngBase64: string): Promise<LLMJudgeResult> {
   const { default: OpenAI } = await import('openai');
   const client = new OpenAI();
-  const model = process.env.CANVAS_LLM_OPENAI_MODEL ?? 'gpt-4.1';
+  const model = process.env.FRAMESMITH_LLM_OPENAI_MODEL ?? 'gpt-4.1';
   const response = await client.chat.completions.create({
     model,
     response_format: { type: 'json_object' },

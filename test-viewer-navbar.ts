@@ -3,14 +3,14 @@ import './test-env.js';
  * Visual check: detail-page toolbar wraps on narrow viewports.
  * Requires the standalone viewer running (npm run viewer).
  * Run: npx tsx test-viewer-navbar.ts <port>
- * Output: /tmp/canvas-mcp-navbar/
+ * Output: /tmp/framesmith-navbar/
  */
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
 
 const PORT = process.argv[2] ?? '3002';
-const OUT = '/tmp/canvas-mcp-navbar';
+const OUT = '/tmp/framesmith-navbar';
 
 async function main() {
   await mkdir(OUT, { recursive: true });

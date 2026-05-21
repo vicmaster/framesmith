@@ -134,7 +134,7 @@ export async function startViewer(port: number): Promise<number> {
       const archiveApi = path.match(/^\/api\/canvas\/([^/]+)\/archive$/);
       if (archiveApi && req.method === 'POST') {
         const id = archiveApi[1];
-        // Repo-mirrored canvases write back to their `.canvas/` file; global
+        // Repo-mirrored canvases write back to their `.framesmith/` file; global
         // canvases use the in-memory + global-store path.
         const result = getRepoLocation(id) ? archiveRepoCanvas(id, true) : !!archiveCanvas(id);
         if (!result) { res.writeHead(404); res.end('Not found'); return; }
@@ -251,7 +251,7 @@ function projectDotColor(projectId: string): string {
   return DOT_PALETTE[Math.abs(hash) % DOT_PALETTE.length];
 }
 
-/** Canvas-mcp grid logo mark — same SVG path as the build-*.ts dogfood
+/** Framesmith grid logo mark — same SVG path as the build-*.ts dogfood
  * scripts. Replaces the original amber rounded-square placeholder so the
  * sidebar wordmark and the viewer favicon share a single brand identity.
  * Uses `currentColor` so the parent's `color` controls the stroke. */
@@ -370,7 +370,7 @@ function renderSidebar(active: string): string {
   return `<aside class="sidebar">
       <div class="sidebar-header">
         ${LOGO_SVG_HTML}
-        <span class="sidebar-logo">Canvas</span>
+        <span class="sidebar-logo">Framesmith</span>
       </div>
       <nav class="sidebar-nav">${sections}</nav>
       <div class="sidebar-footer">${archiveLink}</div>
@@ -424,7 +424,7 @@ export function renderProjectPage(projectId: string, port: number): string | nul
 <html>
 <head>
 <meta charset="utf-8">
-<title>${esc(project.name)} — Canvas MCP</title>
+<title>${esc(project.name)} — Framesmith</title>
 ${FAVICON_HTML}
 <style>
   ${THEME_CSS}
@@ -573,7 +573,7 @@ export function renderArchivePage(port: number): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>Archive — Canvas MCP</title>
+<title>Archive — Framesmith</title>
 ${FAVICON_HTML}
 <style>
   ${THEME_CSS}
@@ -693,7 +693,7 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
 <html>
 <head>
 <meta charset="utf-8">
-<title>${esc(canvas.name)} — Canvas MCP</title>
+<title>${esc(canvas.name)} — Framesmith</title>
 ${FAVICON_HTML}
 <style>
   ${THEME_CSS}

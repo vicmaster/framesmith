@@ -157,7 +157,7 @@ I(bg, {type: "text", content: "Different!", fontSize: 48, color: "#000000"})
 }
 
 async function main() {
-  console.log('Canvas MCP — Phase 3 Smoke Tests\n================================');
+  console.log('Framesmith — Phase 3 Smoke Tests\n================================');
 
   await testGradients();
   await testShadowsAndBlur();

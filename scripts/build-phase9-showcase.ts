@@ -8,7 +8,7 @@
 // script overwrites the canvas and re-applies the workspace tokens, so it's
 // safe to iterate.
 //
-// Publishes to ~/.canvas-mcp/canvases/phase9-design-system.json with a stable
+// Publishes to ~/.framesmith/canvases/phase9-design-system.json with a stable
 // ID so the design is reviewable live at
 // http://localhost:3001/canvas/phase9-design-system — animations play, custom
 // font swaps in, and you can verify (via DevTools) that fills/colors resolve
@@ -41,9 +41,9 @@ ensureDefaultWorkspaceAndProject();
 
 // Idempotent workspace lookup by name. createWorkspace assigns a nanoid each
 // time, so we look for an existing match first and reuse it on reruns.
-// This page IS canvas-mcp's own design system, so it lives in a workspace
+// This page IS framesmith's own design system, so it lives in a workspace
 // named after the project itself — not a hypothetical client workspace.
-const WORKSPACE_NAME = 'canvas-mcp';
+const WORKSPACE_NAME = 'framesmith';
 const PROJECT_NAME = 'Design system';
 let workspace = listWorkspaces().find((w) => w.name === WORKSPACE_NAME);
 if (!workspace) workspace = createWorkspace(WORKSPACE_NAME);
@@ -181,7 +181,7 @@ const header: SceneNode = {
   gap: '$md',
   children: [
     logoMark,
-    { id: 'workspace-name', type: 'text', content: 'canvas-mcp / Design system', fontFamily: FONT_STACK, fontSize: 18, fontWeight: 600, color: '$textPrimary' },
+    { id: 'workspace-name', type: 'text', content: 'framesmith / Design system', fontFamily: FONT_STACK, fontSize: 18, fontWeight: 600, color: '$textPrimary' },
     { id: 'spacer', type: 'frame', width: 1, height: 1 },
     {
       id: 'version-pill',
@@ -212,7 +212,7 @@ const hero: SceneNode = {
   children: [
     { id: 'eyebrow', type: 'text', content: 'v0.9.0 — DESIGN SYSTEM INHERITANCE', fontFamily: FONT_STACK, fontSize: 13, fontWeight: 600, color: '$primary', letterSpacing: 1.2 },
     { id: 'headline', type: 'text', content: 'Tokens declared once,\ninherited everywhere.', fontFamily: FONT_STACK, fontSize: '$h1', fontWeight: 700, color: '$textPrimary', lineHeight: 1.05, letterSpacing: -1.5 },
-    { id: 'subhead', type: 'text', content: 'canvas-mcp declares its design system once on the workspace. Every canvas under it references tokens by name — this page itself contains zero hex codes.', fontFamily: FONT_STACK, fontSize: '$body', color: '$textSecondary', maxWidth: 640 },
+    { id: 'subhead', type: 'text', content: 'framesmith declares its design system once on the workspace. Every canvas under it references tokens by name — this page itself contains zero hex codes.', fontFamily: FONT_STACK, fontSize: '$body', color: '$textSecondary', maxWidth: 640 },
   ],
 };
 
@@ -376,13 +376,13 @@ const root: SceneNode = {
 // ---- Build canvas -------------------------------------------------------
 const here = dirname(fileURLToPath(import.meta.url));
 const OUTPUT = resolve(here, '..', 'docs', 'phase9-design-system.png');
-const STORE_DIR = join(process.env.CANVAS_MCP_HOME ?? join(homedir(), '.canvas-mcp'), 'canvases');
+const STORE_DIR = join(process.env.FRAMESMITH_HOME ?? join(homedir(), '.framesmith'), 'canvases');
 const CANVAS_ID = 'phase9-design-system';
 
 const now = new Date().toISOString();
 const canvas: Canvas = {
   id: CANVAS_ID,
-  name: 'canvas-mcp design tokens (v0.9.0)',
+  name: 'framesmith design tokens (v0.9.0)',
   root,
   variables: {}, // intentionally empty — all tokens come from the workspace
   components: {},

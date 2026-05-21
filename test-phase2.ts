@@ -92,7 +92,7 @@ I(box, {type: "text", content: "Export Test", fontSize: 18, color: "#ffffff"})
   // Export PNG
   const pngPath = await exportToFile(html, {
     format: 'png',
-    outputPath: '/tmp/canvas-mcp-test',
+    outputPath: '/tmp/framesmith-test',
     fileName: 'test-export',
     width: 400,
     height: 200,
@@ -102,7 +102,7 @@ I(box, {type: "text", content: "Export Test", fontSize: 18, color: "#ffffff"})
   // Export PDF
   const pdfPath = await exportToFile(html, {
     format: 'pdf',
-    outputPath: '/tmp/canvas-mcp-test',
+    outputPath: '/tmp/framesmith-test',
     fileName: 'test-export',
     width: 400,
     height: 200,
@@ -112,14 +112,14 @@ I(box, {type: "text", content: "Export Test", fontSize: 18, color: "#ffffff"})
   // Export JPEG
   const jpgPath = await exportToFile(html, {
     format: 'jpeg',
-    outputPath: '/tmp/canvas-mcp-test',
+    outputPath: '/tmp/framesmith-test',
     fileName: 'test-export',
     width: 400,
     height: 200,
   });
   assert(jpgPath.endsWith('.jpeg'), `JPEG exported to ${jpgPath}`);
 
-  console.log('  → Files written to /tmp/canvas-mcp-test/');
+  console.log('  → Files written to /tmp/framesmith-test/');
 }
 
 async function testComponents() {
@@ -177,7 +177,7 @@ inst=I("document", {type: "instance", componentId: btn, overrides: {label: {cont
 
 // Run all tests
 async function main() {
-  console.log('Canvas MCP — Phase 2 Smoke Tests\n================================');
+  console.log('Framesmith — Phase 2 Smoke Tests\n================================');
 
   await testPresets();
   await testIcons();

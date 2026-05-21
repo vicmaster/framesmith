@@ -1,6 +1,6 @@
 // Smoke for Phase 10 slice 2: viewer aggregation (global + registered repos).
 //
-// Binding a workspace registers its `.canvas/` in registry.json and removes the
+// Binding a workspace registers its `.framesmith/` in registry.json and removes the
 // emptied source workspace from the global indexes. The viewer's aggregation
 // loader then shows the global store PLUS every registered repo — without a
 // duplicate empty shell for the bound workspace.
@@ -11,9 +11,9 @@ import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const globalHome = mkdtempSync(join(tmpdir(), 'canvas-mcp-global-'));
-const repoRoot = mkdtempSync(join(tmpdir(), 'canvas-mcp-repo-'));
-process.env.CANVAS_MCP_HOME = globalHome;
+const globalHome = mkdtempSync(join(tmpdir(), 'framesmith-global-'));
+const repoRoot = mkdtempSync(join(tmpdir(), 'framesmith-repo-'));
+process.env.FRAMESMITH_HOME = globalHome;
 
 const { createCanvas, listCanvases, loadPersistedCanvases, getCanvas } = await import('./src/scene-graph.js');
 const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, createProject, setWorkspaceDesignSystem, listWorkspaces, listProjects, getCanvasTokens } = await import('./src/workspaces.js');
@@ -45,7 +45,7 @@ check('bind succeeded', result.ok, result.ok ? '' : result.error);
 
 // registry records the repo
 const reg = readRegistry();
-check('registry.json lists the repo .canvas dir', reg.includes(join(repoRoot, '.canvas')), reg.join(','));
+check('registry.json lists the repo .framesmith dir', reg.includes(join(repoRoot, '.framesmith')), reg.join(','));
 check('registry.json exists on disk', existsSync(join(globalHome, 'registry.json')));
 
 // ---- Simulate the viewer process: global backend, aggregate ---------------
@@ -69,7 +69,7 @@ check('repo workspace token resolves in viewer', getCanvasTokens(getCanvas(bloom
 
 // ---- A dead registry entry is skipped gracefully --------------------------
 const { registerRepo } = await import('./src/repo-store.js');
-registerRepo(join(repoRoot, 'does-not-exist', '.canvas'));
+registerRepo(join(repoRoot, 'does-not-exist', '.framesmith'));
 resetRepoState();
 const agg2 = loadGlobalAndRegisteredRepos();
 check('dead registry entry skipped (still 1 repo)', agg2.repos === 1, `repos=${agg2.repos}`);
