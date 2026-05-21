@@ -305,9 +305,11 @@ Authoring intent: this is the open-JSON differentiator made tangible — **desig
 
 _Slice 1 (shipped): binding, source-of-truth persistence, deterministic serialization, walk-up auto-detect, `canvas_bind` tool. Slice 2: viewer cache + registry. Slice 3: external-change safety + asset externalization._
 
-- [x] `.canvas/` dir at the repo root is the source of truth — one open-JSON file per canvas (slug-named, full scene graph embedded), plus `project.json` (virtual project binding + `schemaVersion`)
-- [x] Self-contained clones — `project.json` snapshots the *flattened effective* design system (workspace → project tokens resolved at write time) so a fresh clone with empty global state renders identically
-- [x] Auto-bind by project-root walk-up — server finds the nearest `.canvas/` / `.git` from cwd and scopes to that virtual project; bound projects never register in global `projects.json`
+A repo binds a whole **workspace** (not a single project): `.canvas/workspace.json` plus one subdirectory per project, each holding one open-JSON file per canvas — so a codebase's design system, UI, and release surfaces stay organised as they are in the gallery.
+
+- [x] `.canvas/` dir at the repo root is the source of truth — `workspace.json` (binding + projects[] + `schemaVersion`) and per-project subdirs of slug-named canvas files (full scene graph embedded)
+- [x] Self-contained clones — `workspace.json` carries the workspace design system + per-project token overrides so a fresh clone with empty global state resolves tokens identically
+- [x] Auto-bind by project-root walk-up — server finds the nearest `.canvas/` / `.git` from cwd and scopes to that virtual workspace; bound entities never register in global `workspaces.json` / `projects.json`
 - [ ] Global store becomes a read-only cache + repo registry — rebuilt from known repos on load so the viewer keeps its unified cross-project gallery; the cache is derived, never authoritative
 - [x] Deterministic, text-only serialization — sorted keys / stable indent / trailing newline (binaries → `.canvas/assets/` still pending) so diffs stay reviewable and git merges conflict only on the *same* canvas
 - [ ] External-change safety — detect via mtime, reload before writing, error (never clobber) if the agent's target node vanished; `schemaVersion` + load-time migration for forward compat

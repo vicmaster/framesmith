@@ -1,35 +1,49 @@
 // Phase 10 — repo-bound canvas storage.
 //
-// When a project has a `.canvas/` directory, that directory is the source of
-// truth for its canvases: one open-JSON file per canvas (slug-named, full
-// scene graph embedded) plus a `project.json` binding file. The global
-// ~/.canvas-mcp store holds no competing copy of a bound canvas — a canvas is
+// When a project tree has a `.canvas/` directory, that directory is the source
+// of truth for a whole workspace: `workspace.json` (the binding + the workspace
+// design system + the list of projects) and one subdirectory per project
+// holding one open-JSON file per canvas (slug-named, full scene graph embedded).
+// The global ~/.canvas-mcp store keeps no copy of a bound canvas — a canvas is
 // either repo-bound or global, never both, so there is nothing to reconcile.
+//
+//   .canvas/
+//     workspace.json        # workspace + projects[] + flattened design system
+//     design-system/
+//       design-tokens.json
+//     ui/
+//       bloom-landing.json
 //
 // This module is deliberately dependency-light (types only) so scene-graph.ts
 // and workspaces.ts can both call into it without an import cycle. Higher-level
-// orchestration (which canvases to migrate, how to flatten tokens) lives in
-// index.ts, which has access to the workspace/project getters.
+// orchestration (which workspace to migrate, how tokens layer) lives in bind.ts.
 
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, renameSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Canvas, DesignVariables } from './types.js';
 
 export const REPO_DIR_NAME = '.canvas';
-export const PROJECT_FILE = 'project.json';
+export const WORKSPACE_FILE = 'workspace.json';
 export const SCHEMA_VERSION = 1;
 
-/** Binding metadata persisted to `.canvas/project.json`. Carries a flattened
- * snapshot of the effective design system so a fresh clone (with empty global
- * state) renders identically — the workspace + project token layers are
- * resolved at write time and folded into `designSystem`. */
-export interface RepoProjectFile {
+export interface RepoProjectEntry {
+  id: string;
+  name: string;
+  /** Subdirectory under `.canvas/` holding this project's canvas files. */
+  dir: string;
+  /** Project-level token overrides (Phase 9 layer above the canvas). */
+  designSystem?: DesignVariables;
+}
+
+/** Binding metadata persisted to `.canvas/workspace.json`. Carries the
+ * workspace design system + per-project overrides so a fresh clone (with empty
+ * global state) resolves tokens identically. */
+export interface RepoWorkspaceFile {
   schemaVersion: number;
   workspaceId: string;
   workspaceName: string;
-  projectId: string;
-  projectName: string;
   designSystem?: DesignVariables;
+  projects: RepoProjectEntry[];
   boundAt: string;
 }
 
@@ -39,9 +53,11 @@ export type Backend =
 
 let backend: Backend = { kind: 'global' };
 
-// id → filename within `.canvas/`, learned on load and assigned on first write.
-// One repo per server process, so a module-level map is sufficient.
+// id → path of the canvas file relative to `.canvas/` (e.g. `ui/login.json`),
+// and projectId → its subdirectory name. Learned on load, assigned on write.
+// One repo per server process, so module-level maps are sufficient.
 const fileById = new Map<string, string>();
+const projectDirById = new Map<string, string>();
 
 export function getBackend(): Backend { return backend; }
 export function isRepoBound(): boolean { return backend.kind === 'repo'; }
@@ -49,10 +65,6 @@ export function isRepoBound(): boolean { return backend.kind === 'repo'; }
 export function repoDir(): string {
   if (backend.kind !== 'repo') throw new Error('repoDir() called while not repo-bound');
   return backend.dir;
-}
-export function repoRoot(): string {
-  if (backend.kind !== 'repo') throw new Error('repoRoot() called while not repo-bound');
-  return backend.root;
 }
 export function setRepoBackend(root: string, dir: string): void {
   backend = { kind: 'repo', root, dir };
@@ -64,7 +76,26 @@ export function setGlobalBackend(): void {
 /** Reset all module state. Test-only — production has one backend per process. */
 export function resetRepoState(): void {
   fileById.clear();
+  projectDirById.clear();
   backend = { kind: 'global' };
+}
+
+// --- Project ↔ subdirectory registry ---
+export function registerProjectDir(projectId: string, dir: string): void {
+  projectDirById.set(projectId, dir);
+}
+export function getProjectDir(projectId: string): string | undefined {
+  return projectDirById.get(projectId);
+}
+
+/** A subdirectory name for a new project, unique among registered projects. */
+export function uniqueProjectDir(name: string): string {
+  const base = slugify(name);
+  const taken = new Set(projectDirById.values());
+  let candidate = base;
+  let n = 2;
+  while (taken.has(candidate)) candidate = `${base}-${n++}`;
+  return candidate;
 }
 
 // --- Deterministic serialization ---
@@ -98,15 +129,14 @@ function slugify(name: string): string {
   return base || 'canvas';
 }
 
-function uniqueFilename(name: string): string {
+function uniqueFilename(projectDir: string, name: string): string {
   const base = slugify(name);
-  const taken = new Set(fileById.values());
+  const taken = new Set(
+    [...fileById.values()].filter((rel) => dirname(rel) === projectDir).map((rel) => basename(rel)),
+  );
   let candidate = `${base}.json`;
   let n = 2;
-  while (taken.has(candidate)) {
-    candidate = `${base}-${n}.json`;
-    n++;
-  }
+  while (taken.has(candidate)) candidate = `${base}-${n++}.json`;
   return candidate;
 }
 
@@ -117,79 +147,83 @@ function writeAtomic(path: string, content: string): void {
   renameSync(tmp, path);
 }
 
-// --- project.json ---
-export function readProjectFile(dir: string): RepoProjectFile | null {
-  const p = join(dir, PROJECT_FILE);
+// --- workspace.json ---
+export function readWorkspaceFile(dir: string): RepoWorkspaceFile | null {
+  const p = join(dir, WORKSPACE_FILE);
   if (!existsSync(p)) return null;
   try {
-    return JSON.parse(readFileSync(p, 'utf-8')) as RepoProjectFile;
+    return JSON.parse(readFileSync(p, 'utf-8')) as RepoWorkspaceFile;
   } catch {
     return null;
   }
 }
 
-export function writeProjectFile(dir: string, file: RepoProjectFile): void {
+export function writeWorkspaceFile(dir: string, file: RepoWorkspaceFile): void {
   mkdirSync(dir, { recursive: true });
-  writeAtomic(join(dir, PROJECT_FILE), stableStringify(file));
+  writeAtomic(join(dir, WORKSPACE_FILE), stableStringify(file));
 }
 
-// --- canvas IO (dir-explicit so bind migration can target a dir before the
-// backend is switched) ---
-export function writeCanvasToDir(dir: string, canvas: Canvas): void {
-  mkdirSync(dir, { recursive: true });
-  let file = fileById.get(canvas.id);
-  if (!file) {
-    file = uniqueFilename(canvas.name);
-    fileById.set(canvas.id, file);
+// --- canvas IO (rootDir = the `.canvas/` dir) ---
+export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
+  const projectDir = projectDirById.get(canvas.projectId) ?? 'unsorted';
+  const targetDir = join(rootDir, projectDir);
+  mkdirSync(targetDir, { recursive: true });
+  let rel = fileById.get(canvas.id);
+  if (!rel) {
+    rel = join(projectDir, uniqueFilename(projectDir, canvas.name));
+    fileById.set(canvas.id, rel);
   }
-  writeAtomic(join(dir, file), stableStringify(canvas));
+  writeAtomic(join(rootDir, rel), stableStringify(canvas));
 }
 
-export function removeCanvasFromDir(dir: string, id: string): void {
-  const file = fileById.get(id);
-  if (!file) return;
+export function removeCanvasFromDir(rootDir: string, id: string): void {
+  const rel = fileById.get(id);
+  if (!rel) return;
   try {
-    const p = join(dir, file);
+    const p = join(rootDir, rel);
     if (existsSync(p)) unlinkSync(p);
   } catch {}
   fileById.delete(id);
 }
 
-/** Read every `*.json` (except `project.json`) in `dir`, rebuilding the
- * id → filename map. The full scene graph lives in each file, so a fresh clone
- * reconstructs the store from disk with no global state. */
-export function loadCanvasesFromDir(dir: string): Canvas[] {
+/** Read every canvas file across all registered project subdirectories,
+ * rebuilding the id → relative-path map. `projectDirById` must already be
+ * populated (from `workspace.json`) before this is called. */
+export function loadCanvasesFromDir(rootDir: string): Canvas[] {
   fileById.clear();
   const out: Canvas[] = [];
-  if (!existsSync(dir)) return out;
-  let files: string[];
-  try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.json') && f !== PROJECT_FILE);
-  } catch {
-    return out;
-  }
-  for (const file of files) {
+  for (const projectDir of projectDirById.values()) {
+    const abs = join(rootDir, projectDir);
+    if (!existsSync(abs)) continue;
+    let files: string[];
     try {
-      const data = JSON.parse(readFileSync(join(dir, file), 'utf-8')) as Canvas;
-      if (data.id && data.root) {
-        fileById.set(data.id, file);
-        out.push(data);
-      }
-    } catch {}
+      files = readdirSync(abs).filter((f) => f.endsWith('.json'));
+    } catch {
+      continue;
+    }
+    for (const file of files) {
+      try {
+        const data = JSON.parse(readFileSync(join(abs, file), 'utf-8')) as Canvas;
+        if (data.id && data.root) {
+          fileById.set(data.id, join(projectDir, file));
+          out.push(data);
+        }
+      } catch {}
+    }
   }
   return out;
 }
 
 // --- Discovery ---
 /** Walk up from `startDir` to the filesystem root, returning the binding for
- * the nearest ancestor that contains `.canvas/project.json`, else null. The
- * `project.json` marker (not a bare `.canvas` dir) is required so an unrelated
- * directory is never mistaken for a binding. */
+ * the nearest ancestor that contains `.canvas/workspace.json`, else null. The
+ * `workspace.json` marker (not a bare `.canvas` dir) is required so an
+ * unrelated directory is never mistaken for a binding. */
 export function detectBinding(startDir: string): { root: string; dir: string } | null {
   let dir = startDir;
   while (true) {
     const candidate = join(dir, REPO_DIR_NAME);
-    if (existsSync(join(candidate, PROJECT_FILE))) return { root: dir, dir: candidate };
+    if (existsSync(join(candidate, WORKSPACE_FILE))) return { root: dir, dir: candidate };
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;

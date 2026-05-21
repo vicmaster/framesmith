@@ -7,9 +7,9 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspaceProject } from './workspaces.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
-import { detectBinding, projectStartDir, readProjectFile, setRepoBackend } from './repo-store.js';
+import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend } from './repo-store.js';
 import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
@@ -888,13 +888,13 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind the current project directory to canvas-mcp so its canvases live in the repo as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global ~/.canvas-mcp store. Creates `.canvas/project.json` (binding + a flattened design-system snapshot) plus one slug-named file per canvas, migrates the chosen project's canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.canvas/` on startup. Commit the `.canvas/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.canvas/` directory checked in alongside the code, instead of the global ~/.canvas-mcp store. Creates `.canvas/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.canvas/` on startup. Commit the `.canvas/` directory so designs travel with the code and diff in review.",
   {
-    projectId: z.string().optional().describe('Project whose canvases migrate into the repo. Defaults to the built-in Untitled project.'),
+    workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
   },
-  async ({ projectId, dir }) => {
-    const result = bindRepo({ projectId, dir });
+  async ({ workspaceId, dir }) => {
+    const result = bindRepo({ workspaceId, dir });
     if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
     return {
       content: [{
@@ -904,7 +904,7 @@ server.tool(
           repoRoot: result.root,
           canvasDir: result.dir,
           workspace: result.workspace,
-          project: result.project,
+          projectsMigrated: result.projects,
           canvasesMigrated: result.migrated,
           note: 'Repo is now the source of truth. Commit the .canvas/ directory to share these designs.',
         }, null, 2),
@@ -945,10 +945,10 @@ async function main() {
   // binding, the repo is the source of truth — load its virtual workspace +
   // project and canvases from there, never touching the global store.
   const binding = detectBinding(projectStartDir());
-  const repoFile = binding ? readProjectFile(binding.dir) : null;
+  const repoFile = binding ? readWorkspaceFile(binding.dir) : null;
   if (binding && repoFile) {
     setRepoBackend(binding.root, binding.dir);
-    loadRepoWorkspaceProject(repoFile);
+    loadRepoWorkspace(repoFile);
     loadPersistedCanvases();
     process.stderr.write(`canvas-mcp bound to repo: ${binding.dir}\n`);
   } else {

@@ -14,16 +14,16 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
 import { mergeDesignTokens } from './variables.js';
-import { isRepoBound, repoDir, writeProjectFile, type RepoProjectFile } from './repo-store.js';
+import { isRepoBound, repoDir, writeWorkspaceFile, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
 
-// When repo-bound, the single virtual workspace + project come from
-// `.canvas/project.json`. We keep the parsed file around so mutations
-// (rename, design-system edits) can be written back to it instead of the
-// global workspaces.json / projects.json indexes.
-let repoProjectFile: RepoProjectFile | null = null;
+// When repo-bound, the single virtual workspace + its projects come from
+// `.canvas/workspace.json`. We keep the parsed file around so mutations
+// (rename, design-system edits, project create/delete) can be written back to
+// it instead of the global workspaces.json / projects.json indexes.
+let repoWorkspaceFile: RepoWorkspaceFile | null = null;
 
 // `CANVAS_MCP_HOME` lets tests redirect persistence to a tmp dir without
 // touching the real ~/.canvas-mcp tree. Resolved per call so an env var set
@@ -44,7 +44,7 @@ function writeAtomic(path: string, content: string): void {
 }
 
 function persistWorkspaces(): void {
-  if (isRepoBound()) { persistRepoProjectFile(); return; }
+  if (isRepoBound()) { persistRepoWorkspaceFile(); return; }
   try {
     writeAtomic(workspacesPath(), JSON.stringify([...workspaces.values()], null, 2));
   } catch (err) {
@@ -53,7 +53,7 @@ function persistWorkspaces(): void {
 }
 
 function persistProjects(): void {
-  if (isRepoBound()) { persistRepoProjectFile(); return; }
+  if (isRepoBound()) { persistRepoWorkspaceFile(); return; }
   try {
     writeAtomic(projectsPath(), JSON.stringify([...projects.values()], null, 2));
   } catch (err) {
@@ -62,45 +62,57 @@ function persistProjects(): void {
 }
 
 /**
- * Load the single virtual workspace + project that back a repo-bound session
- * from a parsed `.canvas/project.json`. The flattened design system lives on
- * the virtual project so `getCanvasTokens` resolves it without a workspace
- * layer. Virtual entries never reach the global indexes — they are written
- * back only via `persistRepoProjectFile`.
+ * Load the virtual workspace + its projects that back a repo-bound session
+ * from a parsed `.canvas/workspace.json`. The workspace design system + each
+ * project's overrides are preserved as separate layers so `getCanvasTokens`
+ * resolves them exactly as Phase 9 does. Project → subdirectory mappings are
+ * registered with the repo store so canvas IO lands in the right subdir.
+ * Virtual entries never reach the global indexes — they are written back only
+ * via `persistRepoWorkspaceFile`.
  */
-export function loadRepoWorkspaceProject(pf: RepoProjectFile): void {
+export function loadRepoWorkspace(wf: RepoWorkspaceFile): void {
   workspaces.clear();
   projects.clear();
-  repoProjectFile = pf;
-  workspaces.set(pf.workspaceId, { id: pf.workspaceId, name: pf.workspaceName, createdAt: pf.boundAt });
-  projects.set(pf.projectId, {
-    id: pf.projectId,
-    workspaceId: pf.workspaceId,
-    name: pf.projectName,
-    createdAt: pf.boundAt,
-    designSystem: pf.designSystem,
+  repoWorkspaceFile = wf;
+  workspaces.set(wf.workspaceId, {
+    id: wf.workspaceId,
+    name: wf.workspaceName,
+    createdAt: wf.boundAt,
+    designSystem: wf.designSystem,
   });
+  for (const p of wf.projects) {
+    projects.set(p.id, {
+      id: p.id,
+      workspaceId: wf.workspaceId,
+      name: p.name,
+      createdAt: wf.boundAt,
+      designSystem: p.designSystem,
+    });
+    registerProjectDir(p.id, p.dir);
+  }
 }
 
-/** Rewrite `.canvas/project.json` from the in-memory virtual workspace +
- * project. There is exactly one of each when bound. A workspace-level design
- * system (if one is ever set while bound) is folded into the flattened
- * snapshot so the file stays self-contained. */
-function persistRepoProjectFile(): void {
-  if (!isRepoBound() || !repoProjectFile) return;
+/** Rewrite `.canvas/workspace.json` from the in-memory virtual workspace + its
+ * projects. There is exactly one workspace when bound; its projects keep their
+ * stable subdirectories (looked up via the repo store). */
+function persistRepoWorkspaceFile(): void {
+  if (!isRepoBound() || !repoWorkspaceFile) return;
   const ws = [...workspaces.values()][0];
-  const proj = [...projects.values()][0];
-  if (ws) repoProjectFile.workspaceName = ws.name;
-  if (proj) {
-    repoProjectFile.projectName = proj.name;
-    repoProjectFile.designSystem = ws?.designSystem
-      ? mergeDesignTokens(ws.designSystem, proj.designSystem)
-      : proj.designSystem;
-  }
+  if (!ws) return;
+  repoWorkspaceFile.workspaceName = ws.name;
+  repoWorkspaceFile.designSystem = ws.designSystem;
+  repoWorkspaceFile.projects = [...projects.values()]
+    .filter((p) => p.workspaceId === ws.id)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      dir: getProjectDir(p.id) ?? uniqueProjectDir(p.name),
+      designSystem: p.designSystem,
+    }));
   try {
-    writeProjectFile(repoDir(), repoProjectFile);
+    writeWorkspaceFile(repoDir(), repoWorkspaceFile);
   } catch (err) {
-    process.stderr.write(`Warning: Could not persist repo project file: ${(err as Error).message}\n`);
+    process.stderr.write(`Warning: Could not persist repo workspace file: ${(err as Error).message}\n`);
   }
 }
 
@@ -189,6 +201,9 @@ export function createProject(workspaceId: string, name: string): Project | unde
   if (!workspaces.has(workspaceId)) return undefined;
   const p: Project = { id: nanoid(10), workspaceId, name, createdAt: new Date().toISOString() };
   projects.set(p.id, p);
+  // When bound, a new project needs a subdirectory under `.canvas/` before its
+  // workspace.json entry (and any future canvas writes) can be persisted.
+  if (isRepoBound()) registerProjectDir(p.id, uniqueProjectDir(name));
   persistProjects();
   return p;
 }

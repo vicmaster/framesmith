@@ -1,30 +1,32 @@
 // Phase 10 — bind orchestration.
 //
-// Creating a `.canvas/` binding spans three layers (repo IO, the workspace /
-// project model, and the canvas store), so it lives in its own module rather
-// than in index.ts — keeping it importable by the smoke test without booting
-// the MCP server. None of the layers below import this file, so there is no
-// import cycle.
+// Binding spans three layers (repo IO, the workspace / project model, and the
+// canvas store), so it lives in its own module rather than in index.ts —
+// keeping it importable by the smoke test without booting the MCP server. None
+// of the layers below import this file, so there is no import cycle.
+//
+// A repo binds a whole workspace: every project under it becomes a `.canvas/`
+// subdirectory, every canvas an open-JSON file inside it.
 
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 import {
   isRepoBound, getBackend, projectStartDir, findRepoRoot, setRepoBackend,
-  writeProjectFile, writeCanvasToDir, SCHEMA_VERSION, type RepoProjectFile,
+  writeWorkspaceFile, writeCanvasToDir, registerProjectDir, uniqueProjectDir,
+  SCHEMA_VERSION, type RepoWorkspaceFile, type RepoProjectEntry,
 } from './repo-store.js';
-import { getProject, getWorkspace, loadRepoWorkspaceProject } from './workspaces.js';
+import { getWorkspace, listProjects, loadRepoWorkspace } from './workspaces.js';
 import { listCanvases, getCanvas, purgeGlobalCanvas, loadPersistedCanvases } from './scene-graph.js';
-import { mergeDesignTokens } from './variables.js';
-import { DEFAULT_PROJECT_ID } from './types.js';
+import { DEFAULT_WORKSPACE_ID } from './types.js';
 
 export type BindResult =
-  | { ok: true; root: string; dir: string; workspace: string; project: string; migrated: number }
+  | { ok: true; root: string; dir: string; workspace: string; projects: number; migrated: number }
   | { ok: false; error: string };
 
-/** Create a `.canvas/` binding in the project directory, migrate a project's
- * canvases into it, and switch the live session to the repo backend. */
-export function bindRepo(opts: { projectId?: string; dir?: string }): BindResult {
+/** Create a `.canvas/` binding for a workspace: migrate all of its projects +
+ * canvases into the repo, then switch the live session to the repo backend. */
+export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResult {
   if (isRepoBound()) {
     const b = getBackend();
     return { ok: false, error: `Already bound to a repo at ${b.kind === 'repo' ? b.dir : '(unknown)'}.` };
@@ -32,45 +34,53 @@ export function bindRepo(opts: { projectId?: string; dir?: string }): BindResult
   const start = opts.dir ?? projectStartDir();
   const root = findRepoRoot(start);
   const dir = join(root, '.canvas');
-  if (existsSync(join(dir, 'project.json'))) {
+  if (existsSync(join(dir, 'workspace.json'))) {
     return { ok: false, error: `A .canvas/ binding already exists at ${dir}. Restart the server in this directory to use it.` };
   }
-  const srcProjectId = opts.projectId ?? DEFAULT_PROJECT_ID;
-  const srcProject = getProject(srcProjectId);
-  if (!srcProject) return { ok: false, error: `Project "${srcProjectId}" not found. Use project_list to see available projects.` };
-  const srcWs = getWorkspace(srcProject.workspaceId);
+  const srcWsId = opts.workspaceId ?? DEFAULT_WORKSPACE_ID;
+  const srcWs = getWorkspace(srcWsId);
+  if (!srcWs) return { ok: false, error: `Workspace "${srcWsId}" not found. Use workspace_list to see available workspaces.` };
 
-  // Flatten the effective design system at bind time so a fresh clone renders
-  // identically without any global workspace/project state.
-  const flattened = mergeDesignTokens(srcWs?.designSystem, srcProject.designSystem);
   const now = new Date().toISOString();
-  const pf: RepoProjectFile = {
+  const srcProjects = listProjects(srcWsId);
+
+  // Build the virtual project entries, assigning each a stable subdirectory and
+  // a fresh repo-scoped id. Track old → new project id so canvases retarget.
+  const idMap = new Map<string, string>();
+  const projectEntries: RepoProjectEntry[] = srcProjects.map((p) => {
+    const newId = `repo-proj-${nanoid(8)}`;
+    idMap.set(p.id, newId);
+    const projDir = uniqueProjectDir(p.name);
+    registerProjectDir(newId, projDir);
+    return { id: newId, name: p.name, dir: projDir, designSystem: p.designSystem };
+  });
+
+  const wf: RepoWorkspaceFile = {
     schemaVersion: SCHEMA_VERSION,
     workspaceId: `repo-ws-${nanoid(8)}`,
-    workspaceName: srcWs?.name ?? 'Repo',
-    projectId: `repo-proj-${nanoid(8)}`,
-    projectName: srcProject.name,
-    designSystem: Object.keys(flattened).length ? flattened : undefined,
+    workspaceName: srcWs.name,
+    designSystem: srcWs.designSystem,
+    projects: projectEntries,
     boundAt: now,
   };
 
   // Snapshot the canvases to migrate before switching backend.
   const toMigrate = listCanvases()
-    .filter((c) => c.projectId === srcProjectId)
+    .filter((c) => idMap.has(c.projectId))
     .map((c) => getCanvas(c.id))
     .filter((c): c is NonNullable<typeof c> => !!c);
 
-  writeProjectFile(dir, pf);
+  writeWorkspaceFile(dir, wf);
   for (const canvas of toMigrate) {
-    canvas.projectId = pf.projectId;
+    canvas.projectId = idMap.get(canvas.projectId)!;
     writeCanvasToDir(dir, canvas);
     purgeGlobalCanvas(canvas.id);
   }
 
   // Switch the live session to the repo and reload the store from disk.
   setRepoBackend(root, dir);
-  loadRepoWorkspaceProject(pf);
+  loadRepoWorkspace(wf);
   loadPersistedCanvases();
 
-  return { ok: true, root, dir, workspace: pf.workspaceName, project: pf.projectName, migrated: toMigrate.length };
+  return { ok: true, root, dir, workspace: wf.workspaceName, projects: projectEntries.length, migrated: toMigrate.length };
 }
