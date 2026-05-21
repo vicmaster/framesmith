@@ -32,21 +32,12 @@ The viewer is purely read-only — every canvas is authored through MCP tool cal
 
 ## Installation
 
-Build the server once, then register it with your MCP client of choice.
-
-### Build
-
-```bash
-git clone https://github.com/vicmaster/framesmith.git
-cd framesmith
-npm install
-npm run build
-```
+No clone or build needed — register framesmith with your MCP client via `npx` (requires Node 20+).
 
 ### Claude Code
 
 ```bash
-claude mcp add framesmith -- node /path/to/framesmith/dist/index.js
+claude mcp add framesmith -- npx -y framesmith
 ```
 
 ### Codex
@@ -55,8 +46,8 @@ Add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.framesmith]
-command = "node"
-args = ["/path/to/framesmith/dist/index.js"]
+command = "npx"
+args = ["-y", "framesmith"]
 ```
 
 ### Cursor
@@ -67,8 +58,8 @@ Add to `~/.cursor/mcp.json` (or per-project `.cursor/mcp.json`):
 {
   "mcpServers": {
     "framesmith": {
-      "command": "node",
-      "args": ["/path/to/framesmith/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "framesmith"]
     }
   }
 }
@@ -82,8 +73,8 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 {
   "mcpServers": {
     "framesmith": {
-      "command": "node",
-      "args": ["/path/to/framesmith/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "framesmith"]
     }
   }
 }
@@ -97,8 +88,8 @@ Add to `.vscode/mcp.json` (project-scoped) or your global MCP settings:
 {
   "servers": {
     "framesmith": {
-      "command": "node",
-      "args": ["/path/to/framesmith/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "framesmith"]
     }
   }
 }
@@ -106,11 +97,19 @@ Add to `.vscode/mcp.json` (project-scoped) or your global MCP settings:
 
 ### Any other MCP-compatible client
 
-framesmith speaks standard stdio MCP. Point your client at `node /path/to/framesmith/dist/index.js` using whatever config shape your client expects.
+framesmith speaks standard stdio MCP. Point your client at `npx -y framesmith` using whatever config shape your client expects.
 
 > **Optional:** set `FRAMESMITH_VIEWER_URL=http://localhost:3001` in the MCP server env to pin it to a long-lived standalone viewer process — see [Running the viewer](#running-the-viewer).
 
-> **npm publish:** `framesmith` is not on npm yet. Install via the build steps above; an `npx framesmith` install is on the roadmap for v1.0.
+### Build from source (for development)
+
+```bash
+git clone https://github.com/vicmaster/framesmith.git
+cd framesmith
+npm install
+npm run build
+# then point your client at: node /path/to/framesmith/dist/index.js
+```
 
 ## Tools
 
