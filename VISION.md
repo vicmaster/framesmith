@@ -324,12 +324,12 @@ Left to their own devices, AI assistants converge on the same handful of layouts
 
 Authoring intent: structures are scene-graph data, not prompt text — the agent applies one, then **renders and verifies** it, an advantage code-only tooling doesn't have.
 
-- [ ] Layout scaffold library — named page structures (e.g. marquee hero, bento grid, stat-led, editorial long-form, split workbench, catalogue) as partial scene trees with placeholder children; distinct from color/token presets
-- [ ] `list_structures` / `apply_structure` tools — agent picks a structure, gets a filled-in skeleton to populate, then renders + verifies it
-- [ ] Structure taxonomy — each scaffold tagged on independent axes (hero treatment, density, rhythm, alignment) so "differs from last" is computable, not a vibe
-- [ ] Per-project build log — record structure + preset + key axes for each canvas authored under a project
-- [ ] Diversification signal — on `canvas_create`, surface the last N log entries and steer the agent to differ on ≥ 1 axis from recent work
-- [ ] Provenance stamp — canvas metadata records which structure / preset / seed produced it (feeds the log; surfaced in the viewer)
+- [x] Layout scaffold library — named page structures (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue) as partial scene trees with labeled placeholder children; distinct from color/token presets _(Slice A)_
+- [x] `list_structures` / `apply_structure` tools — agent picks a structure, gets a filled-in skeleton to populate, then renders + verifies it _(Slice A)_
+- [x] Structure taxonomy — each scaffold tagged on independent axes (heroTreatment, density, rhythm, alignment) so "differs from last" is computable, not a vibe _(Slice A)_
+- [ ] Per-project build log — record structure + preset + key axes for each canvas authored under a project _(Slice B)_
+- [ ] Diversification signal — on `canvas_create`, surface the last N log entries and steer the agent to differ on ≥ 1 axis from recent work _(Slice C)_
+- [~] Provenance stamp — canvas metadata records which structure / preset / seed produced it (stamp shipped in Slice A; feeds the log in Slice B; surfaced in the viewer in Slice C)
 
 ### Phase 12 — Cliché & craft guardrails (v1.2)
 
