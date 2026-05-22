@@ -325,6 +325,22 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 | `canvasId` | string | Canvas ID |
 | `preset` | string | Preset name: `"dark"`, `"light"`, `"material"`, `"minimal"` |
 
+### `list_structures`
+
+List available layout structures — named page scaffolds you stamp onto a canvas and then populate. No params. Returns each structure's name, description, and taxonomy axes. Distinct from presets: structures define **layout skeleton**, presets define **color/token theme** — they compose.
+
+Built-in: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout.
+
+### `apply_structure`
+
+Stamp a layout structure onto a canvas: inserts the scaffold of labeled placeholder nodes under the canvas root, records provenance, and returns the placeholder node IDs to populate. Seeds neutral default colors so the scaffold renders even before a preset is applied. Populate the placeholders with `batch_design` `U` ops, then `screenshot` to verify.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `structure` | string | Structure name (use `list_structures`, e.g. `"marquee-hero"`, `"bento-grid"`) |
+| `replace` | boolean? | If the root already has children, clear them before stamping. Default `false` (refuses on a non-empty canvas) |
+
 ### `import_design_md`
 
 Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a design system preset. Parses the Google Stitch format and extracts colors, typography, spacing, and border radius. It also extracts reusable component skeletons (`button`, `card`, `badge`) from the "Component Styling" section — `apply_preset` then makes them available as instanceable components on the canvas. After importing, use `apply_preset` to apply it to any canvas.
