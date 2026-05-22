@@ -218,6 +218,11 @@ const DEFAULT_SCAFFOLD_COLORS: Record<string, string> = {
 /** Node fields that may carry a `$color` token ref (the theming split). */
 const COLOR_FIELDS = ['fill', 'color', 'stroke', 'iconColor'] as const;
 
+/** Page background token applied to the document root so a scaffold fills the
+ * viewport (renderer hoists root fill to <html>) instead of leaving browser
+ * white below/around the content. */
+const PAGE_BG_TOKEN = 'bg-primary';
+
 function walkNodes(node: SceneNode, visit: (n: SceneNode) => void): void {
   visit(node);
   node.children?.forEach((c) => walkNodes(c, visit));
@@ -265,6 +270,15 @@ export function applyStructure(
   const inserted = structure.nodes.map((n) => structuredClone(n));
   canvas.root.children = inserted;
 
+  // Give the document root a page background so the scaffold fills the viewport
+  // rather than showing browser-default white. createCanvas seeds a white root
+  // fill, so treat white/unset as the default backdrop and override it — but
+  // preserve any custom (non-white) fill or gradient the author already chose.
+  const currentFill = canvas.root.fill?.toUpperCase();
+  if ((!currentFill || currentFill === '#FFFFFF') && !canvas.root.gradient) {
+    canvas.root.fill = `$${PAGE_BG_TOKEN}`;
+  }
+
   // Provenance into the open metadata bag (C3). `preset` is filled later by
   // apply_preset (T7); `seed` is reserved (C6).
   canvas.metadata = {
@@ -285,6 +299,9 @@ export function applyStructure(
       }
     });
   }
+
+  // The page background may only live on the root (not in the scanned children).
+  referenced.add(PAGE_BG_TOKEN);
 
   // Seed neutral defaults for referenced colors not already resolvable (A-P4).
   const existingColors = opts.existingColors ?? new Set<string>();

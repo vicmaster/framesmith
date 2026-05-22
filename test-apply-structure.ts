@@ -29,6 +29,9 @@ check(canvas.root.children?.length === 2, `root has 2 top-level nodes (got ${can
 check(res.insertedNodeIds.includes('mh-hero'), 'returns inserted node ids');
 check(res.placeholders.some((p) => p.role === 'Headline'), 'placeholder list includes a "Headline" role');
 
+console.log('page background applied to the document root (visual-check fix)');
+check(canvas.root.fill === '$bg-primary', 'root.fill set to $bg-primary so the page fills the viewport');
+
 console.log('provenance stamped into metadata bag');
 check(canvas.metadata?.provenance?.structure === 'marquee-hero', 'provenance.structure recorded');
 check(canvas.metadata?.provenance?.axes?.heroTreatment === 'marquee', 'provenance.axes recorded');
