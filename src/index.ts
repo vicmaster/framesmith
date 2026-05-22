@@ -16,6 +16,7 @@ import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
+import { listStructures } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
@@ -703,6 +704,16 @@ server.tool(
   {},
   async () => {
     return { content: [{ type: 'text', text: JSON.stringify(listPresets(), null, 2) }] };
+  }
+);
+
+// --- list_structures ---
+server.tool(
+  'list_structures',
+  'List available layout structures — named page scaffolds (e.g. marquee-hero, bento-grid) you stamp onto a canvas and then populate. Each is tagged on four taxonomy axes (heroTreatment, density, rhythm, alignment) so you can deliberately vary page shape rather than defaulting to the same layout. Distinct from presets: structures define layout skeleton, presets define color/token theme. Apply one with apply_structure, then screenshot and verify before populating.',
+  {},
+  async () => {
+    return { content: [{ type: 'text', text: JSON.stringify(listStructures(), null, 2) }] };
   }
 );
 
