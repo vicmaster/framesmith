@@ -24,18 +24,19 @@ function walk(node: SceneNode, visit: (n: SceneNode) => void): void {
   node.children?.forEach((c) => walk(c, visit));
 }
 
+const NAMES = ['marquee-hero', 'bento-grid', 'stat-led', 'editorial-longform', 'split-workbench', 'catalogue'];
+
 console.log('listStructures()');
 const list = listStructures();
-check(list.length === 2, `returns 2 structures (got ${list.length})`);
+check(list.length === NAMES.length, `returns ${NAMES.length} structures (got ${list.length})`);
 check(list.every((s) => !!s.name && !!s.description && !!s.axes), 'each entry has name + description + axes');
 
 console.log('getStructure()');
-check(!!getStructure('marquee-hero'), "resolves 'marquee-hero'");
-check(!!getStructure('bento-grid'), "resolves 'bento-grid'");
+for (const name of NAMES) check(!!getStructure(name), `resolves '${name}'`);
 check(getStructure('does-not-exist') === undefined, 'unknown name → undefined');
 
 console.log('taxonomy — every structure tagged on all 4 axes with valid values');
-for (const name of ['marquee-hero', 'bento-grid']) {
+for (const name of NAMES) {
   const s = getStructure(name)!;
   for (const axis of Object.keys(AXES) as (keyof typeof AXES)[]) {
     const v = s.axes[axis];
@@ -44,13 +45,13 @@ for (const name of ['marquee-hero', 'bento-grid']) {
 }
 
 console.log('structure has placeholder nodes');
-for (const name of ['marquee-hero', 'bento-grid']) {
+for (const name of NAMES) {
   const s = getStructure(name)!;
   check(Array.isArray(s.nodes) && s.nodes.length > 0, `${name} has nodes`);
 }
 
 console.log('theming split — only color fields hold $tokens; geometry is literal (A-P4)');
-for (const name of ['marquee-hero', 'bento-grid']) {
+for (const name of NAMES) {
   const s = getStructure(name)!;
   let violations: string[] = [];
   s.nodes.forEach((root) => walk(root, (n) => {
@@ -64,7 +65,7 @@ for (const name of ['marquee-hero', 'bento-grid']) {
 }
 
 console.log('all node ids are unique within a structure');
-for (const name of ['marquee-hero', 'bento-grid']) {
+for (const name of NAMES) {
   const s = getStructure(name)!;
   const ids: string[] = [];
   s.nodes.forEach((root) => walk(root, (n) => ids.push(n.id)));
@@ -77,7 +78,7 @@ const stub: Structure = {
 };
 registerStructure(stub);
 check(getStructure('test-stub')?.description === 'temp', 'registered stub is retrievable');
-check(listStructures().length === 3, 'list now reports 3');
+check(listStructures().length === NAMES.length + 1, `list now reports ${NAMES.length + 1}`);
 
 console.log(failures === 0 ? '\nT2a SMOKE TEST PASSED ✅' : `\nT2a SMOKE TEST FAILED ✗ (${failures})`);
 process.exit(failures === 0 ? 0 : 1);
