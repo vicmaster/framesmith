@@ -16,7 +16,7 @@ import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
-import { listStructures } from './structures.js';
+import { listStructures, applyStructure } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
@@ -714,6 +714,33 @@ server.tool(
   {},
   async () => {
     return { content: [{ type: 'text', text: JSON.stringify(listStructures(), null, 2) }] };
+  }
+);
+
+// --- apply_structure ---
+server.tool(
+  'apply_structure',
+  'Stamp a layout structure (see list_structures) onto a canvas: inserts the named scaffold of labeled placeholder nodes under the canvas root and records provenance. Refuses if the root already has content unless replace is true (which clears it first). Seeds neutral default colors so the scaffold renders even before a preset is applied. Returns the placeholder node ids to populate — fill them with batch_design U ops, then call screenshot to verify the layout.',
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    structure: z.string().describe('Structure name (use list_structures, e.g. marquee-hero, bento-grid)'),
+    replace: z.boolean().optional().describe('If the root already has children, clear them before stamping. Default false (refuses on a non-empty canvas).'),
+  },
+  async ({ canvasId, structure, replace }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    try {
+      const existingColors = new Set(Object.keys(getCanvasTokens(canvas).colors ?? {}));
+      const result = applyStructure(canvas, structure, { replace, existingColors });
+      touchCanvas(canvasId);
+      return { content: [{ type: 'text', text: JSON.stringify({
+        ...result,
+        instruction: 'Populate each placeholder by id with batch_design U ops (replace the role-labeled content), then call screenshot to verify the layout before refining.',
+      }, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
   }
 );
 

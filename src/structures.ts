@@ -1,4 +1,4 @@
-import type { SceneNode, Structure, StructureAxes } from './types.js';
+import type { Canvas, SceneNode, Structure, StructureAxes } from './types.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -197,4 +197,111 @@ export function getStructure(name: string): Structure | undefined {
 
 export function registerStructure(structure: Structure): void {
   structureMap.set(structure.name, structure);
+}
+
+// ── apply ────────────────────────────────────────────────────────────────
+
+/** Neutral defaults for the color tokens these scaffolds reference, so an
+ * unthemed canvas still renders (analyze A-P4 — there is no built-in default
+ * token layer). Mirrors the `dark` preset palette; a later `apply_preset` or
+ * design-system merges over these since they live on `canvas.variables`. */
+const DEFAULT_SCAFFOLD_COLORS: Record<string, string> = {
+  'bg-primary': '#0a0a0a',
+  'bg-surface': '#111111',
+  'bg-elevated': '#1a1a1a',
+  'text-primary': '#ffffffde',
+  'text-secondary': '#ffffffa0',
+  'accent': '#3b82f6',
+  'border': '#ffffff1a',
+};
+
+/** Node fields that may carry a `$color` token ref (the theming split). */
+const COLOR_FIELDS = ['fill', 'color', 'stroke', 'iconColor'] as const;
+
+function walkNodes(node: SceneNode, visit: (n: SceneNode) => void): void {
+  visit(node);
+  node.children?.forEach((c) => walkNodes(c, visit));
+}
+
+export interface ApplyStructureResult {
+  applied: string;
+  axes: StructureAxes;
+  /** Top-level node ids inserted under the canvas root. */
+  insertedNodeIds: string[];
+  /** Fillable placeholders (text/image) with their role label, for populating. */
+  placeholders: { id: string; role: string }[];
+  /** Color tokens seeded with neutral defaults because they were unresolved. */
+  seededColors: string[];
+}
+
+/** Stamp a layout structure onto a canvas: insert its placeholder scaffold under
+ * the root, record provenance, and seed neutral defaults for any color token the
+ * scaffold references that isn't already resolvable (A-P4). A pure mutation on
+ * the passed canvas — the MCP handler wraps it with lookup / persist / response.
+ *
+ * @param opts.replace clear an existing non-empty root before stamping.
+ * @param opts.existingColors color token names already resolvable for this canvas
+ *   (from `getCanvasTokens`), so inherited/preset colors are never overwritten.
+ * @throws if the structure is unknown, or the root has children and `replace` is unset.
+ */
+export function applyStructure(
+  canvas: Canvas,
+  structureName: string,
+  opts: { replace?: boolean; existingColors?: Set<string> } = {},
+): ApplyStructureResult {
+  const structure = getStructure(structureName);
+  if (!structure) {
+    throw new Error(`Structure "${structureName}" not found. Use list_structures to see available structures.`);
+  }
+
+  const existing = canvas.root.children ?? [];
+  if (existing.length > 0 && !opts.replace) {
+    throw new Error(
+      `Canvas root already has ${existing.length} child node(s). Pass replace: true to clear them and stamp "${structureName}", or use a fresh canvas.`,
+    );
+  }
+
+  // Insert — clone so the registry template is never mutated.
+  const inserted = structure.nodes.map((n) => structuredClone(n));
+  canvas.root.children = inserted;
+
+  // Provenance into the open metadata bag (C3). `preset` is filled later by
+  // apply_preset (T7); `seed` is reserved (C6).
+  canvas.metadata = {
+    ...canvas.metadata,
+    provenance: { structure: structure.name, axes: structure.axes, at: new Date().toISOString() },
+  };
+
+  // One pass: collect fillable placeholders + referenced color tokens.
+  const placeholders: { id: string; role: string }[] = [];
+  const referenced = new Set<string>();
+  for (const root of inserted) {
+    walkNodes(root, (n) => {
+      if (n.type === 'text' && typeof n.content === 'string') placeholders.push({ id: n.id, role: n.content });
+      else if (n.type === 'image') placeholders.push({ id: n.id, role: 'image' });
+      for (const field of COLOR_FIELDS) {
+        const v = (n as unknown as Record<string, unknown>)[field];
+        if (typeof v === 'string' && v.startsWith('$')) referenced.add(v.slice(1));
+      }
+    });
+  }
+
+  // Seed neutral defaults for referenced colors not already resolvable (A-P4).
+  const existingColors = opts.existingColors ?? new Set<string>();
+  const seededColors: string[] = [];
+  for (const token of referenced) {
+    if (existingColors.has(token)) continue;
+    const def = DEFAULT_SCAFFOLD_COLORS[token];
+    if (def === undefined) continue;
+    canvas.variables.colors = { ...canvas.variables.colors, [token]: def };
+    seededColors.push(token);
+  }
+
+  return {
+    applied: structure.name,
+    axes: structure.axes,
+    insertedNodeIds: inserted.map((n) => n.id),
+    placeholders,
+    seededColors: seededColors.sort(),
+  };
 }
