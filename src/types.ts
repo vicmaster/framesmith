@@ -134,6 +134,51 @@ export interface FontFace {
   style?: 'normal' | 'italic';
 }
 
+/** Phase 11 — independent taxonomy axes a layout structure is tagged on, so
+ * "differs from the last canvas" is a computable set diff, not a vibe. Every
+ * structure sets all four; the diversification signal and Phase 13's "variety"
+ * rubric axis both read them, so keep the names/values stable. */
+export interface StructureAxes {
+  heroTreatment: 'none' | 'marquee' | 'split' | 'stat-led' | 'editorial';
+  density: 'airy' | 'balanced' | 'dense';
+  rhythm: 'uniform' | 'alternating' | 'asymmetric';
+  alignment: 'centered' | 'left' | 'split';
+}
+
+/** Phase 11 — a named page structure: a partial scene tree of labeled
+ * placeholder children plus its taxonomy tags. Distinct from a preset — presets
+ * carry tokens/components, structures carry the layout skeleton. Placeholders
+ * are labeled neutral blocks (never fabricated data) and reference `$token`s so
+ * an applied preset themes them. Registered in `src/structures.ts`. */
+export interface Structure {
+  name: string;
+  description: string;
+  axes: StructureAxes;
+  /** Placeholder children inserted under `canvas.root` by `apply_structure`. */
+  nodes: SceneNode[];
+}
+
+/** Phase 11 — provenance stamp recorded on `Canvas.metadata`: which structure /
+ * preset / axes produced a canvas. Lives in the open metadata bag so Phases 12
+ * (cliche flags) and 13 (rubric verdict) extend it without a further migration. */
+export interface Provenance {
+  structure?: string;
+  preset?: string;
+  axes?: Partial<StructureAxes>;
+  /** Reserved for a future "pick a structure for me" auto-selector; unused in v1.1. */
+  seed?: string;
+  /** ISO-8601 timestamp when the stamp was written. */
+  at: string;
+}
+
+/** Phase 11 — one per-project build-log entry: a provenance record plus the
+ * canvas it describes. The diversification signal reads the last N entries to
+ * steer the next canvas toward differing on >= 1 axis. */
+export interface BuildLogEntry extends Provenance {
+  canvasId: string;
+  canvasName: string;
+}
+
 export interface Canvas {
   id: string;
   name: string;
@@ -153,6 +198,14 @@ export interface Canvas {
    * the default gallery view. Permadelete is a separate action. */
   archived?: boolean;
   archivedAt?: string;
+  /** Phase 11 — open metadata bag. `provenance` records which structure / preset
+   * / axes produced this canvas (feeds the per-project build log + diversification
+   * signal). Optional, so existing canvases load unchanged with no migration.
+   * Phases 12/13 extend this bag (cliche flags, rubric verdict) in place. */
+  metadata?: {
+    provenance?: Provenance;
+    [key: string]: unknown;
+  };
 }
 
 export interface Workspace {
