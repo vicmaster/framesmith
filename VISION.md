@@ -366,8 +366,8 @@ The LLM-judge mode (Phase 6) returns a 0–100 score and free-text strengths / w
 A fresh agent connection gets tool names and schemas but no *model* of how to use them together — the hierarchy, the layered `$token` system, "read the guidelines first," and the current sharp edges all had to be learned by trial and error in a real dogfooding session. Close the gap so the operating model loads up front, plus fix the concrete bugs that produced wrong/empty results.
 
 - [x] Server `instructions` block — orient any client on connect with zero tool calls: hierarchy + how to scope to a repo, the `$token` model, "read `framesmith://guidelines` first," and the current gotchas
-- [ ] Idempotent `init` tool — bind the repo, scaffold convention projects (Foundations + UI), return *live* IDs + workflow cheatsheet + gotchas (a tool, not docs, because `canvas_bind` re-keys IDs)
-- [ ] Fold gotchas into `framesmith://guidelines` + one-liners on the relevant tool descriptions
+- [x] Idempotent `init` tool — bind the repo, scaffold convention projects (Foundations + UI), return *live* IDs + workflow cheatsheet + gotchas (a tool, not docs, because `canvas_bind` re-keys IDs); core in `bind.ts` (`initWorkspace`), thin handler in `index.ts`
+- [ ] Fold gotchas into `framesmith://guidelines` + one-liners on the relevant tool descriptions (server `instructions` gotchas corrected when their bugs were fixed; guidelines doc + per-tool one-liners still pending)
 - [x] Bug: structured `gradient` / `shadows` given a CSS string crash `screenshot` — renderer now coerces a CSS string to a raw `background` / `box-shadow` and falls back to `fill` on a malformed structured value instead of throwing
 - [x] Bug: `canvas_move` on a bound repo doesn't relocate the on-disk JSON — `writeCanvasToDir` now drops the stale path and rewrites under the target project's subdir
 - [ ] Bug: `import_design_md` lossy on colors / typography / radius

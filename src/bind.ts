@@ -9,14 +9,18 @@
 // subdirectory, every canvas an open-JSON file inside it.
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { nanoid } from 'nanoid';
 import {
   isRepoBound, getBackend, projectStartDir, findRepoRoot, setRepoBackend,
   writeWorkspaceFile, writeCanvasToDir, registerProjectDir, uniqueProjectDir,
-  registerRepo, SCHEMA_VERSION, type RepoWorkspaceFile, type RepoProjectEntry,
+  registerRepo, detectBinding, readWorkspaceFile, getProjectDir,
+  SCHEMA_VERSION, type RepoWorkspaceFile, type RepoProjectEntry,
 } from './repo-store.js';
-import { getWorkspace, listProjects, loadRepoWorkspace, deleteProject, deleteWorkspace } from './workspaces.js';
+import {
+  getWorkspace, listProjects, loadRepoWorkspace, deleteProject, deleteWorkspace,
+  createWorkspace, createProject, listWorkspaces, getWorkspaceDesignSystem,
+} from './workspaces.js';
 import { listCanvases, getCanvas, purgeGlobalCanvas, loadPersistedCanvases } from './scene-graph.js';
 import { DEFAULT_WORKSPACE_ID } from './types.js';
 
@@ -94,4 +98,84 @@ export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResu
   registerRepo(dir); // so the viewer can mirror this repo
 
   return { ok: true, root, dir, workspace: wf.workspaceName, projects: projectEntries.length, migrated: toMigrate.length };
+}
+
+/** Turn a directory basename into a readable workspace name ("md-toolkit" →
+ * "Md Toolkit"). Falls back to "Design" for an empty/odd basename. */
+export function prettifyWorkspaceName(s: string): string {
+  return s.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim() || 'Design';
+}
+
+export type InitResult =
+  | {
+      ok: true;
+      workspace: { id: string; name: string; canvasDir: string | null };
+      projects: Array<{ id: string; name: string; dir: string | null }>;
+      projectsCreated: string[];
+      designSystemTokenCount: number;
+    }
+  | { ok: false; error: string };
+
+/** Phase 15 — the `init` tool core: idempotent onboarding orchestration.
+ *
+ * Resolves the session to a bound repo (adopting an on-disk binding, or binding
+ * fresh with a new workspace + the convention projects), ensures the requested
+ * projects exist by name, then collects the live state (re-keyed IDs, on-disk
+ * dirs, token count). Safe to call repeatedly. Presentation — the workflow
+ * cheatsheet, gotchas, viewer URL — is layered on by the index.ts handler. */
+export function initWorkspace(opts: { dir?: string; workspaceName?: string; projects?: string[] }): InitResult {
+  const desired = [...new Set((opts.projects && opts.projects.length ? opts.projects : ['Foundations', 'UI']).map((s) => s.trim()).filter(Boolean))];
+  const created: string[] = [];
+
+  // 1. Resolve to a bound session.
+  if (!isRepoBound()) {
+    // Adopt an existing on-disk binding if the server booted outside the repo
+    // (keeps init idempotent in that case); otherwise bind fresh.
+    const existing = detectBinding(opts.dir ?? projectStartDir());
+    const existingFile = existing ? readWorkspaceFile(existing.dir) : null;
+    if (existing && existingFile) {
+      setRepoBackend(existing.root, existing.dir);
+      loadRepoWorkspace(existingFile);
+      loadPersistedCanvases();
+      registerRepo(existing.dir);
+    } else {
+      const root = findRepoRoot(opts.dir ?? projectStartDir());
+      const ws = createWorkspace(opts.workspaceName ?? prettifyWorkspaceName(basename(root)));
+      for (const name of desired) createProject(ws.id, name);
+      const result = bindRepo({ workspaceId: ws.id, dir: opts.dir });
+      if (!result.ok) {
+        // Roll back the workspace we just created so a failed init leaves no orphan.
+        for (const p of listProjects(ws.id)) deleteProject(p.id);
+        deleteWorkspace(ws.id);
+        return { ok: false, error: result.error };
+      }
+      created.push(...desired);
+    }
+  }
+
+  // 2. Bound now — ensure the convention projects exist (by name, idempotent).
+  const ws = listWorkspaces()[0];
+  if (!ws) return { ok: false, error: 'no workspace after init (unexpected).' };
+  const have = new Set(listProjects(ws.id).map((p) => p.name.toLowerCase()));
+  for (const name of desired) {
+    if (!have.has(name.toLowerCase())) {
+      createProject(ws.id, name);
+      created.push(name);
+      have.add(name.toLowerCase());
+    }
+  }
+
+  // 3. Collect the live state.
+  const backend = getBackend();
+  const ds = getWorkspaceDesignSystem(ws.id);
+  const tokenCount = ds
+    ? Object.keys(ds.colors ?? {}).length + Object.keys(ds.spacing ?? {}).length + Object.keys(ds.radius ?? {}).length + Object.keys(ds.typography ?? {}).length
+    : 0;
+  return {
+    ok: true,
+    workspace: { id: ws.id, name: ws.name, canvasDir: backend.kind === 'repo' ? backend.dir : null },
+    projects: listProjects(ws.id).map((p) => ({ id: p.id, name: p.name, dir: getProjectDir(p.id) ?? null })),
+    projectsCreated: created,
+    designSystemTokenCount: tokenCount,
+  };
 }
