@@ -60,6 +60,58 @@ export function getVariables(canvas: Canvas): DesignVariables {
   return canvas.variables;
 }
 
+export interface PresetApplyResult {
+  variables: DesignVariables;
+  /** Tokens left to inheritance instead of being overwritten by the preset. */
+  preserved: Array<{ category: string; key: string; kept: string; preset: string }>;
+}
+
+/** Apply a preset's tokens to a canvas WITHOUT silently clobbering tokens the
+ * canvas only resolves through inheritance (workspace / project design system).
+ *
+ * A preset writes to the canvas layer, which wins over inheritance — so a key
+ * the canvas doesn't set itself but inherits would silently diverge from the
+ * design system (e.g. preset `md: 16` shadowing a workspace `md: 12`). Those are
+ * preserved (left to inheritance) and reported. Keys that are new everywhere, or
+ * already set on the canvas's own layer, are written normally. */
+export function applyPresetTokens(
+  canvas: Canvas,
+  presetVars: Partial<DesignVariables>,
+  inherited: DesignVariables,
+): PresetApplyResult {
+  const preserved: PresetApplyResult['preserved'] = [];
+  const cats = ['colors', 'spacing', 'radius', 'typography'] as const;
+  for (const cat of cats) {
+    const pv = presetVars[cat];
+    if (!pv) continue;
+    if (!canvas.variables[cat]) (canvas.variables as Record<string, unknown>)[cat] = {};
+    const own = canvas.variables[cat] as Record<string, unknown>;
+    const inh = (inherited[cat] ?? {}) as Record<string, unknown>;
+    for (const [key, val] of Object.entries(pv)) {
+      const hasOwn = own[key] !== undefined;
+      const inhVal = inh[key];
+      if (!hasOwn && inhVal !== undefined && !tokenEquals(inhVal, val)) {
+        preserved.push({ category: cat, key, kept: fmtToken(cat, inhVal), preset: fmtToken(cat, val) });
+        continue;
+      }
+      own[key] = val;
+    }
+  }
+  return { variables: canvas.variables, preserved };
+}
+
+function tokenEquals(a: unknown, b: unknown): boolean {
+  if (typeof a === 'object' || typeof b === 'object') return JSON.stringify(a) === JSON.stringify(b);
+  return a === b;
+}
+
+function fmtToken(cat: string, val: unknown): string {
+  if (cat === 'typography' && val && typeof val === 'object' && 'fontSize' in (val as object)) {
+    return `${(val as { fontSize: number }).fontSize}px`;
+  }
+  return String(val);
+}
+
 /** Phase 9 — merge three layers of design tokens with rightmost winning:
  * canvas.variables overrides project.designSystem overrides workspace.designSystem.
  * Per category, keys are merged (not replaced wholesale), so a canvas can

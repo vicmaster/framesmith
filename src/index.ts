@@ -7,12 +7,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
 import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
-import { resolveVariables, setVariables, getVariables } from './variables.js';
+import { resolveVariables, setVariables, getVariables, applyPresetTokens } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
@@ -41,8 +41,7 @@ Core loop: design at one target width (referencing $tokens) → screenshot → r
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
-- import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.
-- apply_preset may overwrite a canvas's spacing tokens with the preset's scale — re-check tokens after applying.`;
+- import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.`;
 
 const server = new McpServer({
   name: 'framesmith',
@@ -65,7 +64,6 @@ const WORKFLOW_CHEATSHEET = [
 const GOTCHAS = [
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
-  "apply_preset may overwrite a canvas's spacing tokens with the preset's scale — re-check tokens after applying.",
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
 ];
 
@@ -811,7 +809,7 @@ server.tool(
 // --- apply_preset ---
 server.tool(
   'apply_preset',
-  'Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables, and copies in any reusable components (button, card, badge) the preset defines.',
+  "Apply a style guide preset to a canvas. Merges the preset's design tokens into the canvas variables and copies in any reusable components (button, card, badge) the preset defines. Tokens the canvas inherits from the workspace/project design system are preserved (and reported as `preservedFromDesignSystem`) instead of being silently overwritten — set them explicitly with set_variables if you want the preset's values.",
   {
     canvasId: z.string().describe('Canvas ID'),
     preset: z.string().describe('Preset name (dark, light, material, minimal)'),
@@ -823,7 +821,7 @@ server.tool(
     const p = getPreset(preset);
     if (!p) return { content: [{ type: 'text', text: `Error: Preset "${preset}" not found. Use list_presets to see available presets.` }], isError: true };
 
-    const result = setVariables(canvas, p.variables);
+    const merge = applyPresetTokens(canvas, p.variables, getInheritedTokens(canvas));
 
     const components: string[] = [];
     if (p.components) {
@@ -843,7 +841,12 @@ server.tool(
     recordPresetInBuildLog(canvas.projectId, canvas.id, canvas.name, preset);
 
     touchCanvas(canvasId);
-    return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result, components }, null, 2) }] };
+    const out: Record<string, unknown> = { applied: preset, variables: merge.variables, components };
+    if (merge.preserved.length) {
+      out.preservedFromDesignSystem = merge.preserved;
+      out.note = `Kept ${merge.preserved.length} token(s) inherited from the workspace/project design system rather than overwriting them with the preset's. Set them explicitly via set_variables if you do want the preset values.`;
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
   }
 );
 

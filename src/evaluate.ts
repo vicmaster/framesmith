@@ -73,7 +73,7 @@ interface CheckResult {
 
 // --- Color utilities ---
 
-function parseColor(str: string): [number, number, number] | null {
+export function parseColor(str: string): [number, number, number] | null {
   if (!str || typeof str !== 'string') return null;
   // #RGB
   let m = str.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
@@ -94,7 +94,7 @@ function relativeLuminance(r: number, g: number, b: number): number {
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
-function contrastRatio(fg: [number, number, number], bg: [number, number, number]): number {
+export function contrastRatio(fg: [number, number, number], bg: [number, number, number]): number {
   const l1 = relativeLuminance(...fg);
   const l2 = relativeLuminance(...bg);
   const lighter = Math.max(l1, l2);
@@ -255,7 +255,12 @@ function checkColorContrast(entries: NodeEntry[]): CheckResult {
     const bg = parseColor(bgStr);
     if (!bg) continue;
 
-    const ratio = contrastRatio(fg, bg);
+    // Round to 2 decimals — the precision contrast is conventionally reported at
+    // (WebAIM et al.). Comparing the rounded value stops a ratio that rounds to
+    // exactly the WCAG threshold (a true 4.499 shown as "4.5:1") from being
+    // flagged, and keeps the displayed number honest (no 1-decimal "4.5" for a
+    // value that actually failed at 4.46).
+    const ratio = Math.round(contrastRatio(fg, bg) * 100) / 100;
     const fontSize = node.fontSize ?? 16;
     const fontWeight = typeof node.fontWeight === 'number' ? node.fontWeight : 400;
     const isLargeText = fontSize >= 18 || (fontSize >= 14 && fontWeight >= 700);
@@ -268,7 +273,7 @@ function checkColorContrast(entries: NodeEntry[]): CheckResult {
         severity: 'error',
         nodeId: node.id,
         nodeName: node.name,
-        message: `Text "${(node.content ?? '').slice(0, 30)}" has contrast ratio ${ratio.toFixed(1)}:1 against ${bgStr}. WCAG AA requires ${required}:1.`,
+        message: `Text "${(node.content ?? '').slice(0, 30)}" has contrast ratio ${ratio.toFixed(2)}:1 against ${bgStr}. WCAG AA requires ${required}:1.`,
         suggestion: `Increase contrast by darkening/lightening the text or background.`,
       };
       const recoverColor = pickHighContrastColor(bg, required);
