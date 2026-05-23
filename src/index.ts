@@ -421,6 +421,7 @@ server.tool(
 
 Use "document" to reference the root node. Bind results to reuse IDs: header=I("document", {...})
 Concatenate bindings: U(header+"/childId", {...})
+Returns { ok, nodeIds, results }: nodeIds maps each bound variable to the node ID it created (e.g. { "header": "n_a1b2" }) — record it and use those IDs to target nodes in later calls (bindings only live within a single call). results lists each op's outcome in order.
 
 Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance
 Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, d, viewBox, strokeLinecap, strokeLinejoin, animation, transition, componentId, overrides, responsive
@@ -443,10 +444,14 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
 
     const results = parseAndExecute(canvas.root, operations, canvas);
     touchCanvas(canvasId);
+    // Map each bound variable to the node ID it created, so the agent can target
+    // the right nodes in follow-up U/D/M ops without counting result positions.
+    const nodeIds: Record<string, string> = {};
+    for (const r of results) if (r.ok && r.binding && r.nodeId) nodeIds[r.binding] = r.nodeId;
     const viewerUrl = getViewerUrl();
     return {
       content: [
-        { type: 'text', text: JSON.stringify(results, null, 2) },
+        { type: 'text', text: JSON.stringify({ ok: results.every((r) => r.ok), nodeIds, results }, null, 2) },
         ...(viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
       ],
     };
@@ -1011,7 +1016,7 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS every project and canvas ID to repo-* form, so IDs captured before the bind stop resolving — re-list with project_list / canvas_list afterward (or prefer the `init` tool, which binds and returns the fresh IDs in one call). Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
   {
     workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
