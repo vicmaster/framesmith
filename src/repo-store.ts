@@ -199,6 +199,18 @@ export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
   const targetDir = join(rootDir, projectDir);
   mkdirSync(targetDir, { recursive: true });
   let rel = fileById.get(canvas.id);
+  // canvas_move changes projectId: the cached path points at the old project's
+  // subdir. Relocate — delete the stale file and allocate a fresh path under the
+  // new project dir — so on-disk layout matches the move (else the file lingers
+  // in the old dir and the target project renders empty).
+  if (rel && dirname(rel) !== projectDir) {
+    try {
+      const oldAbs = join(rootDir, rel);
+      if (existsSync(oldAbs)) unlinkSync(oldAbs);
+    } catch {}
+    fileById.delete(canvas.id);
+    rel = undefined;
+  }
   if (!rel) {
     rel = join(projectDir, uniqueFilename(projectDir, canvas.name));
     fileById.set(canvas.id, rel);

@@ -368,8 +368,8 @@ A fresh agent connection gets tool names and schemas but no *model* of how to us
 - [x] Server `instructions` block — orient any client on connect with zero tool calls: hierarchy + how to scope to a repo, the `$token` model, "read `framesmith://guidelines` first," and the current gotchas
 - [ ] Idempotent `init` tool — bind the repo, scaffold convention projects (Foundations + UI), return *live* IDs + workflow cheatsheet + gotchas (a tool, not docs, because `canvas_bind` re-keys IDs)
 - [ ] Fold gotchas into `framesmith://guidelines` + one-liners on the relevant tool descriptions
-- [ ] Bug: structured `gradient` / `shadows` given a CSS string crash `screenshot` — validate at `batch_design` (name the node) or coerce
-- [ ] Bug: `canvas_move` on a bound repo doesn't relocate the on-disk JSON
+- [x] Bug: structured `gradient` / `shadows` given a CSS string crash `screenshot` — renderer now coerces a CSS string to a raw `background` / `box-shadow` and falls back to `fill` on a malformed structured value instead of throwing
+- [x] Bug: `canvas_move` on a bound repo doesn't relocate the on-disk JSON — `writeCanvasToDir` now drops the stale path and rewrites under the target project's subdir
 - [ ] Bug: `import_design_md` lossy on colors / typography / radius
 - [ ] Bug: `apply_preset` clobbers inherited spacing tokens
 - [ ] Bug: `canvas_evaluate` flags a true 4.49…:1 ratio that displays as "4.5:1" (round before compare; the operator is already correct)
