@@ -361,6 +361,20 @@ The LLM-judge mode (Phase 6) returns a 0–100 score and free-text strengths / w
 - [ ] Community style guide marketplace
 - [ ] Plugin system for custom node types
 
+### Phase 15 — Agent onboarding (from issue #64)
+
+A fresh agent connection gets tool names and schemas but no *model* of how to use them together — the hierarchy, the layered `$token` system, "read the guidelines first," and the current sharp edges all had to be learned by trial and error in a real dogfooding session. Close the gap so the operating model loads up front, plus fix the concrete bugs that produced wrong/empty results.
+
+- [x] Server `instructions` block — orient any client on connect with zero tool calls: hierarchy + how to scope to a repo, the `$token` model, "read `framesmith://guidelines` first," and the current gotchas
+- [ ] Idempotent `init` tool — bind the repo, scaffold convention projects (Foundations + UI), return *live* IDs + workflow cheatsheet + gotchas (a tool, not docs, because `canvas_bind` re-keys IDs)
+- [ ] Fold gotchas into `framesmith://guidelines` + one-liners on the relevant tool descriptions
+- [ ] Bug: structured `gradient` / `shadows` given a CSS string crash `screenshot` — validate at `batch_design` (name the node) or coerce
+- [ ] Bug: `canvas_move` on a bound repo doesn't relocate the on-disk JSON
+- [ ] Bug: `import_design_md` lossy on colors / typography / radius
+- [ ] Bug: `apply_preset` clobbers inherited spacing tokens
+- [ ] Bug: `canvas_evaluate` flags a true 4.49…:1 ratio that displays as "4.5:1" (round before compare; the operator is already correct)
+- [ ] Ergonomics: `batch_design` returns a `{ varName: nodeId }` map (or address nodes by bound name within a session)
+
 ---
 
 ## Installation (target)
