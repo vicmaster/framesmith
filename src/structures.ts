@@ -657,7 +657,12 @@ export function computeDiversificationHint(recent: BuildLogEntry[]): Diversifica
     let topVal = '';
     let topCount = 0;
     for (const [v, c] of counts) if (c > topCount) { topVal = v; topCount = c; }
-    if (topCount >= 2) {
+    // An axis "converges" only when its dominant value is shared by a STRICT
+    // MAJORITY (> half) of the recent structured canvases. A bare ">= 2" over-
+    // fires: with only 3-5 values per axis and ~5 entries, some value collides
+    // on nearly every axis by chance, so even a deliberately varied project
+    // reads as "repeats everything" (caught dogfooding the showcase).
+    if (topCount >= 2 && topCount * 2 > structured.length) {
       repeatedAxes.push(axis);
       repeats.push(`${axis}=${topVal}`);
     }

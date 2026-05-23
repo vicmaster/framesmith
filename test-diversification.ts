@@ -65,6 +65,23 @@ check(h4.repeatedAxes.length === 0 && /no recent structured/i.test(h4.suggestion
 const h5 = computeDiversificationHint([entry('c1', same), entry('c2', same), entry('c3')]);
 check(h5.repeatedAxes.length === 4, 'axis-less entry does not dilute the structured tally');
 
+// ── strict majority — a minority lean is NOT flagged, a majority is ───────────
+console.log('strict majority — 2/5 (minority) not flagged; 3/5 and 4/5 (majority) flagged');
+const five = [
+  entry('a', axes('marquee', 'airy', 'uniform', 'left')),
+  entry('b', axes('marquee', 'dense', 'uniform', 'centered')),
+  entry('c', axes('split', 'airy', 'uniform', 'left')),
+  entry('d', axes('stat-led', 'dense', 'asymmetric', 'split')),
+  entry('e', axes('editorial', 'balanced', 'uniform', 'left')),
+];
+// heroTreatment: marquee 2/5 → minority; density: airy 2 / dense 2 → minority;
+// rhythm: uniform 4/5 → majority; alignment: left 3/5 → majority.
+const hb = computeDiversificationHint(five);
+check(!hb.repeatedAxes.includes('heroTreatment'), 'heroTreatment 2/5 (minority) is NOT flagged');
+check(!hb.repeatedAxes.includes('density'), 'density 2/5 (minority) is NOT flagged');
+check(hb.repeatedAxes.includes('rhythm'), 'rhythm 4/5 (majority) is flagged');
+check(hb.repeatedAxes.includes('alignment'), 'alignment 3/5 (majority) is flagged');
+
 // ── integration: read + slice(last 5) + reverse (newest first), the cap ───────
 console.log('integration — handler composition caps at last 5, newest first');
 const pid = 'proj-diverse';
