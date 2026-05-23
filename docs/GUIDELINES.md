@@ -128,3 +128,14 @@ set_fonts({
 - **`canvas_evaluate` with `mode: "llm"`** runs fast-mode heuristics plus a vision-model critique (Claude or GPT-4.1, picked from env). Returns the heuristic result with an extra `llmCritique` field: holistic score, strengths, weaknesses, suggestions. Use this for the "is this visually well-designed?" question that the heuristics can't answer on their own — composition, hierarchy, polish. Costs one API call per run; reach for it after the heuristic score plateaus.
 - **`screenshot_responsive`** renders the same scene at mobile / tablet / desktop. Inspect all three; if `responsive` hints are set correctly the mobile layout will look right with no extra work.
 - **`snapshot_layout`** returns computed bounding boxes — useful for asserting alignment or detecting overflow programmatically.
+
+## Sharp edges
+
+A few operational details that aren't obvious from the tool schemas:
+
+- **Scope to a repo with `init` (or `canvas_bind`) — binding re-keys IDs.** Binding rewrites every project/canvas ID to `repo-*` form, so IDs captured before the bind stop resolving. `init` binds and returns the fresh IDs in one call (prefer it); after a bare `canvas_bind`, re-list with `project_list` / `canvas_list`.
+- **Record `batch_design`'s `nodeIds` map.** `batch_design` returns `{ ok, nodeIds, results }` where `nodeIds` maps each bound variable (`header=I(...)`) to the node ID it created. Bindings only live within a single call, so keep that map and target the real IDs in later calls rather than re-deriving them.
+- **Typography `$tokens` resolve `.fontSize` only.** A `$heading` reference substitutes the token's font size; `fontWeight` / `fontFamily` / `lineHeight` on the token are *not* applied through the reference. Set those explicitly on the node alongside the `$token`.
+- **Prefer the structured form for gradients & shadows.** `gradient: { type, angle?, stops: [...] }` and `shadows: [{ x, y, blur, spread?, color, inset? }]`. A raw CSS string is accepted too, but the structured form is canonical and diffs cleanly.
+- **`import_design_md` is best-effort.** It reads tokens per heading section in list / table / `name: value` form (see the tool description for the exact accepted schema) and silently skips what it can't parse — colors deliberately reject shadow/gradient strings. Set anything it misses with `set_variables`. It honors explicit named spacing values and only synthesizes a scale from a stated `Base unit:` — it won't fabricate one otherwise.
+- **`apply_preset` respects an inherited design system.** It won't overwrite tokens a canvas resolves through the workspace/project layers; those are reported as `preservedFromDesignSystem`. Pass them explicitly via `set_variables` if you actually want the preset's values.
