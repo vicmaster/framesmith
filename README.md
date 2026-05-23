@@ -373,6 +373,8 @@ Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a d
 
 Compatible with the 55+ design systems in [awesome-design-md](https://github.com/VoltAgent/awesome-design-md) (Stripe, Notion, Figma, Vercel, Linear, etc.).
 
+**Accepted token formats.** Each category is read from a loosely-matched heading section (`Colors` / `Color Palette`, `Spacing`, `Border Radius` / `Radius`, `Typography`). Within a section, tokens may be written as a list item (`- name: value`), a 2-column table row (`| name | value |`), or a `name: value` / `**name** (\`value\`)` line — where value is a color (`#hex`, `rgba(...)`) for colors, `Npx` for spacing/radius, and `Npx` (optionally `/ weight`, e.g. `16px / 600`) for typography. Named spacing tokens (`md: 12px`) are honored verbatim; a scale is synthesized **only** when no named tokens are given and a `Base unit: Npx` is stated — otherwise nothing is fabricated. Radius accepts the scale names `sm`/`md`/`lg`/`xl`/`full`/`pill`.
+
 ### `screenshot_responsive`
 
 Render a canvas at multiple viewport sizes. Defaults to mobile (390x844), tablet (768x1024), and desktop (1440x900).

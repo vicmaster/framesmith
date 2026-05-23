@@ -370,7 +370,7 @@ A fresh agent connection gets tool names and schemas but no *model* of how to us
 - [ ] Fold gotchas into `framesmith://guidelines` + one-liners on the relevant tool descriptions (server `instructions` gotchas corrected when their bugs were fixed; guidelines doc + per-tool one-liners still pending)
 - [x] Bug: structured `gradient` / `shadows` given a CSS string crash `screenshot` — renderer now coerces a CSS string to a raw `background` / `box-shadow` and falls back to `fill` on a malformed structured value instead of throwing
 - [x] Bug: `canvas_move` on a bound repo doesn't relocate the on-disk JSON — `writeCanvasToDir` now drops the stale path and rewrites under the target project's subdir
-- [ ] Bug: `import_design_md` lossy on colors / typography / radius
+- [x] Bug: `import_design_md` lossy on colors / typography / radius — parser now accepts list / table / `name: value` token formats per section (not just `**Name** (\`#hex\`)`), honors explicit named spacing instead of injecting a default scale, and broadens section-heading matching; accepted schema documented in the tool description + README
 - [x] Bug: `apply_preset` clobbers inherited spacing tokens — `applyPresetTokens` now preserves tokens the canvas only resolves through inheritance and reports them as `preservedFromDesignSystem`
 - [x] Bug: `canvas_evaluate` flags a true 4.49…:1 ratio that displays as "4.5:1" — ratio now rounded to 2 decimals before comparison + display (the `<` operator was already correct)
 - [ ] Ergonomics: `batch_design` returns a `{ varName: nodeId }` map (or address nodes by bound name within a session)

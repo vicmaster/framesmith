@@ -48,22 +48,25 @@ function extractDescription(content: string): string {
  * Looks for patterns like: **Name** (`#hex`) or (`rgba(...)`)
  */
 function extractColors(content: string): Record<string, string> {
-  const section = getSection(content, 'Color Palette');
+  const section = getSection(content, 'Color Palette') || getSection(content, 'Color');
   if (!section) return {};
 
   const colors: Record<string, string> = {};
-  // Match: **Label** (`#hex`) or **Label** (`rgba(...)`)
+  // Original format: **Label** (`#hex`) / **Label** (`rgba(...)`).
   const pattern = /\*\*([^*]+)\*\*\s*\(`([^`]+)`\)/g;
   let match: RegExpExecArray | null;
-
   while ((match = pattern.exec(section)) !== null) {
-    const label = slugify(match[1].trim());
     const value = match[2].trim();
     // Only keep standalone color values — rejects box-shadow strings,
     // gradients, color lists, and anything with trailing content.
-    if (isColorValue(value)) {
-      colors[label] = value;
-    }
+    if (isColorValue(value)) colors[slugify(match[1].trim())] = value;
+  }
+
+  // Tolerant formats: `- Name: #hex`, `| Name | #hex |`, `Name: #hex`.
+  for (const [name, value] of extractTokenPairs(section)) {
+    if (!isColorValue(value)) continue;
+    const key = slugify(name);
+    if (key && colors[key] === undefined) colors[key] = value;
   }
 
   return colors;
@@ -88,7 +91,7 @@ function isColorValue(value: string): boolean {
  * Parses the markdown table with columns: Role, Font, Size, Weight, Line Height, Letter Spacing
  */
 function extractTypography(content: string): Record<string, { fontSize: number; fontWeight?: string | number; fontFamily?: string; lineHeight?: number | string }> {
-  const section = getSection(content, 'Typography');
+  const section = getSection(content, 'Typography') || getSection(content, 'Type Scale') || getSection(content, 'Fonts');
   if (!section) return {};
 
   const typography: Record<string, { fontSize: number; fontWeight?: string | number; fontFamily?: string; lineHeight?: number | string }> = {};
@@ -111,54 +114,62 @@ function extractTypography(content: string): Record<string, { fontSize: number; 
     monoFont = `${monoMatch[1].trim()}, monospace`;
   }
 
-  // Parse the hierarchy table
+  // Primary path — the rich hierarchy table (Role | Font | Size | Weight | …).
   const tableLines = section.split('\n').filter(line => line.startsWith('|') && !line.match(/^\|\s*-/));
-  if (tableLines.length < 2) return typography;
+  if (tableLines.length >= 2) {
+    const cols = tableLines[0].split('|').map(c => c.trim().toLowerCase());
+    const roleIdx = cols.findIndex(c => c === 'role');
+    const sizeIdx = cols.findIndex(c => c === 'size');
+    const weightIdx = cols.findIndex(c => c === 'weight');
+    const lineHeightIdx = cols.findIndex(c => c.includes('line height'));
+    const fontIdx = cols.findIndex(c => c === 'font');
 
-  // Find column indices from header
-  const header = tableLines[0];
-  const cols = header.split('|').map(c => c.trim().toLowerCase());
-  const roleIdx = cols.findIndex(c => c === 'role');
-  const sizeIdx = cols.findIndex(c => c === 'size');
-  const weightIdx = cols.findIndex(c => c === 'weight');
-  const lineHeightIdx = cols.findIndex(c => c.includes('line height'));
-  const letterSpacingIdx = cols.findIndex(c => c.includes('letter'));
-  const fontIdx = cols.findIndex(c => c === 'font');
+    for (let i = 1; i < tableLines.length; i++) {
+      const cells = tableLines[i].split('|').map(c => c.trim());
+      // Tolerate a table whose first column isn't literally headed "Role".
+      const role = roleIdx >= 0 ? cells[roleIdx] : cells.find((c) => c.length > 0);
+      if (!role) continue;
 
-  for (let i = 1; i < tableLines.length; i++) {
-    const cells = tableLines[i].split('|').map(c => c.trim());
-    const role = cells[roleIdx];
-    if (!role) continue;
+      const sizeStr = sizeIdx >= 0 ? (cells[sizeIdx] || '') : cells.join(' ');
+      const sizeMatch = sizeStr.match(/(\d+)\s*px/);
+      if (!sizeMatch) continue;
 
-    const sizeStr = cells[sizeIdx] || '';
-    const sizeMatch = sizeStr.match(/(\d+)px/);
-    if (!sizeMatch) continue;
+      const fontSize = parseInt(sizeMatch[1], 10);
+      const weightStr = weightIdx >= 0 ? (cells[weightIdx] || '') : '';
+      const weightMatch = weightStr.match(/(\d+)/);
+      const fontWeight = weightMatch ? parseInt(weightMatch[1], 10) : undefined;
 
-    const fontSize = parseInt(sizeMatch[1], 10);
-    const weightStr = cells[weightIdx] || '';
-    const weightMatch = weightStr.match(/(\d+)/);
-    const fontWeight = weightMatch ? parseInt(weightMatch[1], 10) : undefined;
+      const lineHeightStr = lineHeightIdx >= 0 ? (cells[lineHeightIdx] || '') : '';
+      const lhMatch = lineHeightStr.match(/([\d.]+)/);
+      const lineHeight = lhMatch ? parseFloat(lhMatch[1]) : undefined;
 
-    const lineHeightStr = cells[lineHeightIdx] || '';
-    const lhMatch = lineHeightStr.match(/([\d.]+)/);
-    const lineHeight = lhMatch ? parseFloat(lhMatch[1]) : undefined;
+      const cellFont = fontIdx >= 0 ? cells[fontIdx] || '' : '';
+      const fontFamily = (cellFont.toLowerCase().includes('mono') || cellFont.toLowerCase().includes('code'))
+        ? (monoFont || `${cellFont}, monospace`)
+        : primaryFont;
 
-    // Determine font family
-    const cellFont = fontIdx >= 0 ? cells[fontIdx] || '' : '';
-    let fontFamily: string | undefined;
-    if (cellFont.toLowerCase().includes('mono') || cellFont.toLowerCase().includes('code')) {
-      fontFamily = monoFont || `${cellFont}, monospace`;
-    } else {
-      fontFamily = primaryFont;
+      const entry: { fontSize: number; fontWeight?: number; fontFamily?: string; lineHeight?: number } = { fontSize };
+      if (fontWeight !== undefined) entry.fontWeight = fontWeight;
+      if (fontFamily) entry.fontFamily = fontFamily;
+      if (lineHeight !== undefined) entry.lineHeight = lineHeight;
+      typography[slugify(role)] = entry;
     }
+  }
 
-    const key = slugify(role);
-    const entry: { fontSize: number; fontWeight?: number; fontFamily?: string; lineHeight?: number } = { fontSize };
-    if (fontWeight !== undefined) entry.fontWeight = fontWeight;
-    if (fontFamily) entry.fontFamily = fontFamily;
-    if (lineHeight !== undefined) entry.lineHeight = lineHeight;
-
-    typography[key] = entry;
+  // Fallback — a simple list when there's no usable table: `- Heading: 32px`,
+  // `- Body: 16px / 400`, `| Caption | 12px |`.
+  if (Object.keys(typography).length === 0) {
+    for (const [name, value] of extractTokenPairs(section)) {
+      const sizeMatch = value.match(/(\d+)\s*px/);
+      if (!sizeMatch) continue;
+      const key = slugify(name);
+      if (!key) continue;
+      const entry: { fontSize: number; fontWeight?: number; fontFamily?: string } = { fontSize: parseInt(sizeMatch[1], 10) };
+      const weightMatch = value.match(/\b([1-9]00)\b/);
+      if (weightMatch) entry.fontWeight = parseInt(weightMatch[1], 10);
+      if (primaryFont) entry.fontFamily = primaryFont;
+      typography[key] = entry;
+    }
   }
 
   return typography;
@@ -169,33 +180,52 @@ function extractTypography(content: string): Record<string, { fontSize: number; 
  * Looks for spacing scales or base unit definitions.
  */
 function extractSpacing(content: string): Record<string, number> {
-  const section = getSection(content, 'Layout Principles') || getSection(content, 'Spacing');
+  const section = getSection(content, 'Spacing') || getSection(content, 'Layout Principles');
   if (!section) return {};
 
+  // Prefer explicit named tokens: `- md: 12px`, `| lg | 18px |`, `sm: 8`. Cap at
+  // 200px so a stray `max-width: 1200px` in a Layout section isn't mistaken for
+  // a spacing token.
   const spacing: Record<string, number> = {};
+  for (const [name, value] of extractTokenPairs(section)) {
+    const px = value.match(/^(\d+)\s*px$/) || value.match(/^(\d+)$/);
+    if (!px) continue;
+    const n = parseInt(px[1], 10);
+    const key = slugify(name);
+    if (key && n > 0 && n <= 200) spacing[key] = n;
+  }
+  if (Object.keys(spacing).length > 0) return spacing;
 
-  // Look for "Base unit: Npx"
+  // Otherwise synthesize a scale from an explicit base unit. Never fabricate a
+  // default when the doc states nothing — that silently injected wrong values.
   const baseMatch = section.match(/[Bb]ase\s+unit:\s*(\d+)px/);
-  const base = baseMatch ? parseInt(baseMatch[1], 10) : 8;
-
-  // Always generate a clean scale from the base unit — explicit scales in DESIGN.md
-  // are often too dense (every 2px) to map well to named tokens.
-  spacing.xs = Math.round(base * 0.5);
-  spacing.sm = base;
-  spacing.md = base * 2;
-  spacing.lg = base * 3;
-  spacing.xl = base * 4;
-  spacing['2xl'] = base * 6;
-
-  return spacing;
+  if (!baseMatch) return {};
+  const base = parseInt(baseMatch[1], 10);
+  return { xs: Math.round(base * 0.5), sm: base, md: base * 2, lg: base * 3, xl: base * 4, '2xl': base * 6 };
 }
 
 /**
  * Extract border radius from "Component Stylings" section.
  */
 function extractRadius(content: string): Record<string, number> {
-  const section = getSection(content, 'Component Styling') || getSection(content, 'Component');
+  const section = getSection(content, 'Border Radius') || getSection(content, 'Radius')
+    || getSection(content, 'Corner') || getSection(content, 'Component Styling') || getSection(content, 'Component');
   if (!section) return {};
+
+  // Named radius tokens take precedence: `- md: 8px`, `| full | 9999px |`,
+  // `Radius lg: 16px`. Only names that are (or reduce to) a scale name count, so
+  // a `- padding: 16px` in a Component Styling section isn't read as radius.
+  const named: Record<string, number> = {};
+  const SCALE = /^(xs|sm|md|lg|xl|2xl|full|pill|none)$/;
+  for (const [rawName, value] of extractTokenPairs(section)) {
+    const name = rawName.toLowerCase().replace(/border[-\s]?radius|corner\s*radius|radius|corner/g, '').trim();
+    if (!SCALE.test(name)) continue;
+    const key = name === 'pill' ? 'full' : name;
+    if (/9999|pill|full/.test(value) || name === 'pill') { named[key] = 9999; continue; }
+    const px = value.match(/(\d+)/);
+    if (px) named[key] = parseInt(px[1], 10);
+  }
+  if (Object.keys(named).length > 0) return named;
 
   const radius: Record<string, number> = {};
   const radiusValues: number[] = [];
@@ -476,4 +506,40 @@ function slugify(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+}
+
+/**
+ * Extract `name → value` pairs from a section, tolerating the formats a
+ * design doc commonly uses beyond framesmith's original `**Name** (`#hex`)`:
+ *   - list items:        `- Name: value`  /  `* Name: value`
+ *   - 2-column tables:   `| Name | value |`  (separator rows skipped)
+ *   - key/value lines:   `**Name**: value`  /  `Name: value`
+ * Markdown emphasis and backticks are stripped. Returns raw `[name, value]`
+ * strings; callers filter by value type (color / px) so a section's prose
+ * lines that don't carry a token are ignored.
+ */
+function extractTokenPairs(section: string): Array<[string, string]> {
+  const pairs: Array<[string, string]> = [];
+  for (const raw of section.split('\n')) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith('|')) {
+      if (/^\|[\s:|-]+\|?\s*$/.test(line)) continue; // table separator row
+      const cells = line.split('|').map((c) => c.trim()).filter((c) => c.length > 0);
+      if (cells.length >= 2) pairs.push([stripInline(cells[0]), stripInline(cells[1])]);
+      continue;
+    }
+    const m = line.match(/^(?:[-*]\s*)?(?:\*\*)?([^:|]+?)(?:\*\*)?\s*[:=]\s*(.+)$/);
+    if (m) pairs.push([stripInline(m[1]), stripInline(m[2])]);
+  }
+  return pairs;
+}
+
+/** Strip surrounding markdown emphasis / backticks / wrapping parens from a
+ * cell. Only a *matched* `(…)` pair is removed, so the closing paren of an
+ * `rgba(…)` value survives. */
+function stripInline(s: string): string {
+  let v = s.trim().replace(/\*\*/g, '').replace(/`/g, '').trim();
+  if (v.startsWith('(') && v.endsWith(')')) v = v.slice(1, -1).trim();
+  return v;
 }

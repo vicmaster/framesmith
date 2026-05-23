@@ -853,7 +853,13 @@ server.tool(
 // --- import_design_md ---
 server.tool(
   'import_design_md',
-  `Import a DESIGN.md file as a design system preset. Parses the Google Stitch / awesome-design-md format and extracts colors, typography, spacing, border radius, and reusable component skeletons (button, card, badge) into a preset. After importing, use apply_preset to apply it to any canvas. Accepts either a file path or raw DESIGN.md content.`,
+  `Import a DESIGN.md file as a design system preset: extracts colors, typography, spacing, border radius, and reusable component skeletons (button, card, badge). After importing, use apply_preset to apply it to a canvas. Accepts a file path or raw content.
+
+Tokens are read from a heading section per category (heading matched loosely, e.g. "Colors" / "Color Palette", "Spacing", "Border Radius" / "Radius", "Typography"). Within a section each of these token formats is accepted:
+- list item — \`- name: value\`
+- table row — \`| name | value |\`
+- key/value — \`name: value\` or \`**name** (\`value\`)\`
+where value is a color (\`#hex\`, \`rgba(...)\`) for colors, \`Npx\` for spacing/radius, and \`Npx\` (optionally \`/ weight\`) for typography. Named spacing tokens (\`md: 12px\`) are honored verbatim; only when none are given AND a "Base unit: Npx" is stated is a scale synthesized — nothing is fabricated otherwise. Radius accepts scale names (sm/md/lg/xl/full/pill).`,
   {
     content: z.string().optional().describe('Raw DESIGN.md content. Provide this OR filePath.'),
     filePath: z.string().optional().describe('Absolute path to a DESIGN.md file. Provide this OR content.'),
