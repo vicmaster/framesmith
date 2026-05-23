@@ -94,7 +94,6 @@ I(row, {type: "frame", width: 200, height: 100, fill: "#22c55e", cornerRadius: 8
   `, canvas);
 
   const resolved = resolveVariables(canvas.root, canvas.variables);
-  const html = renderToHtml(resolved, 1440, 900, canvas);
 
   const breakpoints = [
     { label: 'mobile', width: 390, height: 844 },
@@ -102,7 +101,9 @@ I(row, {type: "frame", width: 200, height: 100, fill: "#22c55e", cornerRadius: 8
     { label: 'desktop', width: 1440, height: 900 },
   ];
 
-  const results = await takeResponsiveScreenshots(html, breakpoints);
+  // Per-breakpoint render callback — matches the screenshot_responsive handler's
+  // signature (true reflow: the body scaffold matches each viewport).
+  const results = await takeResponsiveScreenshots((bp) => renderToHtml(resolved, bp.width, bp.height, canvas), breakpoints);
   assert(results.length === 3, 'Got 3 responsive screenshots');
   assert(results[0].label === 'mobile', 'First is mobile');
   assert(results[0].width === 390, 'Mobile width is 390');
