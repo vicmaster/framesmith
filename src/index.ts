@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
-import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome } from './repo-store.js';
+import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog } from './repo-store.js';
 import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
@@ -733,6 +733,10 @@ server.tool(
     try {
       const existingColors = new Set(Object.keys(getCanvasTokens(canvas).colors ?? {}));
       const result = applyStructure(canvas, structure, { replace, existingColors });
+      // Record provenance in the per-project build log (feeds the diversification
+      // signal). applyStructure stamped canvas.metadata.provenance just above.
+      const prov = canvas.metadata?.provenance;
+      if (prov) appendBuildLog(canvas.projectId, { ...prov, canvasId: canvas.id, canvasName: canvas.name });
       touchCanvas(canvasId);
       return { content: [{ type: 'text', text: JSON.stringify({
         ...result,
@@ -768,6 +772,15 @@ server.tool(
         components.push(key);
       }
     }
+
+    // Record the preset in the canvas provenance stamp + per-project build log.
+    // Merges onto any existing structure provenance; creates a minimal entry if
+    // the preset lands on a hand-built canvas with no prior provenance (A-T3).
+    canvas.metadata = {
+      ...canvas.metadata,
+      provenance: { ...canvas.metadata?.provenance, preset, at: new Date().toISOString() },
+    };
+    recordPresetInBuildLog(canvas.projectId, canvas.id, canvas.name, preset);
 
     touchCanvas(canvasId);
     return { content: [{ type: 'text', text: JSON.stringify({ applied: preset, variables: result, components }, null, 2) }] };

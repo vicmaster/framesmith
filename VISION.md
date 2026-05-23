@@ -327,9 +327,9 @@ Authoring intent: structures are scene-graph data, not prompt text — the agent
 - [x] Layout scaffold library — named page structures (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue) as partial scene trees with labeled placeholder children; distinct from color/token presets _(Slice A)_
 - [x] `list_structures` / `apply_structure` tools — agent picks a structure, gets a filled-in skeleton to populate, then renders + verifies it _(Slice A)_
 - [x] Structure taxonomy — each scaffold tagged on independent axes (heroTreatment, density, rhythm, alignment) so "differs from last" is computable, not a vibe _(Slice A)_
-- [ ] Per-project build log — record structure + preset + key axes for each canvas authored under a project _(Slice B)_
+- [x] Per-project build log — record structure + preset + key axes for each canvas authored under a project; dual-backend (global `~/.framesmith/build-logs.json` keyed by project, repo-bound `.framesmith/<project>/build-log.json`) _(Slice B)_
 - [ ] Diversification signal — on `canvas_create`, surface the last N log entries and steer the agent to differ on ≥ 1 axis from recent work _(Slice C)_
-- [~] Provenance stamp — canvas metadata records which structure / preset / seed produced it (stamp shipped in Slice A; feeds the log in Slice B; surfaced in the viewer in Slice C)
+- [~] Provenance stamp — canvas metadata records which structure / preset / seed produced it (stamp shipped in Slice A; `apply_preset` now extends it + feeds the build log in Slice B; surfaced in the viewer in Slice C)
 
 ### Phase 12 — Cliché & craft guardrails (v1.2)
 

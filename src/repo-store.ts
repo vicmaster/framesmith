@@ -21,7 +21,7 @@
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, renameSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { homedir } from 'node:os';
-import type { Canvas, DesignVariables } from './types.js';
+import type { Canvas, DesignVariables, BuildLogEntry } from './types.js';
 import { externalizeAssets, rehydrateAssets } from './assets.js';
 
 export const REPO_DIR_NAME = '.framesmith';
@@ -417,4 +417,106 @@ export function deleteCanvasFileAt(absFile: string): void {
   try {
     if (existsSync(absFile)) unlinkSync(absFile);
   } catch {}
+}
+
+// --- Build log (Phase 11) ---
+// A per-project log of provenance entries (which structure / preset / axes
+// produced each canvas). Routed by the active backend exactly like canvases:
+//   repo-bound → `.framesmith/<projectDir>/build-log.json` — per-project, lives
+//                beside the project's canvas files and is git-committed.
+//   global     → `~/.framesmith/build-logs.json` — a single file keyed by
+//                projectId (the global store is flat, with no per-project subdirs;
+//                matches the `workspaces.json` / `projects.json` index convention).
+// Written via `stableStringify` so the committed repo log diffs cleanly and
+// branch merges stay additive (entries appended in order). The diversification
+// signal (Slice C) reads the last N entries to steer the next canvas.
+
+const BUILD_LOG_FILE = 'build-log.json';        // repo: one per project subdir
+const GLOBAL_BUILD_LOGS_FILE = 'build-logs.json'; // global: single keyed file
+
+function globalBuildLogsPath(): string {
+  return join(dataDir(), GLOBAL_BUILD_LOGS_FILE);
+}
+
+/** The build-log file path for a project in the repo backend. Falls back to the
+ * `unsorted` subdir (mirroring `writeCanvasToDir`) when a project's dir isn't
+ * registered, so read and write always agree on the location. */
+function repoBuildLogPath(projectId: string): string {
+  if (backend.kind !== 'repo') throw new Error('repoBuildLogPath() called while not repo-bound');
+  const projectDir = projectDirById.get(projectId) ?? 'unsorted';
+  return join(backend.dir, projectDir, BUILD_LOG_FILE);
+}
+
+/** Every build-log entry for a project, in build order (empty if none yet). */
+export function readBuildLog(projectId: string): BuildLogEntry[] {
+  if (backend.kind === 'repo') {
+    const p = repoBuildLogPath(projectId);
+    if (!existsSync(p)) return [];
+    try {
+      const parsed = JSON.parse(readFileSync(p, 'utf-8'));
+      return Array.isArray(parsed) ? (parsed as BuildLogEntry[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  const p = globalBuildLogsPath();
+  if (!existsSync(p)) return [];
+  try {
+    const all = JSON.parse(readFileSync(p, 'utf-8')) as Record<string, BuildLogEntry[]>;
+    const entries = all?.[projectId];
+    return Array.isArray(entries) ? entries : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Overwrite a project's build log (the routed write behind append + update). */
+function writeBuildLog(projectId: string, entries: BuildLogEntry[]): void {
+  try {
+    if (backend.kind === 'repo') {
+      const p = repoBuildLogPath(projectId);
+      mkdirSync(dirname(p), { recursive: true });
+      writeAtomic(p, stableStringify(entries));
+      return;
+    }
+    const p = globalBuildLogsPath();
+    let all: Record<string, BuildLogEntry[]> = {};
+    if (existsSync(p)) {
+      try {
+        all = JSON.parse(readFileSync(p, 'utf-8')) as Record<string, BuildLogEntry[]>;
+      } catch {
+        all = {};
+      }
+    }
+    all[projectId] = entries;
+    mkdirSync(dataDir(), { recursive: true });
+    writeAtomic(p, stableStringify(all));
+  } catch (err) {
+    process.stderr.write(`Warning: could not write build log: ${(err as Error).message}\n`);
+  }
+}
+
+/** Append a provenance entry to a project's build log. */
+export function appendBuildLog(projectId: string, entry: BuildLogEntry): void {
+  writeBuildLog(projectId, [...readBuildLog(projectId), entry]);
+}
+
+/** Record a preset application in the build log: update the `preset` field on the
+ * most-recent entry for `canvasId`, or append a minimal entry if the canvas has
+ * none yet (A-T3 — a preset on a hand-built canvas is still logged, never dropped). */
+export function recordPresetInBuildLog(
+  projectId: string,
+  canvasId: string,
+  canvasName: string,
+  preset: string,
+): void {
+  const log = readBuildLog(projectId);
+  for (let i = log.length - 1; i >= 0; i--) {
+    if (log[i].canvasId === canvasId) {
+      log[i] = { ...log[i], preset, at: new Date().toISOString() };
+      writeBuildLog(projectId, log);
+      return;
+    }
+  }
+  appendBuildLog(projectId, { canvasId, canvasName, preset, at: new Date().toISOString() });
 }
