@@ -122,6 +122,8 @@ Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitl
 | `name` | string? | Canvas name |
 | `projectId` | string? | Target project. Defaults to the built-in Untitled project. See `project_list`. |
 
+The response also carries a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
+
 ### `canvas_list`
 
 List canvases. Excludes archived canvases by default.
@@ -318,7 +320,7 @@ List available style guide presets. No params. Returns preset names and descript
 
 ### `apply_preset`
 
-Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables, and copies in any reusable components (`button`, `card`, `badge`) the preset defines so they can be instanced.
+Apply a style guide preset to a canvas. Merges preset design tokens into the canvas variables, and copies in any reusable components (`button`, `card`, `badge`) the preset defines so they can be instanced. The preset is also recorded in the canvas provenance + per-project build log.
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -327,13 +329,19 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 
 ### `list_structures`
 
-List available layout structures — named page scaffolds you stamp onto a canvas and then populate. No params. Returns each structure's name, description, and taxonomy axes. Distinct from presets: structures define **layout skeleton**, presets define **color/token theme** — they compose.
+List available layout structures — named page scaffolds you stamp onto a canvas and then populate. Returns each structure's name, description, and taxonomy axes. Distinct from presets: structures define **layout skeleton**, presets define **color/token theme** — they compose.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `projectId` | string? | If given, also return a `diversification` signal for the project (recently-built structures + a hint to differ on ≥ 1 axis), so you pick a shape that contrasts with recent work. Omit it to get just the structure list. |
 
 Built-in: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout.
 
 ### `apply_structure`
 
 Stamp a layout structure onto a canvas: inserts the scaffold of labeled placeholder nodes under the canvas root, records provenance, and returns the placeholder node IDs to populate. Seeds neutral default colors so the scaffold renders even before a preset is applied. Populate the placeholders with `batch_design` `U` ops, then `screenshot` to verify.
+
+The chosen structure + axes are stamped onto the canvas (`metadata.provenance`) and appended to a **per-project build log**, which feeds the `diversification` signal on `canvas_create` / `list_structures`. Provenance is shown on the canvas's viewer detail page.
 
 | Param | Type | Description |
 |-------|------|-------------|
