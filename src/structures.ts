@@ -1,4 +1,4 @@
-import type { Canvas, SceneNode, Structure, StructureAxes } from './types.js';
+import type { BuildLogEntry, Canvas, SceneNode, Structure, StructureAxes } from './types.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -612,5 +612,68 @@ export function applyStructure(
     insertedNodeIds: inserted.map((n) => n.id),
     placeholders,
     seededColors: seededColors.sort(),
+  };
+}
+
+// ── diversification signal ─────────────────────────────────────────────────
+
+/** The four taxonomy axes, in display order. */
+const AXIS_KEYS: (keyof StructureAxes)[] = ['heroTreatment', 'density', 'rhythm', 'alignment'];
+
+export interface DiversificationHint {
+  /** The build-log entries this hint was computed from (newest first). */
+  recent: BuildLogEntry[];
+  /** Axes where recent structured canvases converged on a single value (the
+   * agent is repeating itself here). Empty when recent work already varies. */
+  repeatedAxes: (keyof StructureAxes)[];
+  /** One-line advisory steer for the next canvas — never blocking (C5). */
+  suggestion: string;
+}
+
+/** Advisory anti-sameness signal: tally taxonomy axis values across the most
+ * recent structured canvases in a project and recommend differing on >= 1 axis.
+ * Pure and total — entries without `axes` (preset-only / hand-built, A-T3) are
+ * ignored, and an empty/short history yields an open "pick freely" hint rather
+ * than a false "you're repeating". The caller decides how many entries to pass
+ * (N = 5 per FR-7); this just tallies whatever it's given (analyze C-A6). */
+export function computeDiversificationHint(recent: BuildLogEntry[]): DiversificationHint {
+  const structured = recent.filter((e) => e.axes);
+  if (structured.length === 0) {
+    return {
+      recent,
+      repeatedAxes: [],
+      suggestion: 'No recent structured canvases in this project — pick any structure to set the direction.',
+    };
+  }
+
+  const repeatedAxes: (keyof StructureAxes)[] = [];
+  const repeats: string[] = [];
+  for (const axis of AXIS_KEYS) {
+    const counts = new Map<string, number>();
+    for (const e of structured) {
+      const v = e.axes?.[axis];
+      if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    let topVal = '';
+    let topCount = 0;
+    for (const [v, c] of counts) if (c > topCount) { topVal = v; topCount = c; }
+    if (topCount >= 2) {
+      repeatedAxes.push(axis);
+      repeats.push(`${axis}=${topVal}`);
+    }
+  }
+
+  if (repeatedAxes.length === 0) {
+    return {
+      recent,
+      repeatedAxes,
+      suggestion: 'Recent canvases already vary across the taxonomy axes — keep the variety going.',
+    };
+  }
+
+  return {
+    recent,
+    repeatedAxes,
+    suggestion: `Recent canvases in this project repeat ${repeats.join(', ')}. Prefer a structure that differs on at least one of: ${repeatedAxes.join(', ')}.`,
   };
 }

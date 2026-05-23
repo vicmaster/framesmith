@@ -9,14 +9,14 @@ import { z } from 'zod';
 import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
-import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog } from './repo-store.js';
+import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
 import { bindRepo } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
-import { listStructures, applyStructure } from './structures.js';
+import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
@@ -30,6 +30,15 @@ const server = new McpServer({
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
 
+/** Phase 11 — the advisory diversification signal for a project: the last 5
+ * build-log entries (newest first) plus a "differ on >= 1 axis" hint. Surfaced
+ * on canvas_create and list_structures so the agent varies page shape instead of
+ * defaulting to the same layout. Never throws (readBuildLog returns [] on error). */
+function diversificationFor(projectId: string) {
+  const recent = readBuildLog(projectId).slice(-5).reverse();
+  return computeDiversificationHint(recent);
+}
+
 server.resource(
   'guidelines',
   'framesmith://guidelines',
@@ -42,7 +51,7 @@ server.resource(
 // --- canvas_create ---
 server.tool(
   'canvas_create',
-  'Create a new design canvas. Returns the canvas ID, root node ID, project assignment, and viewer URL. Always share the viewer URL with the user so they can see the design live in their browser. If `projectId` is omitted, the canvas lands in the default Untitled project.',
+  'Create a new design canvas. Returns the canvas ID, root node ID, project assignment, viewer URL, and a `diversification` signal — the recently-built structures in this project plus a hint to differ on at least one taxonomy axis, so successive canvases don\'t converge on the same layout. Always share the viewer URL with the user so they can see the design live in their browser. If `projectId` is omitted, the canvas lands in the default Untitled project.',
   {
     name: z.string().optional().describe('Name for the canvas'),
     projectId: z.string().optional().describe('Project to create the canvas in. Defaults to the built-in Untitled project. Use project_list to see available projects.'),
@@ -64,6 +73,7 @@ server.tool(
             projectId: canvas.projectId,
             viewerUrl: viewerUrl ? `${viewerUrl}/canvas/${canvas.id}` : null,
             galleryUrl: viewerUrl,
+            diversification: diversificationFor(canvas.projectId),
           }, null, 2),
         },
       ],
@@ -710,10 +720,19 @@ server.tool(
 // --- list_structures ---
 server.tool(
   'list_structures',
-  'List available layout structures — named page scaffolds (e.g. marquee-hero, bento-grid) you stamp onto a canvas and then populate. Each is tagged on four taxonomy axes (heroTreatment, density, rhythm, alignment) so you can deliberately vary page shape rather than defaulting to the same layout. Distinct from presets: structures define layout skeleton, presets define color/token theme. Apply one with apply_structure, then screenshot and verify before populating.',
-  {},
-  async () => {
-    return { content: [{ type: 'text', text: JSON.stringify(listStructures(), null, 2) }] };
+  'List available layout structures — named page scaffolds (e.g. marquee-hero, bento-grid) you stamp onto a canvas and then populate. Each is tagged on four taxonomy axes (heroTreatment, density, rhythm, alignment) so you can deliberately vary page shape rather than defaulting to the same layout. Distinct from presets: structures define layout skeleton, presets define color/token theme. Pass projectId to also get a diversification signal (recently-built structures + a hint to differ) so you pick a shape that contrasts with recent work. Apply one with apply_structure, then screenshot and verify before populating.',
+  {
+    projectId: z.string().optional().describe('If given, also return a diversification signal for this project: the recently-built structures and a hint to differ on >= 1 taxonomy axis. Use project_list to see projects.'),
+  },
+  async ({ projectId }) => {
+    const structures = listStructures();
+    if (!projectId) {
+      return { content: [{ type: 'text', text: JSON.stringify(structures, null, 2) }] };
+    }
+    if (!getProject(projectId)) {
+      return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see available projects.` }], isError: true };
+    }
+    return { content: [{ type: 'text', text: JSON.stringify({ structures, diversification: diversificationFor(projectId) }, null, 2) }] };
   }
 );
 
