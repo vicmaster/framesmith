@@ -10,7 +10,7 @@ import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersi
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
-import { bindRepo } from './bind.js';
+import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
@@ -40,8 +40,7 @@ Design tokens are a layered system (workspace > project > canvas). Reference the
 Core loop: design at one target width (referencing $tokens) → screenshot → review → iterate → canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing/contrast fixes.
 
 Gotchas (current sharp edges):
-- Use STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]) — passing a CSS string like "linear-gradient(...)" or "0 1px 2px rgba(...)" crashes screenshot.
-- canvas_move on a bound repo updates state but does not yet relocate the on-disk JSON; the target project may render empty until fixed.
+- Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
 - import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.
 - apply_preset may overwrite a canvas's spacing tokens with the preset's scale — re-check tokens after applying.`;
 
@@ -51,6 +50,24 @@ const server = new McpServer({
 }, {
   instructions: INSTRUCTIONS,
 });
+
+/** Structured workflow + gotcha lists returned by the `init` tool. Kept in step
+ * with the prose in INSTRUCTIONS so an agent gets the same orientation whether
+ * it reads the connect-time instructions or calls init. */
+const WORKFLOW_CHEATSHEET = [
+  'Read the framesmith://guidelines resource before drawing.',
+  'Author at one target width; reference tokens with $name (e.g. fill: "$surface").',
+  'screenshot → review the render → iterate.',
+  'canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing / contrast fixes.',
+  'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
+];
+
+const GOTCHAS = [
+  'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
+  'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
+  "apply_preset may overwrite a canvas's spacing tokens with the preset's scale — re-check tokens after applying.",
+  'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
+];
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
 
@@ -1004,6 +1021,41 @@ server.tool(
           projectsMigrated: result.projects,
           canvasesMigrated: result.migrated,
           note: 'Repo is now the source of truth. Commit the .framesmith/ directory to share these designs.',
+        }, null, 2),
+      }],
+    };
+  }
+);
+
+// --- init (Phase 15 — agent onboarding) ---
+server.tool(
+  'init',
+  "One-call onboarding — safe to run first thing every session (idempotent). Binds the current repo if it isn't already (so canvases live as checked-in JSON under .framesmith/), ensures the convention projects exist (default: a Foundations style-guide project + a UI catch-all), and returns the LIVE state the rest of the session needs: resolved workspace + project IDs, the on-disk layout, a workflow cheatsheet, the current gotchas, and the guidelines resource URI. Binding re-keys IDs, so the IDs this returns are the ones to use — don't cache pre-bind IDs. `projects` names the projects to ensure exist (default when omitted: Foundations + UI); existing projects are never removed, so it's safe for adding feature/area projects like Onboarding or Settings. Does not seed design tokens — set those at the workspace layer with workspace_set_design_system.",
+  {
+    dir: z.string().optional().describe('Directory to bind / detect. Defaults to the nearest git repo root above the server working directory.'),
+    workspaceName: z.string().optional().describe('Name for the workspace when binding fresh. Defaults to the repo folder name.'),
+    projects: z.array(z.string()).optional().describe('Convention project names to ensure exist. Defaults to ["Foundations", "UI"].'),
+  },
+  async ({ dir, workspaceName, projects }) => {
+    const result = initWorkspace({ dir, workspaceName, projects });
+    if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+    return {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          bound: true,
+          workspace: result.workspace,
+          projects: result.projects,
+          projectsCreatedThisCall: result.projectsCreated,
+          designSystem: {
+            layer: 'workspace',
+            tokenCount: result.designSystemTokenCount,
+            note: 'Tokens live at the workspace layer (set via workspace_set_design_system) and inherit down to projects/canvases; the Foundations project is just a canvas that visualizes them.',
+          },
+          workflow: WORKFLOW_CHEATSHEET,
+          gotchas: GOTCHAS,
+          guidelinesResource: 'framesmith://guidelines',
+          viewerUrl: getViewerUrl(),
         }, null, 2),
       }],
     };

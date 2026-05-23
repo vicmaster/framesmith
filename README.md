@@ -113,6 +113,18 @@ npm run build
 
 ## Tools
 
+### `init`
+
+One-call onboarding — **the recommended first call each session**, and safe to run repeatedly (idempotent). Binds the current repo if it isn't already (canvases become checked-in JSON under `.framesmith/`), ensures the convention projects exist, and returns the live state you need to start working.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `dir` | string? | Directory to bind / detect. Defaults to the nearest git repo root above the server working directory. |
+| `workspaceName` | string? | Name for the workspace when binding fresh. Defaults to the repo folder name. |
+| `projects` | string[]? | Projects to ensure exist (default: `["Foundations", "UI"]`). Existing projects are never removed, so it's safe for adding feature/area projects like `Onboarding`. |
+
+Returns the bound workspace + project IDs (binding **re-keys** IDs to `repo-*` — use the ones `init` returns), the on-disk layout, the workspace-layer token count, a workflow cheatsheet, the current gotchas, the `framesmith://guidelines` URI, and the viewer URL. It does **not** seed design tokens — set those at the workspace layer with `workspace_set_design_system`. The default `Foundations` project is just a canvas that visualizes the workspace tokens (which is where the design system actually lives).
+
 ### `canvas_create`
 
 Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitled` project of the `Personal` workspace.
