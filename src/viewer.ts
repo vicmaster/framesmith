@@ -689,6 +689,19 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
   const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
   const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
 
+  // Provenance chip (Phase 11) — structure · preset · alignment/density. Shows
+  // only the parts that exist; hidden entirely when a canvas has no provenance.
+  const prov = canvas.metadata?.provenance;
+  let provChip = '';
+  if (prov) {
+    const parts: string[] = [];
+    if (prov.structure) parts.push(esc(prov.structure));
+    if (prov.preset) parts.push(esc(prov.preset));
+    const ax = prov.axes ? [prov.axes.alignment, prov.axes.density].filter(Boolean).join('/') : '';
+    if (ax) parts.push(esc(ax));
+    if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / preset / axes that produced this canvas"><b>◆</b>${parts.join(' · ')}</span>`;
+  }
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -708,6 +721,10 @@ ${FAVICON_HTML}
   .toolbar a:hover { color: var(--text-primary); }
   .toolbar .title { font-size: 15px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
   .toolbar .dim { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  /* Provenance chip — the structure / preset / axes that produced this canvas
+   * (Phase 11). Flat + muted, with a single small accent mark; no glow. */
+  .toolbar .prov { font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
+  .toolbar .prov b { color: var(--accent-soft); font-weight: 700; margin-right: 6px; }
   .toolbar .spacer { flex: 1; }
   .toolbar .btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
   .toolbar .btn:hover { background: var(--surface-hover); color: var(--text-primary); }
@@ -735,7 +752,7 @@ ${FAVICON_HTML}
     .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 12px; gap: 8px; }
     .toolbar a { font-size: 13px; }
     .toolbar .title { font-size: 14px; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .toolbar .dim { display: none; }
+    .toolbar .dim, .toolbar .prov { display: none; }
     /* Dividers don't make sense when clusters wrap to separate rows — hide. */
     .toolbar-divider { display: none; }
     /* Spacer becomes a full-width line break so the buttons drop to a new row
@@ -758,6 +775,7 @@ ${FAVICON_HTML}
     <a href="/project/${canvas.projectId}">&larr; Back</a>
     <span class="title">${esc(canvas.name)}</span>
     <span class="dim">${w} x ${h}</span>
+    ${provChip}
     <div class="spacer"></div>
     <div class="toolbar-cluster">
       <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
