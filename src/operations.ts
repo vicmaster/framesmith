@@ -4,6 +4,10 @@ import { insertNode, updateNode, deleteNode, copyNode, moveNode, replaceNode, fi
 interface OperationResult {
   ok: boolean;
   nodeId?: string;
+  /** The variable the op bound its created node to (e.g. `header` in
+   * `header=I(...)`), so callers can map bound names back to node IDs without
+   * counting result positions. Only set by node-creating ops (I / C / R). */
+  binding?: string;
   error?: string;
 }
 
@@ -209,7 +213,7 @@ function executeLine(root: SceneNode, line: string, bindings: Map<string, string
         canvas.components[node.id] = node;
       }
       if (bindingName) bindings.set(bindingName, node.id);
-      return { ok: true, nodeId: node.id };
+      return { ok: true, nodeId: node.id, ...(bindingName ? { binding: bindingName } : {}) };
     }
 
     case 'U': {
@@ -234,7 +238,7 @@ function executeLine(root: SceneNode, line: string, bindings: Map<string, string
       const overrides = args.length > 2 ? parseJsonArg(args.slice(2).join(',')) : undefined;
       const node = copyNode(root, sourceId, parentId, overrides as Partial<SceneNode> | undefined);
       if (bindingName) bindings.set(bindingName, node.id);
-      return { ok: true, nodeId: node.id };
+      return { ok: true, nodeId: node.id, ...(bindingName ? { binding: bindingName } : {}) };
     }
 
     case 'M': {
@@ -252,7 +256,7 @@ function executeLine(root: SceneNode, line: string, bindings: Map<string, string
       const props = args.length > 1 ? parseJsonArg(args.slice(1).join(',')) : {};
       const node = replaceNode(root, nodeId, props as Partial<SceneNode>);
       if (bindingName) bindings.set(bindingName, node.id);
-      return { ok: true, nodeId: node.id };
+      return { ok: true, nodeId: node.id, ...(bindingName ? { binding: bindingName } : {}) };
     }
 
     default:
