@@ -311,3 +311,12 @@ export function getCanvasTokens(canvas: Canvas): DesignVariables {
   const workspace = project ? workspaces.get(project.workspaceId) : undefined;
   return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
 }
+
+/** The tokens a canvas inherits from the workspace + project layers, *excluding*
+ * its own variables. Used by apply_preset to detect (and preserve) design-system
+ * values a preset would otherwise silently override at the canvas layer. */
+export function getInheritedTokens(canvas: Canvas): DesignVariables {
+  const project = projects.get(canvas.projectId);
+  const workspace = project ? workspaces.get(project.workspaceId) : undefined;
+  return mergeDesignTokens(workspace?.designSystem, project?.designSystem);
+}
