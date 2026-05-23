@@ -25,7 +25,7 @@ import type { SceneNode } from './types.js';
 
 const server = new McpServer({
   name: 'framesmith',
-  version: '1.0.0',
+  version: '1.1.0',
 });
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
