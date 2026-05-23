@@ -1,6 +1,45 @@
 import type { Canvas, FontFace, SceneNode } from './types.js';
 import { getIconSvg } from './icons.js';
 
+/** Build a `background: …` declaration from a node's `gradient`.
+ *
+ * The documented form is structured (`{ type, angle?, stops: [...] }`), but
+ * agents frequently pass a raw CSS string (e.g. `"linear-gradient(...)"`).
+ * Previously that crashed `screenshot` on `g.stops.map` — here we accept the
+ * string as-is and treat a structured value missing `stops` as absent (the
+ * caller falls back to `fill`) rather than throwing. Returns `null` when there
+ * is nothing renderable. Typed `unknown` because the runtime value may not
+ * match the `SceneNode.gradient` declared type. */
+function gradientBackgroundCss(g: unknown): string | null {
+  if (typeof g === 'string') {
+    const v = g.trim();
+    return v ? `background: ${v}` : null;
+  }
+  if (!g || typeof g !== 'object') return null;
+  const grad = g as { type?: string; angle?: number; stops?: Array<{ color: string; position?: number }> };
+  if (!Array.isArray(grad.stops) || grad.stops.length === 0) return null;
+  const stops = grad.stops.map((st) => (st.position !== undefined ? `${st.color} ${st.position}%` : st.color)).join(', ');
+  return grad.type === 'linear'
+    ? `background: linear-gradient(${grad.angle ?? 180}deg, ${stops})`
+    : `background: radial-gradient(${stops})`;
+}
+
+/** Build a `box-shadow` value from a node's `shadows` (structured array) /
+ * `shadow` (CSS string). Like gradients, a CSS string handed to `shadows`
+ * (instead of the `[{ x, y, blur, color }]` form) previously crashed on
+ * `.map`; here it's accepted as a raw value. Returns `null` when neither field
+ * yields anything. */
+function boxShadowCss(shadows: unknown, shadow: unknown): string | null {
+  if (Array.isArray(shadows) && shadows.length > 0) {
+    return shadows
+      .map((sh) => `${sh.inset ? 'inset ' : ''}${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread ?? 0}px ${sh.color}`)
+      .join(', ');
+  }
+  if (typeof shadows === 'string' && shadows.trim()) return shadows.trim();
+  if (typeof shadow === 'string' && shadow.trim()) return shadow.trim();
+  return null;
+}
+
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
   const body = renderNode(root, canvas);
   const responsiveCss = buildRendererStylesheet(root, canvas);
@@ -156,13 +195,8 @@ function buildFontHead(canvas?: Canvas): { preconnect: string; fontFaceCss: stri
 }
 
 function rootBackgroundCss(root: SceneNode): string {
-  if (root.gradient) {
-    const g = root.gradient;
-    const stops = g.stops.map((st) => st.position !== undefined ? `${st.color} ${st.position}%` : st.color).join(', ');
-    return g.type === 'linear'
-      ? `background: linear-gradient(${g.angle ?? 180}deg, ${stops})`
-      : `background: radial-gradient(${stops})`;
-  }
+  const grad = gradientBackgroundCss(root.gradient);
+  if (grad) return grad;
   if (root.fill) return `background-color: ${root.fill}`;
   return '';
 }
@@ -303,14 +337,9 @@ function buildStyles(node: SceneNode): string {
   // in renderPathSvg) — skip the wrapper-level background/border so the path
   // isn't backed by a colored rectangle.
   const isPath = node.type === 'path';
-  if (node.gradient) {
-    const g = node.gradient;
-    const stops = g.stops.map((st) => st.position !== undefined ? `${st.color} ${st.position}%` : st.color).join(', ');
-    if (g.type === 'linear') {
-      s.push(`background: linear-gradient(${g.angle ?? 180}deg, ${stops})`);
-    } else {
-      s.push(`background: radial-gradient(${stops})`);
-    }
+  const gradCss = gradientBackgroundCss(node.gradient);
+  if (gradCss) {
+    s.push(gradCss);
   } else if (node.fill && !isPath) {
     s.push(`background-color: ${node.fill}`);
   }
@@ -324,14 +353,8 @@ function buildStyles(node: SceneNode): string {
   }
   if (node.opacity !== undefined) s.push(`opacity: ${node.opacity}`);
   if (node.overflow) s.push(`overflow: ${node.overflow}`);
-  if (node.shadows?.length) {
-    const shadowStr = node.shadows.map((sh) =>
-      `${sh.inset ? 'inset ' : ''}${sh.x}px ${sh.y}px ${sh.blur}px ${sh.spread ?? 0}px ${sh.color}`
-    ).join(', ');
-    s.push(`box-shadow: ${shadowStr}`);
-  } else if (node.shadow) {
-    s.push(`box-shadow: ${node.shadow}`);
-  }
+  const shadowCss = boxShadowCss(node.shadows, node.shadow);
+  if (shadowCss) s.push(`box-shadow: ${shadowCss}`);
   if (node.blur) s.push(`filter: blur(${node.blur}px)`);
 
   // Animation: emit shorthand only if the keyframe name is in the built-in
