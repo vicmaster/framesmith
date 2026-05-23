@@ -23,9 +23,33 @@ import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
 import type { SceneNode } from './types.js';
 
+/** Server `instructions` — sent in the MCP initialize response and loaded into
+ * the client's context on connect, so a fresh agent has framesmith's operating
+ * model with zero tool calls. Keep it tight: deep guidance lives in the
+ * framesmith://guidelines resource; this just orients + flags sharp edges. */
+const INSTRUCTIONS = `framesmith turns a scene graph into HTML/CSS and Puppeteer screenshots — a visual design canvas for AI agents.
+
+Read the **framesmith://guidelines** resource before drawing; it covers width strategies, responsive hints, and common patterns vs. anti-patterns.
+
+Organizing model — Workspace > Project > Canvas:
+- Canvases live in a project, projects in a workspace. A default "Personal > Untitled" always exists.
+- To scope work to a code repo, call **canvas_bind** once: it stores canvases as checked-in JSON under the repo's .framesmith/ and makes that the source of truth. Heads up — bind RE-KEYS every project/canvas ID to repo-* form, so pre-bind IDs stop resolving. Re-list (project_list / canvas_list) right after binding.
+
+Design tokens are a layered system (workspace > project > canvas). Reference them in node properties with $name (e.g. fill: "$surface"); set them with workspace_/project_/set_variables. Lower layers override higher ones — author tokens once at the workspace and inherit down.
+
+Core loop: design at one target width (referencing $tokens) → screenshot → review → iterate → canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing/contrast fixes.
+
+Gotchas (current sharp edges):
+- Use STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]) — passing a CSS string like "linear-gradient(...)" or "0 1px 2px rgba(...)" crashes screenshot.
+- canvas_move on a bound repo updates state but does not yet relocate the on-disk JSON; the target project may render empty until fixed.
+- import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.
+- apply_preset may overwrite a canvas's spacing tokens with the preset's scale — re-check tokens after applying.`;
+
 const server = new McpServer({
   name: 'framesmith',
   version: '1.1.0',
+}, {
+  instructions: INSTRUCTIONS,
 });
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
