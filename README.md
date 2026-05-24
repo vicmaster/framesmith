@@ -409,7 +409,8 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID to evaluate |
 | `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
-| `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`. Defaults to all. |
+| `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`, `cliche`. Defaults to all. |
+| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple). Defaults to the canvas's provenance preset if stamped. |
 
 **Categories and what they check**
 
@@ -420,6 +421,7 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 | `typography` | 20 | Type-scale ratios (1.15–1.75), font-family count, weight variation |
 | `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse |
 | `consistency` | 20 | Frames missing `layout`, inconsistent sibling padding, sibling overlap (detailed mode) |
+| `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos. Each issue carries a `tell` discriminator; all advisory (warning/info). Relaxable per `genre`. |
 
 **Return shape**
 
@@ -480,12 +482,14 @@ Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a
 |-------|------|-------------|
 | `canvasId` | string | Canvas to autofix |
 | `categories` | string[]? | Restrict to fixes from these categories (default: all) |
+| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple). Defaults to the canvas's provenance preset if stamped. |
 
 **What gets auto-fixed**
 
 - **Spacing** — off-scale `gap` or scalar `padding` snaps to the nearest scale value. Array `padding` is skipped (ambiguous which index).
 - **Consistency** — frames with multiple children but no `layout` get `layout: "vertical"`.
 - **Color** — recoverable WCAG contrast failures get `color: "#000000"` or `"#FFFFFF"`, whichever wins against the resolved background. Failures so bad that neither black nor white meets the threshold are not auto-fixed (the background also needs to change).
+- **Cliché** — a *known-default* purple/indigo accent (`#6366f1` and friends) written literally on a node swaps to a neutral accent; a dedicated fake-chrome strip (a row that is just traffic-light dots) gets a `D(...)` delete. Taste-dependent tells (gradient/glow overuse, the hanging header, fabricated copy) are reported by `canvas_evaluate` with a suggestion but carry **no** auto-fix op.
 
 **Return shape**
 

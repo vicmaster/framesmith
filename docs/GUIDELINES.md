@@ -129,6 +129,22 @@ set_fonts({
 - **`screenshot_responsive`** renders the same scene at mobile / tablet / desktop. Inspect all three; if `responsive` hints are set correctly the mobile layout will look right with no extra work.
 - **`snapshot_layout`** returns computed bounding boxes — useful for asserting alignment or detecting overflow programmatically.
 
+## Cliché & craft
+
+`canvas_evaluate` scores craft (contrast, scale, structure) **and** a `cliche` category — the visual tells that read as machine-made. The bar is "designers say *wow*," not "competent": flat color and restraint beat effects. Steer away from these *before* you draw; the evaluator is the safety net, not the plan.
+
+| Tell | What flags | Do this instead |
+|---|---|---|
+| **Default purple / indigo accent** | An accent (button, stroke, icon, accent text) in the indigo→violet band — especially the Tailwind defaults `#6366f1` / `#8b5cf6` / `#7c3aed` | Pick an accent that fits the brand — a considered blue, green, or warm hue. Set it once as a `$accent` token. |
+| **Gradient / glow overuse** | 3+ gradient nodes, or a colored glow/bloom shadow (large blur + a saturated or translucent-white color) | Flat `$surface` fills. Reserve a gradient for at most one deliberate focal moment; use a subtle near-black low-alpha shadow, not a halo. |
+| **Fake browser / OS chrome** | A row of ≥3 small circular dots (mac traffic lights) wrapping content | Frame the content directly. Skip the fake window — it adds nothing and dates the mockup. |
+| **Hanging eyebrow header** | A small eyebrow/tag *beside* a large heading in a horizontal row | Stack the eyebrow **above** the heading (`layout: "vertical"`, left-aligned). |
+| **Fabricated content** | Invented metrics / testimonials / brand logos in placeholder copy (`"99.9% uptime"`, `"— Jane Doe, CEO"`, `"TechCrunch"`) | Use a labeled placeholder until real data exists: `"Uptime — to confirm"` + a neutral block. Don't ship invented numbers. |
+
+- **`cliche` is advisory** — tells are `warning`/`info`, never a hard error; they dent the score, they don't block.
+- **`canvas_autofix` fixes the mechanical ones** — it swaps a *known-default* purple accent and deletes a fake-chrome strip. Gradient/glow, the hanging header, and fabricated copy carry a suggestion but no op (taste/judgment calls).
+- **Genre relaxes intentional tells** — pass `genre` (or stamp a preset via provenance) so a style that legitimately uses a tell isn't nagged. Today `genre: "material"` allows purple.
+
 ## Sharp edges
 
 A few operational details that aren't obvious from the tool schemas:
