@@ -8,8 +8,20 @@ import { computeLayout, type LayoutRect } from './screenshot.js';
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
 
+/** Phase 12 — discriminator for `cliche`-category issues so downstream code
+ * (autofix filtering, genre relax, the viewer) keys off a field instead of
+ * string-matching the message. Only set on `category: 'cliche'` issues. */
+export type ClicheTell =
+  | 'accent-hue'
+  | 'gradient-glow'
+  | 'fake-chrome'
+  | 'hanging-header'
+  | 'honest-content';
+
 export interface EvaluationIssue {
   category: string;
+  /** Present only on `cliche` issues — which machine-made tell fired. */
+  tell?: ClicheTell;
   severity: IssueSeverity;
   nodeId: string;
   nodeName?: string;
@@ -100,6 +112,36 @@ export function contrastRatio(fg: [number, number, number], bg: [number, number,
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Phase 12 — HSL conversion for hue-based tells (default purple/indigo accent,
+// chromatic-glow detection). `h` in [0,360), `s`/`l` in [0,1].
+export function rgbToHsl(rgb: [number, number, number]): { h: number; s: number; l: number } {
+  const [r, g, b] = rgb.map((c) => c / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) return { h: 0, s: 0, l };
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h: number;
+  if (max === r) h = ((g - b) / d) % 6;
+  else if (max === g) h = (b - r) / d + 2;
+  else h = (r - g) / d + 4;
+  h = Math.round(h * 60);
+  if (h < 0) h += 360;
+  return { h, s, l };
+}
+
+// Phase 12 — alpha channel for glow detection (a low-alpha colored shadow reads
+// as a bloom). Handles #RRGGBBAA and rgba(); everything else is opaque.
+export function parseAlpha(str: string): number {
+  if (!str || typeof str !== 'string') return 1;
+  const hex8 = str.match(/^#[0-9a-f]{6}([0-9a-f]{2})$/i);
+  if (hex8) return parseInt(hex8[1], 16) / 255;
+  const rgba = str.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/i);
+  if (rgba) return Math.max(0, Math.min(1, parseFloat(rgba[1])));
+  return 1;
 }
 
 // --- Tree walking ---
@@ -552,6 +594,342 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
   return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
 }
 
+// --- Phase 12: Cliché tells ---
+//
+// Mechanically detectable signals that mark a design as machine-made. Distinct
+// from the craft checks: those score *competence* (contrast, scale, structure);
+// these score *taste* — the recurring AI tells (default purple, gradient/glow,
+// fake browser chrome, the hanging eyebrow header, fabricated data). Advisory
+// by design (warning/info, never a hard error); genre can relax a gate.
+
+/** Genre (active preset / design system) → tells it relaxes because they're
+ * intentional in that style. Material Design is legitimately purple. */
+const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
+  material: ['accent-hue'],
+};
+
+/** Canonical unconfigured AI accents — Tailwind indigo/violet/purple defaults,
+ * lowercased. An exact match gets a mechanical autofix; a near-purple literal
+ * or a $token-resolved purple gets a suggestion only. */
+const DEFAULT_AI_ACCENTS = new Set([
+  '#6366f1', '#818cf8', '#4f46e5', // indigo 500 / 400 / 600
+  '#8b5cf6', '#7c3aed', '#a78bfa', // violet 500 / 600 / 400
+  '#a855f7', '#9333ea',            // purple 500 / 600
+]);
+/** Neutral intentional accent the autofix swaps a default purple to. */
+const RECOMMENDED_ACCENT = '#2563EB'; // blue-600
+
+/** Wordmarks that, in placeholder copy, read as a fabricated "as seen in" wall. */
+const BRAND_WORDMARKS = [
+  'techcrunch', 'forbes', 'the verge', 'wired', 'product hunt',
+  'google', 'microsoft', 'apple', 'amazon', 'meta', 'netflix', 'stripe',
+];
+
+function rgbToHex([r, g, b]: [number, number, number]): string {
+  return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('').toLowerCase();
+}
+
+// A hue in the indigo→violet→purple band with real saturation — the "AI purple"
+// tell. Floor 230 catches indigo-500 (#6366f1 ≈ h239); a considered blue like
+// #2563EB (≈ h221) or #3b82f6 (≈ h217) stays below it.
+function isPurpleHue(rgb: [number, number, number]): boolean {
+  const { h, s } = rgbToHsl(rgb);
+  return h >= 230 && h <= 290 && s >= 0.35;
+}
+
+interface ClicheCtx {
+  entries: NodeEntry[];          // resolved ($tokens → real values)
+  rawById: Map<string, SceneNode>; // raw node lookup (literal vs $token)
+  tokens: DesignVariables;
+  relaxed: Set<ClicheTell>;
+}
+
+// FR-2 / C4 — default purple/indigo accent. Flags accent usage (stroke, small-
+// element fill, text/icon color, accent token), not full-bleed backgrounds.
+function tellAccentHue(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('accent-hue')) return [];
+  const issues: EvaluationIssue[] = [];
+  const rootId = ctx.entries[0]?.node.id;
+
+  const isAccentFill = (node: SceneNode): boolean => {
+    if (node.id === rootId) return false; // page background, not an accent
+    if (node.type === 'ellipse' || node.type === 'rectangle' || node.icon) return true;
+    const w = node.width;
+    if (typeof w === 'number') return w < 600;        // big surface → background
+    if (typeof w === 'string') return false;           // "100%"/"50%" → section
+    return (node.children?.length ?? 0) <= 3;          // undefined width: leaf-ish = element
+  };
+
+  for (const { node } of ctx.entries) {
+    const raw = ctx.rawById.get(node.id);
+    const props: { prop: 'fill' | 'stroke' | 'color' | 'iconColor'; accent: boolean }[] = [
+      { prop: 'fill', accent: isAccentFill(node) },
+      { prop: 'stroke', accent: true },
+      { prop: 'color', accent: node.type === 'text' },
+      { prop: 'iconColor', accent: !!node.icon },
+    ];
+    for (const { prop, accent } of props) {
+      if (!accent) continue;
+      const resolved = node[prop];
+      if (typeof resolved !== 'string') continue;
+      const rgb = parseColor(resolved);
+      if (!rgb || !isPurpleHue(rgb)) continue;
+
+      const rawVal = raw?.[prop];
+      const fromToken = typeof rawVal === 'string' && rawVal.startsWith('$');
+      const hex = rgbToHex(rgb);
+      const issue: EvaluationIssue = {
+        category: 'cliche',
+        tell: 'accent-hue',
+        severity: 'warning',
+        nodeId: node.id,
+        nodeName: node.name,
+        message: `${prop} ${resolved} is a default-looking purple/indigo accent — the most common machine-made tell.`,
+        suggestion: fromToken
+          ? `This resolves from a $token; set an intentional accent via set_variables instead of the default purple.`
+          : `Pick an accent that fits the brand (a considered blue, green, or warm hue) instead of the default purple.`,
+      };
+      // Mechanical fix only for an exact unconfigured default written literally
+      // on the node — a $token-sourced purple is fixed at the token, not here.
+      if (!fromToken && DEFAULT_AI_ACCENTS.has(hex)) {
+        issue.fix = {
+          op: formatUpdateOp(node.id, { [prop]: RECOMMENDED_ACCENT }),
+          rationale: `Swap the default indigo ${hex} for a neutral accent ${RECOMMENDED_ACCENT}`,
+        };
+      }
+      issues.push(issue);
+    }
+  }
+
+  // Token-level default accent (defined but maybe unused) — suggest-only since
+  // tokens are changed via set_variables, not batch_design.
+  const accentTok = ctx.tokens.colors?.accent;
+  if (typeof accentTok === 'string') {
+    const rgb = parseColor(accentTok);
+    if (rgb && isPurpleHue(rgb) && !issues.some((i) => i.tell === 'accent-hue')) {
+      issues.push({
+        category: 'cliche',
+        tell: 'accent-hue',
+        severity: 'warning',
+        nodeId: rootId,
+        message: `The "accent" design token (${accentTok}) is a default-looking purple.`,
+        suggestion: `Set an intentional accent via set_variables / *_set_design_system.`,
+      });
+    }
+  }
+  return issues;
+}
+
+// FR-3 / C8 / C9 — gradient & glow/bloom overuse. Recognizes both the
+// structured forms and the CSS-string escape hatches the renderer accepts.
+function tellGradientGlow(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('gradient-glow')) return [];
+  const issues: EvaluationIssue[] = [];
+
+  const gradientNodes = ctx.entries.filter((e) => e.node.gradient != null);
+  const fillableCount = ctx.entries.filter((e) =>
+    ['frame', 'rectangle', 'ellipse', 'component'].includes(e.node.type),
+  ).length;
+  const overuseByRatio = fillableCount >= 4 && gradientNodes.length / fillableCount > 0.25;
+  if (gradientNodes.length > 2 || overuseByRatio) {
+    issues.push({
+      category: 'cliche',
+      tell: 'gradient-glow',
+      severity: 'warning',
+      nodeId: gradientNodes[0].node.id,
+      nodeName: gradientNodes[0].node.name,
+      message: `${gradientNodes.length} nodes use gradients — gradient overuse is a machine-made tell.`,
+      suggestion: `Prefer flat $surface fills; reserve a gradient for at most one deliberate focal moment.`,
+    });
+  }
+
+  // Glow / bloom: a big-blur, chromatic (or translucent-white) shadow.
+  const isGlow = (color: string, blur: number): boolean => {
+    if (blur < 24) return false;
+    const rgb = parseColor(color);
+    if (!rgb) return false;
+    const { s, l } = rgbToHsl(rgb);
+    if (s > 0.25) return true;                       // colored glow
+    if (l > 0.85 && parseAlpha(color) < 1) return true; // white bloom / halo
+    return false;
+  };
+  for (const { node } of ctx.entries) {
+    let glow = false;
+    if (Array.isArray(node.shadows)) {
+      glow = node.shadows.some((s) => isGlow(s.color, s.blur));
+    }
+    if (!glow && typeof node.shadow === 'string') {
+      // Best-effort on the CSS string: a large px blur + a chromatic color token.
+      const blurs = [...node.shadow.matchAll(/(\d+)px/g)].map((m) => +m[1]);
+      const colorM = node.shadow.match(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/i);
+      const blur = blurs.length >= 3 ? blurs[2] : Math.max(0, ...blurs);
+      if (colorM && blur >= 24) glow = isGlow(colorM[0], blur);
+    }
+    if (glow) {
+      issues.push({
+        category: 'cliche',
+        tell: 'gradient-glow',
+        severity: 'warning',
+        nodeId: node.id,
+        nodeName: node.name,
+        message: `"${node.name ?? node.id}" has a colored glow/bloom shadow — a halo tell.`,
+        suggestion: `Drop the colored glow; use a subtle neutral shadow (low blur, near-black, low alpha) or none.`,
+      });
+    }
+  }
+  return issues;
+}
+
+// FR-4 / C6 — fake browser/phone/IDE chrome: a row of ≥3 small circular dots
+// (mac traffic lights). Autofix deletes the chrome strip when the dots are the
+// whole row; otherwise suggest-only (deleting a shared parent is unsafe).
+const MAC_TRAFFIC_LIGHTS = new Set(['#ff5f56', '#ffbd2e', '#27c93f', '#febc2e', '#28c840', '#ff5f57']);
+function tellFakeChrome(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('fake-chrome')) return [];
+  const issues: EvaluationIssue[] = [];
+
+  const isSmallCircle = (n: SceneNode): boolean => {
+    const w = typeof n.width === 'number' ? n.width : Infinity;
+    if (w > 20) return false;
+    if (n.type === 'ellipse') return true;
+    if ((n.type === 'frame' || n.type === 'rectangle') && typeof n.cornerRadius === 'number') {
+      return n.cornerRadius >= w / 2; // circular
+    }
+    return false;
+  };
+
+  for (const { node } of ctx.entries) {
+    if (!node.children || node.children.length < 3) continue;
+    const dots = node.children.filter(isSmallCircle);
+    if (dots.length < 3) continue;
+    const macColored = dots.filter((d) => {
+      const rgb = d.fill ? parseColor(d.fill) : null;
+      return rgb && MAC_TRAFFIC_LIGHTS.has(rgbToHex(rgb));
+    }).length;
+    const dotsAreTheRow = dots.length >= node.children.length - 1; // strip, not a card
+    const issue: EvaluationIssue = {
+      category: 'cliche',
+      tell: 'fake-chrome',
+      severity: 'warning',
+      nodeId: node.id,
+      nodeName: node.name,
+      message: `"${node.name ?? node.id}" looks like fake window chrome — ${dots.length} small dots${macColored >= 2 ? ' in traffic-light colors' : ''}. Fake browser/OS chrome is a machine-made tell.`,
+      suggestion: `Drop the fake chrome; frame the content directly or use an honest, minimal container.`,
+    };
+    if (dotsAreTheRow) {
+      issue.fix = {
+        op: `D("${node.id}")`,
+        rationale: `Delete the fake-chrome strip "${node.name ?? node.id}"`,
+      };
+    }
+    issues.push(issue);
+  }
+  return issues;
+}
+
+// FR-5 / C7 — the hanging "tag-left / heading-right" header: a small eyebrow
+// beside a big heading, not vertically reconciled. Info + suggestion only.
+function tellHangingHeader(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('hanging-header')) return [];
+  const issues: EvaluationIssue[] = [];
+
+  const isEyebrow = (n: SceneNode): boolean => {
+    if (n.type === 'text') return (n.fontSize ?? 16) <= 14;
+    if (n.type === 'frame') {
+      const w = typeof n.width === 'number' ? n.width : (n.width === 'fit-content' ? 0 : Infinity);
+      const oneShortText = (n.children?.length ?? 0) === 1 && n.children![0].type === 'text';
+      return w <= 200 && oneShortText && typeof n.cornerRadius === 'number';
+    }
+    return false;
+  };
+  const isHeading = (n: SceneNode): boolean => n.type === 'text' && (n.fontSize ?? 16) >= 28;
+
+  for (const { node } of ctx.entries) {
+    if (node.layout !== 'horizontal' || !node.children || node.children.length !== 2) continue;
+    const [a, b] = node.children;
+    if (!isEyebrow(a) || !isHeading(b)) continue;
+    if (node.alignItems === 'center' || node.alignItems === 'end') continue; // vertically reconciled
+    issues.push({
+      category: 'cliche',
+      tell: 'hanging-header',
+      severity: 'info',
+      nodeId: node.id,
+      nodeName: node.name,
+      message: `"${node.name ?? node.id}" places a small eyebrow beside a large heading (the hanging tag-left/heading-right header).`,
+      suggestion: `Stack the eyebrow above the heading (layout: "vertical", left-aligned) for a cleaner hierarchy.`,
+    });
+  }
+  return issues;
+}
+
+// FR-6 / C5 — honest-content: flag fabricated-looking metrics / testimonials /
+// logos in short placeholder copy; suggest the labeled-placeholder convention.
+const HONEST_CONTENT_PATTERNS: { name: string; re: RegExp }[] = [
+  { name: 'a percentage', re: /\b\d+(\.\d+)?\s?%/ },
+  { name: 'a money figure', re: /[$€£]\s?\d/ },
+  { name: 'a multiplier', re: /\b\d+(\.\d+)?x\b/i },
+  { name: 'a large count', re: /\b\d{1,3}(,\d{3})+\+?\b|\b\d+(\.\d+)?[KMB]\+?\b|\b\d+\+\b/ },
+  { name: 'a star rating', re: /\b[0-5](\.\d)\s?(★|stars?\b|\/\s?5)/i },
+  { name: 'a testimonial attribution', re: /^\s*[—–-]\s*\p{Lu}[\p{L}\s.]+,/u },
+  { name: 'an "as seen in" claim', re: /\b(as seen (in|on)|trusted by|featured (in|on)|used by)\b/i },
+];
+const HONEST_PLACEHOLDER_GUARD = /\b(to confirm|placeholder|tbd|sample|lorem|example|xx+)\b/i;
+function tellHonestContent(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('honest-content')) return [];
+  const issues: EvaluationIssue[] = [];
+
+  for (const { node } of ctx.entries) {
+    if (node.type !== 'text' || typeof node.content !== 'string') continue;
+    const text = node.content.trim();
+    if (text.length === 0 || text.length > 60) continue;       // only short copy
+    if (HONEST_PLACEHOLDER_GUARD.test(text)) continue;          // already a labeled placeholder
+
+    let reason: string | null = null;
+    const lower = text.toLowerCase();
+    if (BRAND_WORDMARKS.some((b) => lower.includes(b))) {
+      reason = 'a real brand wordmark (fabricated logo wall)';
+    } else {
+      const hit = HONEST_CONTENT_PATTERNS.find((p) => p.re.test(text));
+      if (hit) reason = hit.name;
+    }
+    if (!reason) continue;
+
+    issues.push({
+      category: 'cliche',
+      tell: 'honest-content',
+      severity: 'info',
+      nodeId: node.id,
+      nodeName: node.name,
+      message: `"${text.slice(0, 40)}" looks like fabricated data (${reason}).`,
+      suggestion: `Use a labeled placeholder until real data exists, e.g. "<Label> — to confirm" + a neutral block.`,
+    });
+  }
+  return issues;
+}
+
+function checkCliche(
+  entries: NodeEntry[],
+  rawEntries: NodeEntry[],
+  tokens: DesignVariables,
+  opts: { relaxed: Set<ClicheTell> },
+): CheckResult {
+  const rawById = new Map(rawEntries.map((e) => [e.node.id, e.node]));
+  const ctx: ClicheCtx = { entries, rawById, tokens, relaxed: opts.relaxed };
+
+  const issues = [
+    ...tellAccentHue(ctx),
+    ...tellGradientGlow(ctx),
+    ...tellFakeChrome(ctx),
+    ...tellHangingHeader(ctx),
+    ...tellHonestContent(ctx),
+  ];
+
+  const penalty = { error: 25, warning: 12, info: 6 } as const;
+  let score = 100;
+  for (const i of issues) score -= penalty[i.severity];
+  return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
+}
+
 // --- Scoring & Summary ---
 
 function aggregateScores(results: Map<string, CheckResult>, weights: Map<string, number>): number {
@@ -602,11 +980,12 @@ const CATEGORY_WEIGHTS = new Map([
   ['typography', 20],
   ['structure', 15],
   ['consistency', 20],
+  ['cliche', 15],
 ]);
 
 export async function evaluateCanvas(
   canvas: Canvas,
-  options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[] },
+  options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[]; genre?: string },
 ): Promise<EvaluationResult> {
   // Resolve variables so $tokens become actual values for contrast checks.
   // Tokens flow through workspace → project → canvas inheritance (Phase 9),
@@ -654,6 +1033,14 @@ export async function evaluateCanvas(
     } else {
       results.set('consistency', checkConsistency(entries));
     }
+  }
+  if (activeCategories.includes('cliche')) {
+    // Genre comes from the explicit option, else the Phase 11 provenance stamp.
+    const genre = options.genre ?? canvas.metadata?.provenance?.preset;
+    const relaxed = new Set(RELAXED_BY_GENRE[genre ?? ''] ?? []);
+    // Resolved entries → $accent becomes a real hex for hue math; rawEntries →
+    // distinguish a literal default purple (autofixable) from a $token one.
+    results.set('cliche', checkCliche(entries, rawEntries, mergedTokens, { relaxed }));
   }
 
   const overallScore = aggregateScores(results, CATEGORY_WEIGHTS);

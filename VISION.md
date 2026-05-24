@@ -335,12 +335,14 @@ Authoring intent: structures are scene-graph data, not prompt text — the agent
 
 `canvas_evaluate` (Phase 6) scores *craft* — contrast, spacing scale, type scale, structure. It says nothing about *cliché*: the visual tells that mark a design as machine-made. Several of these are mechanically detectable on the scene graph, and because framesmith renders, it can confirm them instead of guessing. Add a `cliche` category alongside the craft checks, plus an honest-content rule so mockups stop shipping invented data.
 
-- [ ] `cliche` evaluation category in `canvas_evaluate` — flags the recurring machine-made tells
-- [ ] Detectable tells (scene-graph + render): default purple / indigo accent hue, gradient / glow overuse, fake browser / phone / IDE chrome (traffic-light-dot frames), the hanging "tag-left / heading-right" header
-- [ ] Honest-content check — flag fabricated-looking metrics / testimonials / logos in placeholder copy; suggest a labeled placeholder convention ("metric to confirm" + neutral block) instead
-- [ ] Auto-fix ops where mechanical (swap a default-accent hue, replace a fake-chrome frame), consistent with Phase 6 `canvas_autofix`
-- [ ] Genre-aware loosening — some tells are intentional in some styles; let the active preset / design system relax specific gates
-- [ ] Guidelines update — tool descriptions steer authoring away from the tells up front, not just catch them after
+- [x] `cliche` evaluation category in `canvas_evaluate` — flags the recurring machine-made tells (weight 15; each issue tagged with a `tell` discriminator; advisory warning/info)
+- [x] Detectable tells (scene-graph + render): default purple / indigo accent hue, gradient / glow overuse, fake browser / phone / IDE chrome (traffic-light-dot frames), the hanging "tag-left / heading-right" header
+- [x] Honest-content check — flag fabricated-looking metrics / testimonials / logos in placeholder copy; suggest a labeled placeholder convention ("metric to confirm" + neutral block) instead
+- [x] Auto-fix ops where mechanical (swap a *known-default* purple accent → neutral, delete a fake-chrome strip), consistent with Phase 6 `canvas_autofix`; taste tells (gradient/glow, hanging header, fabricated copy) are suggestion-only
+- [x] Genre-aware loosening — `RELAXED_BY_GENRE` map; genre from `provenance.preset` or an explicit `genre` option (today `material` relaxes the purple gate)
+- [x] Guidelines update — `docs/GUIDELINES.md` "Cliché & craft" section + `canvas_evaluate` / `canvas_autofix` tool descriptions steer authoring away from the tells up front
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-12-SPEC.md`](docs/specs/PHASE-12-SPEC.md). Phase 12 complete._
 
 ### Phase 13 — Structured critique & auto-revision (v1.3)
 

@@ -912,7 +912,7 @@ where value is a color (\`#hex\`, \`rgba(...)\`) for colors, \`Npx\` for spacing
 // --- canvas_evaluate ---
 server.tool(
   'canvas_evaluate',
-  `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores (spacing, color, typography, structure, consistency), and actionable issues referencing specific node IDs. Modes:
+  `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores, and actionable issues referencing specific node IDs. Categories: spacing, color, typography, structure, consistency (craft), plus "cliche" — the machine-made tells: default purple/indigo accents, gradient/glow overuse, fake browser/phone chrome (traffic-light dots), the hanging eyebrow-beside-heading header, and fabricated-looking metrics/testimonials/logos. cliche issues carry a "tell" discriminator and are advisory (warning/info). Modes:
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
   - "llm": fast-mode heuristics plus a vision-model critique (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field with { score, summary, strengths, weaknesses, suggestions }. Cost: one paid API call per invocation.
@@ -920,15 +920,17 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
     mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model critique'),
-    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency']))
+    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency', 'cliche']))
       .optional()
       .describe('Specific categories to evaluate (default: all)'),
+    genre: z.string().optional()
+      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple). Defaults to the canvas provenance preset if stamped.'),
   },
-  async ({ canvasId, mode, categories }) => {
+  async ({ canvasId, mode, categories, genre }) => {
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const result = await evaluateCanvas(canvas, { mode, categories });
+    const result = await evaluateCanvas(canvas, { mode, categories, genre });
 
     if (mode === 'llm') {
       try {
@@ -955,18 +957,20 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 // --- canvas_autofix ---
 server.tool(
   'canvas_autofix',
-  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins). Each fix carries a ready-to-paste \`batch_design\` Update op string and a one-line rationale. Closes the generator-evaluator loop: generate with batch_design → autofix → re-evaluate. Issues without a fix are not returned here; call canvas_evaluate to see the full set.`,
+  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins; default-purple accent → swap to a neutral accent; fake-chrome strip → delete). Each fix carries a ready-to-paste \`batch_design\` op string and a one-line rationale. Taste-dependent cliche tells (gradient/glow overuse, the hanging header, fabricated content) carry a suggestion but no auto-fix — call canvas_evaluate to see those. Closes the generator-evaluator loop: generate with batch_design → autofix → re-evaluate.`,
   {
     canvasId: z.string().describe('Canvas ID to autofix'),
-    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency']))
+    categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency', 'cliche']))
       .optional()
       .describe('Restrict to fixes from these categories (default: all)'),
+    genre: z.string().optional()
+      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple). Defaults to the canvas provenance preset if stamped.'),
   },
-  async ({ canvasId, categories }) => {
+  async ({ canvasId, categories, genre }) => {
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const result = await evaluateCanvas(canvas, { mode: 'fast', categories });
+    const result = await evaluateCanvas(canvas, { mode: 'fast', categories, genre });
     const fixes = result.issues
       .filter((issue) => issue.fix)
       .map((issue) => ({
