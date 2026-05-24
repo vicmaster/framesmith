@@ -444,21 +444,30 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 }
 ```
 
-**With `mode: "llm"`**, the response additionally carries:
+**With `mode: "llm"`** (Phase 13), the vision model scores a **fixed rubric** — five axes, each 1–5 with a rationale — instead of one opaque number. The verdict is stamped on the canvas (`metadata.critique`) and the per-project build log so quality is auditable over time. Add `floor` (1–5, default 3, or `FRAMESMITH_CRITIQUE_FLOOR`) to set the per-axis threshold that trips `needsRevision`.
 
 ```json
 {
   "llmCritique": {
     "provider": "anthropic",
     "model": "claude-sonnet-4-6",
-    "score": 84,
-    "summary": "Clean dashboard layout with a strong primary metric and clear hierarchy.",
-    "strengths": ["balanced spacing", "consistent type scale"],
-    "weaknesses": ["stat tiles sit slightly below the card's baseline"],
-    "suggestions": ["align the stat row to the card's bottom edge for a tighter composition"]
+    "rubric": {
+      "hierarchy":   { "score": 4, "rationale": "clear primary metric, secondary stats recede" },
+      "execution":   { "score": 4, "rationale": "tidy alignment and consistent spacing" },
+      "specificity": { "score": 3, "rationale": "reads a touch generic for a dashboard" },
+      "restraint":   { "score": 5, "rationale": "flat surfaces, no gratuitous effects" },
+      "variety":     { "score": 2, "rationale": "the default centered three-card row" }
+    },
+    "score": 72,
+    "summary": "Clean, restrained dashboard; layout is conventional.",
+    "suggestions": ["break the symmetric three-card row with an asymmetric feature tile"],
+    "needsRevision": true,
+    "failingAxes": [{ "axis": "variety", "score": 2, "rationale": "the default centered three-card row" }]
   }
 }
 ```
+
+Axes: **hierarchy** (focal order), **execution** (craft — alignment/spacing/contrast), **specificity** (designed-for-purpose vs generic), **restraint** (no overdone effects — the LLM sibling of the `cliche` category), **variety** (avoids same-shape sameness). `score` is **derived**: `round(mean(axisScores) / 5 * 100)`. To close the loop automatically, see `canvas_revise`.
 
 Provider selection: `FRAMESMITH_LLM_PROVIDER` env var (`anthropic` | `openai`), else falls back to whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set. Default models: `claude-sonnet-4-6` / `gpt-4.1` (override via `FRAMESMITH_LLM_ANTHROPIC_MODEL` / `FRAMESMITH_LLM_OPENAI_MODEL`). Adding a third provider is one entry in the `judges` table in `src/llm-judge.ts`.
 
@@ -510,6 +519,36 @@ Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a
 ```
 
 Apply the ops by joining them with newlines and passing to `batch_design`, then re-evaluate.
+
+### `canvas_revise`
+
+Closes the critique loop (Phase 13). Judges the canvas against the rubric; if any axis is below the floor, asks an LLM for targeted `batch_design` ops that raise the failing axes, applies them, re-renders, and re-judges — up to `maxIterations` passes. **Mutates the canvas.** Opt-in and bounded; it never runs implicitly.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas to revise |
+| `maxIterations` | number? | Revise passes, 1–3 (default 1) |
+| `floor` | number? | Per-axis rubric floor 1–5 (default 3 / `FRAMESMITH_CRITIQUE_FLOOR`) |
+| `provider` | `"anthropic"` \| `"openai"`? | Force an LLM provider (default auto-detect) |
+
+**Loop & safety**
+
+- Each pass: render → judge → if `needsRevision`, revise the failing axes → apply (validated through `batch_design`) → re-render → re-judge.
+- **Stops** when the canvas passes (`passed`), at the cap (`max-iterations`), when a pass doesn't improve the overall (`no-improvement` — the regressing edit is **reverted**), when the reviser returns nothing (`no-ops`), or when an op fails to apply (`apply-error` — the partial edit is reverted).
+- Every **accepted** pass re-stamps `metadata.critique` + the build log. Costs ≥2 paid API calls per pass (one judge + one revise) and renders between passes (Chrome required).
+
+**Return shape**
+
+```json
+{
+  "iterations": [
+    { "pass": 1, "overallBefore": 72, "failingAxes": ["variety"],
+      "opsApplied": "U(\"cards\", { ... })", "overallAfter": 84 }
+  ],
+  "finalVerdict": { "rubric": { "...": {} }, "score": 84, "needsRevision": false, "failingAxes": [] },
+  "stoppedReason": "passed"
+}
+```
 
 ## Resources
 

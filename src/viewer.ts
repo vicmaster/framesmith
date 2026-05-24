@@ -702,6 +702,16 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
     if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / preset / axes that produced this canvas"><b>◆</b>${parts.join(' · ')}</span>`;
   }
 
+  // Critique verdict chip (Phase 13) — latest rubric overall + needs-revision
+  // flag. Hidden when a canvas has never been judged.
+  const crit = canvas.metadata?.critique;
+  let verdictChip = '';
+  if (crit) {
+    const cls = crit.needsRevision ? 'verdict warn' : 'verdict';
+    const tail = crit.needsRevision ? ' · needs revision' : '';
+    verdictChip = `<span class="${cls}" title="Latest rubric critique (Phase 13) — derived overall + needs-revision flag"><b>◇</b>${crit.overall}/100${tail}</span>`;
+  }
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -725,6 +735,11 @@ ${FAVICON_HTML}
    * (Phase 11). Flat + muted, with a single small accent mark; no glow. */
   .toolbar .prov { font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
   .toolbar .prov b { color: var(--accent-soft); font-weight: 700; margin-right: 6px; }
+  /* Critique verdict chip (Phase 13) — flat, muted; amber mark when the latest
+   * rubric flagged the canvas as needing revision. */
+  .toolbar .verdict { font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .toolbar .verdict b { color: var(--accent-soft); font-weight: 700; margin-right: 6px; }
+  .toolbar .verdict.warn b { color: #d9a441; }
   .toolbar .spacer { flex: 1; }
   .toolbar .btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
   .toolbar .btn:hover { background: var(--surface-hover); color: var(--text-primary); }
@@ -776,6 +791,7 @@ ${FAVICON_HTML}
     <span class="title">${esc(canvas.name)}</span>
     <span class="dim">${w} x ${h}</span>
     ${provChip}
+    ${verdictChip}
     <div class="spacer"></div>
     <div class="toolbar-cluster">
       <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
