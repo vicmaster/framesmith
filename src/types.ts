@@ -171,12 +171,29 @@ export interface Provenance {
   at: string;
 }
 
+/** Phase 13 — rubric critique verdict stamped on `Canvas.metadata.critique`.
+ * Distinct from `provenance` (what *produced* the canvas); this is *how good* it
+ * is. The full rubric lives here; the build log keeps only a compact summary. */
+export interface CritiqueVerdict {
+  rubric: Record<string, { score: number; rationale: string }>;
+  /** 0–100 derived from the rubric. */
+  overall: number;
+  needsRevision: boolean;
+  model: string;
+  /** ISO-8601 timestamp. */
+  at: string;
+}
+
 /** Phase 11 — one per-project build-log entry: a provenance record plus the
  * canvas it describes. The diversification signal reads the last N entries to
  * steer the next canvas toward differing on >= 1 axis. */
 export interface BuildLogEntry extends Provenance {
   canvasId: string;
   canvasName: string;
+  /** Phase 13 — compact critique verdict for auditability across the build log
+   * (the full rubric stays on the canvas's metadata). Optional / back-compat. */
+  critiqueOverall?: number;
+  needsRevision?: boolean;
 }
 
 export interface Canvas {
@@ -204,6 +221,8 @@ export interface Canvas {
    * Phases 12/13 extend this bag (cliche flags, rubric verdict) in place. */
   metadata?: {
     provenance?: Provenance;
+    /** Phase 13 — latest rubric critique verdict (LLM judge). */
+    critique?: CritiqueVerdict;
     [key: string]: unknown;
   };
 }

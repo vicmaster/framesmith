@@ -348,11 +348,13 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-12-SPEC.md`](docs/specs/PHASE-
 
 The LLM-judge mode (Phase 6) returns a 0–100 score and free-text strengths / weaknesses — a vibe check, not a reproducible rubric, and nothing closes the loop automatically. Move the judge to a fixed multi-axis rubric with a per-axis floor, and let a low axis trigger a revision pass rather than just reporting it.
 
-- [ ] Fixed critique rubric — score named axes (e.g. hierarchy, execution, specificity, restraint, variety), each 1–5, instead of one opaque number
-- [ ] Revision threshold — any axis below a floor flags the canvas as needs-revision, naming the specific axis
-- [ ] Closed loop — optional auto-revise pass that feeds the failing axis back as targeted `batch_design` guidance, then re-judges
-- [ ] Stamp the verdict — store the rubric result in canvas metadata / provenance so quality is auditable over time and across the build log
-- [ ] Keep the rubric pluggable alongside the existing heuristic categories (don't lose the deterministic signal)
+- [x] Fixed critique rubric — five axes (hierarchy, execution, specificity, restraint, variety), each scored 1–5 with a rationale, instead of one opaque number; derived 0–100 overall (`round(mean/5*100)`)
+- [x] Revision threshold — any axis below the `floor` (default 3, overridable / `FRAMESMITH_CRITIQUE_FLOOR`) sets `needsRevision` + names the specific `failingAxes`
+- [x] Closed loop — opt-in `canvas_revise` tool: judge → revise the failing axes via targeted `batch_design` ops → re-judge, bounded (≤3 passes), stop-on-pass/cap/no-improvement, reverts a regressing or malformed pass
+- [x] Stamp the verdict — `canvas.metadata.critique` (full rubric) + a compact `{ critiqueOverall, needsRevision }` on the per-project build log, auditable over time
+- [x] Keep the rubric pluggable alongside the existing heuristic categories — the deterministic Phase 6/12 categories run unchanged in `llm` mode; judging + revising are pluggable per-provider (`judges` / `revisers` tables)
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-13-SPEC.md`](docs/specs/PHASE-13-SPEC.md). Phase 13 complete._
 
 ### Phase 14 — Ecosystem (v1.4)
 - [x] Web-based canvas viewer (read-only UI to browse designs)

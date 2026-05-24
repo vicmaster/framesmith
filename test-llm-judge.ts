@@ -1,12 +1,15 @@
 import './test-env.js';
-// Smoke for Phase 6a llm-judge module. Exercises parse + provider-selection +
-// the dispatch path through `judges` without hitting any real API. The MCP
-// tool wiring in src/index.ts uses the same `judgeCanvas` entry, so this
-// covers the orchestration there too.
+// Smoke for the Phase 13 rubric judge. Exercises parseRubric + withVerdict +
+// provider-selection + the dispatch path through `judges` without hitting any
+// real API. The MCP tool wiring in src/index.ts uses the same `judgeCanvas`
+// entry, so this covers the orchestration there too.
 //
 // Usage: npx tsx test-llm-judge.ts
 
-import { judges, judgeCanvas, parseJudgement, pickProvider, type Provider } from './src/llm-judge.js';
+import {
+  judges, judgeCanvas, parseRubric, withVerdict, pickProvider,
+  RUBRIC_AXES, type Rubric,
+} from './src/llm-judge.js';
 
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
@@ -14,113 +17,110 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-// ---- 1. parseJudgement: well-formed JSON --------------------------------
+const fullRubric = (scores: Partial<Record<string, number>>): Rubric => {
+  const r = {} as Rubric;
+  for (const a of RUBRIC_AXES) r[a] = { score: scores[a] ?? 4, rationale: `${a} note` };
+  return r;
+};
+
+// ---- 1. parseRubric: well-formed rubric JSON --------------------------------
 {
-  const parsed = parseJudgement(JSON.stringify({
-    score: 87,
-    summary: 'Clean layout with strong hierarchy.',
-    strengths: ['clear typographic scale', 'good contrast'],
-    weaknesses: ['stat tiles slightly misaligned'],
-    suggestions: ['snap stat tiles to a shared baseline'],
+  const parsed = parseRubric(JSON.stringify({
+    rubric: {
+      hierarchy: { score: 4, rationale: 'clear focal order' },
+      execution: { score: 4, rationale: 'tidy alignment' },
+      specificity: { score: 4, rationale: 'feels purposeful' },
+      restraint: { score: 4, rationale: 'flat, no glow' },
+      variety: { score: 4, rationale: 'not a default hero' },
+    },
+    summary: 'Solid, considered layout.',
+    suggestions: ['tighten the footer'],
   }));
-  check('parse: score', parsed.score === 87);
-  check('parse: summary', parsed.summary.startsWith('Clean layout'));
-  check('parse: strengths array', parsed.strengths.length === 2);
-  check('parse: weaknesses array', parsed.weaknesses.length === 1);
+  check('parse: all 5 axes present', RUBRIC_AXES.every((a) => parsed.rubric[a]?.score === 4));
+  check('parse: derived score = round(mean/5*100)', parsed.score === 80, `got ${parsed.score}`);
+  check('parse: summary', parsed.summary.startsWith('Solid'));
   check('parse: suggestions array', parsed.suggestions.length === 1);
 }
 
-// ---- 2. parseJudgement: code-fenced output (models love to do this) ----
+// ---- 2. parseRubric: code-fenced output ------------------------------------
 {
-  const wrapped = '```json\n' + JSON.stringify({ score: 50, summary: 'mid', strengths: [], weaknesses: [], suggestions: [] }) + '\n```';
-  const parsed = parseJudgement(wrapped);
-  check('parse: strips ```json fences', parsed.score === 50 && parsed.summary === 'mid');
+  const wrapped = '```json\n' + JSON.stringify({ rubric: { hierarchy: { score: 3, rationale: 'm' } }, summary: 'mid', suggestions: [] }) + '\n```';
+  const parsed = parseRubric(wrapped);
+  check('parse: strips ```json fences', parsed.summary === 'mid' && parsed.rubric.hierarchy.score === 3);
 }
 
-// ---- 3. parseJudgement: score clamping to 0–100 ------------------------
+// ---- 3. parseRubric: clamping + missing-axis default -----------------------
 {
-  const overshoot = parseJudgement(JSON.stringify({ score: 250, summary: '', strengths: [], weaknesses: [], suggestions: [] }));
-  check('parse: clamps score >100 to 100', overshoot.score === 100);
-  const undershoot = parseJudgement(JSON.stringify({ score: -10, summary: '', strengths: [], weaknesses: [], suggestions: [] }));
-  check('parse: clamps score <0 to 0', undershoot.score === 0);
+  const parsed = parseRubric(JSON.stringify({ rubric: { hierarchy: { score: 99 }, execution: { score: 0 } }, summary: '', suggestions: [] }));
+  check('parse: clamps axis >5 to 5', parsed.rubric.hierarchy.score === 5);
+  check('parse: clamps axis <1 to 1', parsed.rubric.execution.score === 1);
+  check('parse: missing axis defaults to 3', parsed.rubric.variety.score === 3 && parsed.rubric.variety.rationale === '');
 }
 
-// ---- 4. parseJudgement: bad input throws ------------------------------
+// ---- 4. parseRubric: bad input throws -------------------------------------
 {
   let threw = false;
-  try { parseJudgement('not json at all'); } catch { threw = true; }
+  try { parseRubric('not json at all'); } catch { threw = true; }
   check('parse: malformed input throws', threw);
 }
 
-// ---- 5. pickProvider: env-var priority ---------------------------------
+// ---- 5. withVerdict: floor → needsRevision + failingAxes -------------------
 {
-  // Clean slate per case — process.env mutations are scoped to this test.
-  const savedForced = process.env.FRAMESMITH_LLM_PROVIDER;
-  const savedAnth = process.env.ANTHROPIC_API_KEY;
-  const savedOAI = process.env.OPENAI_API_KEY;
-
-  delete process.env.FRAMESMITH_LLM_PROVIDER;
-  delete process.env.ANTHROPIC_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  check('pickProvider: no keys → null', pickProvider() === null);
-
-  process.env.OPENAI_API_KEY = 'sk-test';
-  check('pickProvider: openai key only → openai', pickProvider() === 'openai');
-
-  process.env.ANTHROPIC_API_KEY = 'sk-test';
-  check('pickProvider: both keys → anthropic (priority)', pickProvider() === 'anthropic');
-
-  process.env.FRAMESMITH_LLM_PROVIDER = 'openai';
-  check('pickProvider: forced openai overrides priority', pickProvider() === 'openai');
-
-  process.env.FRAMESMITH_LLM_PROVIDER = savedForced ?? '';
-  if (savedAnth === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = savedAnth;
-  if (savedOAI === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = savedOAI;
-  if (!savedForced) delete process.env.FRAMESMITH_LLM_PROVIDER;
+  const base = { rubric: fullRubric({ variety: 2, specificity: 2 }), score: 64, summary: '', suggestions: [] };
+  const v3 = withVerdict({ provider: 'anthropic', model: 'm', ...base }, 3);
+  check('verdict: needsRevision when an axis < floor', v3.needsRevision === true);
+  check('verdict: failingAxes names the low axes', v3.failingAxes.map((f) => f.axis).sort().join(',') === 'specificity,variety');
+  const v2 = withVerdict({ provider: 'anthropic', model: 'm', ...base }, 2);
+  check('verdict: lower floor clears it', v2.needsRevision === false && v2.failingAxes.length === 0);
+  const vDefault = withVerdict({ provider: 'anthropic', model: 'm', rubric: fullRubric({}), score: 80, summary: '', suggestions: [] });
+  check('verdict: all-4 rubric passes default floor 3', vDefault.needsRevision === false);
 }
 
-// ---- 6. judgeCanvas: dispatches via `judges` table; stub provider ------
+// ---- 6. pickProvider: env-var priority ------------------------------------
 {
-  // Pluggability claim: swapping the table entry should redirect dispatch.
-  // We replace `anthropic` with a stub, call judgeCanvas, restore.
+  const saved = { f: process.env.FRAMESMITH_LLM_PROVIDER, a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
+  delete process.env.FRAMESMITH_LLM_PROVIDER; delete process.env.ANTHROPIC_API_KEY; delete process.env.OPENAI_API_KEY;
+  check('pickProvider: no keys → null', pickProvider() === null);
+  process.env.OPENAI_API_KEY = 'sk-test';
+  check('pickProvider: openai key only → openai', pickProvider() === 'openai');
+  process.env.ANTHROPIC_API_KEY = 'sk-test';
+  check('pickProvider: both keys → anthropic (priority)', pickProvider() === 'anthropic');
+  process.env.FRAMESMITH_LLM_PROVIDER = 'openai';
+  check('pickProvider: forced openai overrides priority', pickProvider() === 'openai');
+  if (saved.f === undefined) delete process.env.FRAMESMITH_LLM_PROVIDER; else process.env.FRAMESMITH_LLM_PROVIDER = saved.f;
+  if (saved.a === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved.a;
+  if (saved.o === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = saved.o;
+}
+
+// ---- 7. judgeCanvas: dispatches via `judges` table; stub provider ----------
+{
   const original = judges.anthropic;
   let stubCalled = false;
   judges.anthropic = async (png: string) => {
     stubCalled = true;
-    return {
-      provider: 'anthropic',
-      model: 'stub-1',
-      score: 42,
-      summary: `stubbed (png length ${png.length})`,
-      strengths: [], weaknesses: [], suggestions: [],
-    };
+    return { provider: 'anthropic', model: 'stub-1', rubric: fullRubric({ variety: 2 }), score: 72, summary: `stubbed (png length ${png.length})`, suggestions: [] };
   };
   try {
-    const result = await judgeCanvas('PNGBASE64DATA', 'anthropic');
+    const result = await judgeCanvas('PNGBASE64DATA', { provider: 'anthropic', floor: 3 });
     check('dispatch: stubbed anthropic judge was called', stubCalled);
-    check('dispatch: result flows through', result.score === 42 && result.model === 'stub-1');
+    check('dispatch: rubric flows through', result.model === 'stub-1' && result.score === 72);
+    check('dispatch: verdict derived from rubric', result.needsRevision === true && result.failingAxes[0].axis === 'variety');
     check('dispatch: image is forwarded', result.summary.includes('png length 13'));
   } finally {
     judges.anthropic = original;
   }
 }
 
-// ---- 7. judgeCanvas: no provider + no keys → typed error --------------
+// ---- 8. judgeCanvas: no provider + no keys → typed error ------------------
 {
-  const savedForced = process.env.FRAMESMITH_LLM_PROVIDER;
-  const savedAnth = process.env.ANTHROPIC_API_KEY;
-  const savedOAI = process.env.OPENAI_API_KEY;
-  delete process.env.FRAMESMITH_LLM_PROVIDER;
-  delete process.env.ANTHROPIC_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-
+  const saved = { f: process.env.FRAMESMITH_LLM_PROVIDER, a: process.env.ANTHROPIC_API_KEY, o: process.env.OPENAI_API_KEY };
+  delete process.env.FRAMESMITH_LLM_PROVIDER; delete process.env.ANTHROPIC_API_KEY; delete process.env.OPENAI_API_KEY;
   let caught: unknown = null;
   try { await judgeCanvas('PNG'); } catch (e) { caught = e; }
   check('unavailable: throws LLMJudgeUnavailableError', (caught as Error)?.name === 'LLMJudgeUnavailableError');
-
-  if (savedForced) process.env.FRAMESMITH_LLM_PROVIDER = savedForced;
-  if (savedAnth) process.env.ANTHROPIC_API_KEY = savedAnth;
-  if (savedOAI) process.env.OPENAI_API_KEY = savedOAI;
+  if (saved.f) process.env.FRAMESMITH_LLM_PROVIDER = saved.f;
+  if (saved.a) process.env.ANTHROPIC_API_KEY = saved.a;
+  if (saved.o) process.env.OPENAI_API_KEY = saved.o;
 }
 
 process.exit(allPass ? 0 : 1);

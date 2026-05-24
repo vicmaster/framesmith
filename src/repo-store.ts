@@ -532,3 +532,28 @@ export function recordPresetInBuildLog(
   }
   appendBuildLog(projectId, { canvasId, canvasName, preset, at: new Date().toISOString() });
 }
+
+/** Phase 13 — record a compact critique verdict in the build log: update the
+ * most-recent entry for `canvasId`, or append a minimal one. Keeps only the
+ * overall + needsRevision (the full rubric stays on the canvas metadata) so the
+ * git-committed log stays small and diff-friendly. */
+export function recordCritiqueInBuildLog(
+  projectId: string,
+  canvasId: string,
+  canvasName: string,
+  verdict: { overall: number; needsRevision: boolean },
+): void {
+  const log = readBuildLog(projectId);
+  for (let i = log.length - 1; i >= 0; i--) {
+    if (log[i].canvasId === canvasId) {
+      log[i] = { ...log[i], critiqueOverall: verdict.overall, needsRevision: verdict.needsRevision, at: new Date().toISOString() };
+      writeBuildLog(projectId, log);
+      return;
+    }
+  }
+  appendBuildLog(projectId, {
+    canvasId, canvasName,
+    critiqueOverall: verdict.overall, needsRevision: verdict.needsRevision,
+    at: new Date().toISOString(),
+  });
+}

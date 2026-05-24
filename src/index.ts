@@ -21,6 +21,8 @@ import { parseDesignMd } from './design-md-parser.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
+import { reviseCanvas } from './reviser.js';
+import { stampCritique, runReviseLoop } from './critique.js';
 import type { SceneNode } from './types.js';
 
 /** Server `instructions` — sent in the MCP initialize response and loaded into
@@ -915,18 +917,20 @@ server.tool(
   `Auto-score a design canvas against quality criteria. Returns an overall score (0-100), category scores, and actionable issues referencing specific node IDs. Categories: spacing, color, typography, structure, consistency (craft), plus "cliche" — the machine-made tells: default purple/indigo accents, gradient/glow overuse, fake browser/phone chrome (traffic-light dots), the hanging eyebrow-beside-heading header, and fabricated-looking metrics/testimonials/logos. cliche issues carry a "tell" discriminator and are advisory (warning/info). Modes:
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
-  - "llm": fast-mode heuristics plus a vision-model critique (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field with { score, summary, strengths, weaknesses, suggestions }. Cost: one paid API call per invocation.
+  - "llm": fast-mode heuristics plus a vision-model critique against a FIXED rubric (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field: { rubric: { hierarchy, execution, specificity, restraint, variety } each {score 1-5, rationale}, score (0-100 derived), summary, suggestions, needsRevision, failingAxes }. The verdict is stamped on the canvas (metadata.critique) + the per-project build log for auditability. Cost: one paid API call per invocation. To CLOSE the loop and auto-fix failing axes, use canvas_revise.
 Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset).`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
-    mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model critique'),
+    mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model rubric critique'),
     categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency', 'cliche']))
       .optional()
       .describe('Specific categories to evaluate (default: all)'),
     genre: z.string().optional()
       .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple). Defaults to the canvas provenance preset if stamped.'),
+    floor: z.number().min(1).max(5).optional()
+      .describe('llm mode only: per-axis rubric floor (1-5). Any axis below it sets needsRevision. Default 3 (or FRAMESMITH_CRITIQUE_FLOOR).'),
   },
-  async ({ canvasId, mode, categories, genre }) => {
+  async ({ canvasId, mode, categories, genre, floor }) => {
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
@@ -939,7 +943,10 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
         const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
         const html = renderToHtml(resolved, w, h, canvas);
         const screenshotPng = await takeScreenshot(html, { width: w, height: h, scale: 1 });
-        result.llmCritique = await judgeCanvas(screenshotPng);
+        const critique = await judgeCanvas(screenshotPng, { floor });
+        result.llmCritique = critique;
+        stampCritique(canvas, critique);
+        touchCanvas(canvasId);
       } catch (err) {
         const msg = err instanceof LLMJudgeUnavailableError
           ? err.message
@@ -988,6 +995,41 @@ server.tool(
         fixes,
       }, null, 2) }],
     };
+  }
+);
+
+// --- canvas_revise ---
+server.tool(
+  'canvas_revise',
+  `Close the critique loop. Judge the canvas against the rubric (the same one canvas_evaluate mode:"llm" uses); if any axis is below the floor, ask an LLM to emit targeted batch_design ops that raise the failing axes, apply them, re-render, and re-judge — up to maxIterations passes. Stops early when the canvas passes, when a pass does not improve the overall score (the worse edit is reverted), or at the iteration cap. MUTATES the canvas; each accepted pass re-stamps metadata.critique + the build log. Costs >=2 paid API calls per pass (one judge + one revise) and renders between passes (Chrome required). Opt-in — never runs implicitly. Returns an iteration log (ops applied + before/after overall per pass), the final verdict, and why it stopped.`,
+  {
+    canvasId: z.string().describe('Canvas ID to revise'),
+    maxIterations: z.number().min(1).max(3).optional().describe('Max revise passes (1-3, default 1).'),
+    floor: z.number().min(1).max(5).optional().describe('Per-axis rubric floor (1-5). Default 3 (or FRAMESMITH_CRITIQUE_FLOOR).'),
+    provider: z.enum(['anthropic', 'openai']).optional().describe('Force an LLM provider; default auto-detect from env.'),
+  },
+  async ({ canvasId, maxIterations, floor, provider }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    const render = async () => {
+      const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+      const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+      const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+      return takeScreenshot(renderToHtml(resolved, w, h, canvas), { width: w, height: h, scale: 1 });
+    };
+
+    try {
+      const result = await runReviseLoop(canvas, { maxIter: maxIterations ?? 1 }, {
+        render,
+        judge: (png) => judgeCanvas(png, { floor, provider }),
+        revise: (args) => reviseCanvas(args, provider),
+      });
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    } catch (err) {
+      const msg = err instanceof LLMJudgeUnavailableError ? err.message : `canvas_revise failed: ${(err as Error).message}`;
+      return { content: [{ type: 'text', text: msg }], isError: true };
+    }
   }
 );
 
