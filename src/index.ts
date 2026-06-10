@@ -14,12 +14,12 @@ import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables, applyPresetTokens } from './variables.js';
 import { renderToHtml, type RenderOptions } from './renderer.js';
-import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl } from './fonts.js';
+import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl, collectReferencedFamilies } from './fonts.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
-import { importHtml } from './import.js';
+import { importHtml, snapToTokens } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
@@ -49,7 +49,7 @@ Fonts load by name: set fontFamily in a typography token (or on a node) and the 
 
 Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
-Import from implementation: canvas_import_html turns an HTML snippet (+ optional CSS) into an editable canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives. Lossy by design: READ the returned report (warnings/literals) instead of assuming fidelity.
+Import from implementation: canvas_import_html turns an HTML snippet (+ optional CSS) into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. Lossy by design: READ the returned report (snapped/literals/warnings) instead of assuming fidelity.
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
@@ -77,7 +77,7 @@ const GOTCHAS = [
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
-  'canvas_import_html: a bare Tailwind snippet has no Tailwind runtime — pass the compiled CSS via the css param, or the classes render unstyled. Always read the returned report; the import is honest about what it dropped.',
+  'canvas_import_html: Tailwind classes map to intent directly (bg-surface → fill "$surface", gap-4 → 16, bg-red-500 → the bundled v4 palette hex) and literal colors snap to the design system — a bare snippet styles via the common utilities + palette; pass the compiled CSS via the css param for everything else. Always read the returned report (snapped/literals/warnings); the import is honest about what it dropped.',
   'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
@@ -968,12 +968,14 @@ server.tool(
   'canvas_import_html',
   `Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of export. Renders the markup headlessly and walks the DOM's computed styles into a scene graph: flex containers → frames (layout/gap/padding/align), text runs → text nodes (size/weight/color/spacing/transform), <img> → image, inline SVGs → icon nodes when they match a bundled Lucide/Material glyph (else path), checkboxes/radios/switches/selects → the input-primitive node types with their live checked/value state.
 
+Token re-mapping: Tailwind utility classes map to INTENT directly (bg-surface → fill: "$surface", gap-4 → 16, custom utilities via tailwind.theme); remaining literal colors snap to the matched design system (nearest within tolerance — near-ties are reported, never guessed). report.snapped / report.literals / report.scaleMatches tell you exactly what happened; report.warnings flags $refs the design system doesn't define yet.
+
 LOSSY BY DESIGN — read the returned report: it lists what was dropped (pseudo-elements, background images, grid intricacies), unmatched fonts/icons, and warnings. The import is an editable starting point that honestly tells you where it degraded, not a pixel-perfect clone.
 
-Note: a bare Tailwind snippet has no Tailwind runtime — pass the compiled CSS via \`css\` for faithful styling (Tailwind utility-class intent mapping lands in a later slice).`,
+Note: a bare Tailwind snippet has no Tailwind runtime — the class intent mapper covers the common utilities; pass the compiled CSS via \`css\` for everything else.`,
   {
     html: z.string().min(1).describe('The HTML snippet to import'),
-    css: z.string().optional().describe('CSS to apply (e.g. the compiled Tailwind stylesheet). Without it, only inline styles and browser defaults render.'),
+    css: z.string().optional().describe('CSS to apply (e.g. the compiled Tailwind stylesheet). Without it, only inline styles, browser defaults, and Tailwind class intent render.'),
     projectId: z.string().optional().describe('Project to create the canvas in (default: the default project)'),
     name: z.string().optional().describe('Canvas name (default: "Imported HTML")'),
     selector: z.string().optional().describe('Import only the first element matching this CSS selector within the snippet'),
@@ -984,17 +986,45 @@ Note: a bare Tailwind snippet has no Tailwind runtime — pass the compiled CSS 
       dropInvisible: z.boolean().optional().describe('Drop display:none / zero-size / aria-hidden nodes (default true)'),
       maxDepth: z.number().optional().describe('Truncate subtrees deeper than this (default 24)'),
     }).optional().describe('Tree-simplification knobs'),
+    tokenMatch: z.object({
+      source: z.enum(['workspace', 'designMd', 'tailwind', 'none']).optional().describe('Design system to snap against: "workspace" (default — the target project\'s merged tokens), "designMd" (parse designMd content), "tailwind" (the supplied theme), "none" (skip snapping)'),
+      tolerance: z.number().optional().describe('Max normalized RGB distance for nearest-color snapping (default 0.08)'),
+      designMd: z.string().optional().describe('DESIGN.md content — required when source is "designMd"'),
+    }).optional().describe('Snap concrete values back to $token refs'),
+    tailwind: z.object({
+      theme: z.record(z.string()).optional().describe('Flat { name: value } map from the project\'s @theme — widens which class names map to $tokens (e.g. { surface: "#1e1e1e" })'),
+    }).optional().describe('Tailwind-specific import options'),
   },
-  async ({ html, css, projectId, name, selector, width, flatten }) => {
+  async ({ html, css, projectId, name, selector, width, flatten, tokenMatch, tailwind }) => {
     if (projectId && !getProject(projectId)) {
       return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see projects.` }], isError: true };
     }
+    if (tokenMatch?.source === 'designMd' && !tokenMatch.designMd) {
+      return { content: [{ type: 'text', text: 'Error: tokenMatch.source "designMd" requires tokenMatch.designMd content.' }], isError: true };
+    }
     try {
-      const { root, report, contentHeight } = await importHtml(html, { css, selector, width, flatten });
+      const { root, report, contentHeight } = await importHtml(html, { css, selector, width, flatten, tailwindTheme: tailwind?.theme });
       const canvas = createCanvas(name ?? 'Imported HTML', projectId);
       canvas.root.width = width ?? 1440;
       canvas.root.height = Math.max(contentHeight, 100);
       canvas.root.children = [root];
+
+      // Token snapping (FR-B2) — against the canvas's merged inheritance chain
+      // by default, so workspace/project design systems apply without setup.
+      const source = tokenMatch?.source ?? 'workspace';
+      if (source !== 'none') {
+        const vars = source === 'designMd' ? parseDesignMd(tokenMatch!.designMd!).variables
+          : source === 'tailwind' ? { colors: tailwind?.theme ?? {} }
+          : getCanvasTokens(canvas);
+        snapToTokens(root, vars, report, { tolerance: tokenMatch?.tolerance });
+      }
+
+      // Fonts seen in computed styles feed the Phase 16 resolver so the
+      // imported canvas renders in the same faces (failures → report).
+      for (const family of collectReferencedFamilies(root)) {
+        try { await resolveFamily(family); } catch { report.unmatchedFonts.push(family); }
+      }
+
       canvas.metadata = {
         ...canvas.metadata,
         provenance: { importedFrom: 'html', at: new Date().toISOString() },

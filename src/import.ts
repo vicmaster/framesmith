@@ -16,8 +16,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import type { SceneNode } from './types.js';
+import type { DesignVariables, SceneNode } from './types.js';
 import { withPage } from './screenshot.js';
+import { classesToProps } from './tailwind-map.js';
 
 // ── walker output ────────────────────────────────────────────────────────────
 
@@ -137,17 +138,20 @@ export const DOM_WALKER_SOURCE = `(function (rootSelector, whitelist) {
 
 export interface ImportReport {
   counts: { nodes: number; frames: number; text: number; maxDepth: number; dropped: number };
-  /** Values snapped to $tokens (filled by slice B's snapToTokens). */
+  /** Color values rewritten to $token refs (Tailwind intent or nearest-match snapping). */
   snapped: { nodeId: string; prop: string; from: string; token: string }[];
-  /** Concrete values that found no token — flagged for review (slice B). */
+  /** Concrete color values that found no token — flagged for review. */
   literals: { nodeId: string; prop: string; value: string }[];
+  /** Numeric values that EQUAL a scale token (gap 16 ≙ $md) — informational;
+   * number-typed props aren't rewritten to refs. */
+  scaleMatches: { nodeId: string; prop: string; value: number; token: string }[];
   unmatchedFonts: string[];
   unmatchedIcons: string[];
   warnings: string[];
 }
 
 function emptyReport(): ImportReport {
-  return { counts: { nodes: 0, frames: 0, text: 0, maxDepth: 0, dropped: 0 }, snapped: [], literals: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
+  return { counts: { nodes: 0, frames: 0, text: 0, maxDepth: 0, dropped: 0 }, snapped: [], literals: [], scaleMatches: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
 }
 
 // ── icon recognition (spec C5: exact path-hash match, no false positives) ────
@@ -247,6 +251,9 @@ export interface DomToSceneOptions {
   flatten?: FlattenOptions;
   /** Width of the import container — drives the '100%' width strategy (C4). */
   containerWidth?: number;
+  /** Flat { name: value } map from the project's Tailwind @theme — widens
+   * which class names the intent mapper treats as $tokens (spec FR-B1). */
+  tailwindTheme?: Record<string, string>;
 }
 
 export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): { root: SceneNode; report: ImportReport } {
@@ -335,16 +342,18 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     // ── text vs frame ──
     const childNodes: SceneNode[] = [];
     const isTextOnly = !!node.text && node.children.length === 0;
+    const intent = node.classes.length ? classesToProps(node.classes, opts.tailwindTheme) : null;
 
     // A chip/badge is "text-only" in the DOM but visually a frame — keep the
     // background/border/radius by wrapping the text instead of dropping them.
     const hasVisualBox = !!cssColor(node.styles.backgroundColor)
       || (px(node.styles.borderTopWidth) ?? 0) > 0
       || (node.styles.boxShadow && node.styles.boxShadow !== 'none')
-      || (px(node.styles.borderTopLeftRadius) ?? 0) > 0;
+      || (px(node.styles.borderTopLeftRadius) ?? 0) > 0
+      || intent?.props.fill !== undefined || intent?.props.cornerRadius !== undefined;
 
     if (isTextOnly && !hasVisualBox) {
-      return count({ id: nextId('text'), type: 'text', content: node.text!, ...textProps(node) });
+      return count(mergeIntent({ id: nextId('text'), type: 'text', content: node.text!, ...textProps(node) }, node));
     }
 
     // Mixed content: synthesize a text child for the element's own text.
@@ -357,7 +366,31 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     }
 
     const frame: SceneNode = { id: nextId('frame'), type: 'frame', ...frameProps(node, parent), ...(childNodes.length ? { children: childNodes } : {}) };
-    return count(frame);
+    return count(mergeIntent(frame, node));
+  };
+
+  /** Tailwind intent (spec FR-B1/C1): geometry + typography utilities FILL
+   * GAPS the computed styles didn't provide (a bare snippet has no Tailwind
+   * runtime, so they provide everything); custom-name color utilities OVERRIDE
+   * computed literals with their $token ref — the class name carries intent a
+   * computed value can't. Recorded under report.snapped. */
+  const mergeIntent = (scene: SceneNode, raw: RawDomNode): SceneNode => {
+    if (!raw.classes.length) return scene;
+    const { props, tokenRefs } = classesToProps(raw.classes, opts.tailwindTheme);
+    const record = scene as unknown as Record<string, unknown>;
+    const refProps = new Set(tokenRefs.map((t) => t.prop));
+    for (const [key, value] of Object.entries(props)) {
+      if (refProps.has(key)) {
+        const from = record[key];
+        if (from !== value) {
+          report.snapped.push({ nodeId: scene.id, prop: key, from: typeof from === 'string' ? from : '(unstyled)', token: value as string });
+        }
+        record[key] = value;
+      } else if (record[key] === undefined) {
+        record[key] = value;
+      }
+    }
+    return scene;
   };
 
   const count = (n: SceneNode): SceneNode => {
@@ -516,6 +549,124 @@ export function flattenTree(root: SceneNode, opts: Required<FlattenOptions>, rep
   return walk(root);
 }
 
+// ── token snapping (spec FR-B2) ──────────────────────────────────────────────
+
+/** #hex (3/6) or rgb()/rgba() → [r,g,b], null for anything else or alpha < 1
+ * (tokens are opaque — snapping a translucent overlay to one would lie). */
+export function parseCssColor(value: string): [number, number, number] | null {
+  const hex = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (hex) {
+    const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex;
+    return [parseInt(full.slice(0, 2), 16), parseInt(full.slice(2, 4), 16), parseInt(full.slice(4, 6), 16)];
+  }
+  const rgb = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i);
+  if (rgb) {
+    if (rgb[4] !== undefined && parseFloat(rgb[4]) < 1) return null;
+    return [parseInt(rgb[1], 10), parseInt(rgb[2], 10), parseInt(rgb[3], 10)];
+  }
+  return null;
+}
+
+function colorDistance(a: [number, number, number], b: [number, number, number]): number {
+  const dr = (a[0] - b[0]) / 255, dg = (a[1] - b[1]) / 255, db = (a[2] - b[2]) / 255;
+  return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+const COLOR_PROPS = ['fill', 'color', 'stroke', 'iconColor'] as const;
+const EXACT = 0.004;       // sub-rounding-error — always snap
+const TIE_MARGIN = 0.02;   // two candidates this close → report, don't guess
+const LITERAL_CAP = 100;
+
+export interface SnapOptions {
+  /** Max normalized RGB distance to snap (default 0.08 ≈ a close shade). */
+  tolerance?: number;
+}
+
+/** Snap concrete values back to design-system refs, in place:
+ *  - color props → `$token` on exact or nearest-within-tolerance match
+ *    (near-ties are reported and left literal — never guessed);
+ *  - pre-existing `$refs` (Tailwind intent) that DON'T resolve in the given
+ *    tokens → warning, so an agent knows to set_variables;
+ *  - gap/padding/cornerRadius/fontSize that EQUAL a scale token → reported
+ *    under scaleMatches (number-typed props aren't rewritten);
+ *  - remaining literal colors → report.literals (capped). */
+export function snapToTokens(root: SceneNode, vars: DesignVariables, report: ImportReport, opts: SnapOptions = {}): void {
+  const tolerance = opts.tolerance ?? 0.08;
+
+  const tokenColors: { name: string; rgb: [number, number, number] }[] = [];
+  for (const [name, value] of Object.entries(vars.colors ?? {})) {
+    const rgb = parseCssColor(value);
+    if (rgb) tokenColors.push({ name, rgb });
+  }
+  const scaleEntries = (cat: Record<string, number> | undefined) => Object.entries(cat ?? {});
+  const unresolvedRefs = new Set<string>();
+
+  const snapColor = (node: SceneNode, prop: string, value: string): void => {
+    const rgb = parseCssColor(value);
+    if (!rgb) return;
+    let best: { name: string; d: number } | null = null;
+    let second: { name: string; d: number } | null = null;
+    for (const t of tokenColors) {
+      const d = colorDistance(rgb, t.rgb);
+      if (!best || d < best.d) { second = best; best = { name: t.name, d }; }
+      else if (!second || d < second.d) second = { name: t.name, d };
+    }
+    if (best && (best.d <= EXACT || best.d <= tolerance)) {
+      if (best.d > EXACT && second && second.d <= tolerance && second.d - best.d < TIE_MARGIN) {
+        report.warnings.push(`Color ${value} (${node.id}.${prop}) is near both $${best.name} and $${second.name} — left literal, snap it yourself.`);
+        report.literals.push({ nodeId: node.id, prop, value });
+        return;
+      }
+      report.snapped.push({ nodeId: node.id, prop, from: value, token: `$${best.name}` });
+      (node as unknown as Record<string, unknown>)[prop] = `$${best.name}`;
+      return;
+    }
+    if (report.literals.length < LITERAL_CAP) report.literals.push({ nodeId: node.id, prop, value });
+  };
+
+  const matchScale = (node: SceneNode, prop: string, value: number, cat: Record<string, number> | undefined): void => {
+    for (const [name, v] of scaleEntries(cat)) {
+      if (Math.abs(v - value) <= 1) {
+        report.scaleMatches.push({ nodeId: node.id, prop, value, token: `$${name}` });
+        return;
+      }
+    }
+  };
+
+  const walk = (node: SceneNode): void => {
+    for (const prop of COLOR_PROPS) {
+      const value = node[prop];
+      if (typeof value !== 'string') continue;
+      if (value.startsWith('$')) {
+        const name = value.slice(1);
+        if (vars.colors?.[name] === undefined) unresolvedRefs.add(name);
+        continue;
+      }
+      snapColor(node, prop, value);
+    }
+    if (typeof node.gap === 'number') matchScale(node, 'gap', node.gap, vars.spacing);
+    if (typeof node.padding === 'number') matchScale(node, 'padding', node.padding, vars.spacing);
+    if (typeof node.cornerRadius === 'number') matchScale(node, 'cornerRadius', node.cornerRadius, vars.radius);
+    if (typeof node.fontSize === 'number') {
+      for (const [name, t] of Object.entries(vars.typography ?? {})) {
+        if (Math.abs(t.fontSize - node.fontSize) <= 1) {
+          report.scaleMatches.push({ nodeId: node.id, prop: 'fontSize', value: node.fontSize, token: `$${name}` });
+          break;
+        }
+      }
+    }
+    node.children?.forEach(walk);
+  };
+  walk(root);
+
+  if (report.literals.length >= LITERAL_CAP) {
+    report.warnings.push(`More than ${LITERAL_CAP} literal colors — list truncated.`);
+  }
+  for (const name of unresolvedRefs) {
+    report.warnings.push(`Token $${name} (from Tailwind class intent) is not defined in the matched design system — define it via set_variables or it will render unresolved.`);
+  }
+}
+
 // ── Chrome side ──────────────────────────────────────────────────────────────
 
 export interface ImportHtmlOptions {
@@ -524,6 +675,8 @@ export interface ImportHtmlOptions {
   flatten?: FlattenOptions;
   /** Container width percentage layouts resolve against. Default 1440. */
   width?: number;
+  /** Tailwind @theme map for the intent mapper (FR-B1). */
+  tailwindTheme?: Record<string, string>;
 }
 
 const IMPORT_ROOT_ID = '__framesmith_import_root';
@@ -543,7 +696,7 @@ export async function importHtml(html: string, opts: ImportHtmlOptions = {}): Pr
     )) as RawDomNode | null;
     if (!raw) throw new Error(`Selector "${rootSelector}" matched nothing in the provided HTML.`);
 
-    const { root, report } = domToSceneGraph(raw, { flatten: opts.flatten, containerWidth: width });
+    const { root, report } = domToSceneGraph(raw, { flatten: opts.flatten, containerWidth: width, tailwindTheme: opts.tailwindTheme });
     if (opts.selector === undefined && root.type === 'frame') {
       // The synthetic container div is not part of the user's markup.
       root.width = '100%';
