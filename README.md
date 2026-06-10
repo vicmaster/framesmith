@@ -303,18 +303,25 @@ Same shape, but at the project layer between workspace and canvas. Use for sub-b
 
 ### `get_fonts` / `set_fonts`
 
-Register custom font faces on a canvas. The renderer emits `@font-face` blocks in `<head>` plus a `<link rel="preconnect">` for unique remote origins, and declares `font-display: swap` so paint isn't blocked while a font loads.
+**Fonts load by name automatically** — naming a `fontFamily` in a typography token (or on a node) resolves it from Google Fonts at token-write time, with a render-time backstop catching anything else. Binaries are cached under `~/.framesmith/fonts/`, so renders are offline and deterministic after the first resolve; `typography.body.fontFamily` becomes the document default. An unresolvable family renders in the fallback stack **and** adds a `Font warnings` item to the screenshot/export result.
+
+`set_fonts` covers explicit registration. Three forms, combinable:
 
 ```json
 {
+  "families": ["Inter", "JetBrains Mono"],
   "fonts": [
-    { "family": "Inter", "url": "https://fonts.gstatic.com/s/inter/v18/...regular.woff2", "weight": 400 },
-    { "family": "Inter", "url": "https://fonts.gstatic.com/s/inter/v18/...bold.woff2",    "weight": 700 }
+    { "family": "Inter", "url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;700" },
+    { "family": "Brand Face", "url": "https://example.com/brand.woff2", "weight": 400 }
   ]
 }
 ```
 
-URLs must point at the binary (`.woff2` / `.woff` / `.ttf` / `.otf` or a `data:` URI) — Google Fonts CSS stylesheet URLs (`fonts.googleapis.com/css2`) are not supported, use the gstatic.com binary URL directly. After registering, reference the family on any text node: `fontFamily: "Inter, system-ui, sans-serif"`.
+- `families` — resolve by name from Google Fonts and merge into the existing declarations.
+- `fonts` with a Google Fonts CSS URL (`fonts.googleapis.com/css2?...`) — faces are extracted from the stylesheet automatically.
+- `fonts` with a direct binary URL (`.woff2` / `.woff` / `.ttf` / `.otf` or a `data:` URI) — for non-Google sources.
+
+`fonts` replaces declarations wholesale (pass `[]` to clear); `families` merges. The renderer emits `@font-face` blocks plus `<link rel="preconnect">` per remote origin, with `font-display: swap`.
 
 ### `export`
 
