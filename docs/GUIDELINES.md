@@ -82,6 +82,7 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 - **Hardcoding pixel font sizes everywhere.** Large sizes get a `clamp()` treatment by the renderer to scale down on small viewports — only set `fontSize` to the *desktop* value and let the renderer handle the rest.
 - **Unicode glyphs as icon stand-ins.** `✓ ● ▾ ○` read as unfinished. Use the `icon` node type — two sets render by name as inline SVG: 1,900+ [Lucide](https://lucide.dev) (`icon: "check"`) and 3,800+ [Material Symbols](https://fonts.google.com/icons) (`icon: "material:check"`, `iconStyle: "outlined" | "rounded" | "sharp"`, `-fill` suffix for filled variants). `I("parent", { type: "icon", icon: "material:check", iconSize: 16, iconColor: "$primary" })`. For Material-style design systems, prefer the Material set.
 - **Baking uppercase into `content`.** Use `textTransform: "uppercase"` (with `letterSpacing` for tracking) so the underlying copy stays editable and case-styling lives in the design, not the data.
+- **Faking form controls from frames + ellipses.** `toggle`, `checkbox`, `radio`, and `select` are real node types: `I("parent", { type: "toggle", checked: true })`. They style themselves from `$accent`/`$border`/`$bg-surface` tokens (neutral fallbacks when unthemed) and stay pixel-consistent; `fill`/`stroke`/`color` override.
 
 ## Design systems (workspace + project inheritance)
 

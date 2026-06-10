@@ -17,11 +17,48 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
     }
   }
 
+  applyControlDefaults(node, variables);
+
   if (node.children) {
     node.children = node.children.map((child) => deepResolve(child, variables));
   }
 
   return node;
+}
+
+// Phase 16 — input primitives default their colors from the design system
+// (the structures token vocabulary) AFTER explicit $refs resolve, so an
+// unthemed canvas still renders (neutral fallbacks — same never-crash rule as
+// structure scaffolds) and a themed one picks up the brand automatically.
+// Explicit fill / stroke / color on the node always wins.
+const CONTROL_FALLBACK = { accent: '#2563EB', border: '#D1D5DB', surface: '#FFFFFF', text: '#111827' } as const;
+
+function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
+  const t = node.type;
+  if (t !== 'toggle' && t !== 'checkbox' && t !== 'radio' && t !== 'select') return;
+
+  const accent = v.colors?.accent ?? v.colors?.primary ?? CONTROL_FALLBACK.accent;
+  const border = v.colors?.border ?? CONTROL_FALLBACK.border;
+
+  if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
+
+  if (t === 'toggle') {
+    // fill = track color; the knob is always white.
+    if (node.fill === undefined) node.fill = node.checked ? accent : border;
+  } else if (t === 'checkbox') {
+    // fill = box background (transparent when unchecked so dark surfaces work).
+    if (node.fill === undefined) node.fill = node.checked ? accent : 'transparent';
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+  } else if (t === 'radio') {
+    // stroke = ring, fill = dot (drawn only when checked).
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+    if (node.fill === undefined) node.fill = accent;
+  } else {
+    // select
+    if (node.fill === undefined) node.fill = v.colors?.['bg-surface'] ?? v.colors?.surface ?? CONTROL_FALLBACK.surface;
+    if (node.stroke === undefined) node.stroke = border;
+    if (node.color === undefined) node.color = v.colors?.['text-primary'] ?? CONTROL_FALLBACK.text;
+  }
 }
 
 function lookupToken(name: string, variables: DesignVariables): unknown {

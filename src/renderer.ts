@@ -251,6 +251,14 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
     return `<div${dataAttr}${styleAttr}>${renderPathSvg(node)}</div>`;
   }
 
+  // Phase 16 — input primitives. Static, deterministic control renders; colors
+  // arrive pre-defaulted by resolveVariables (token-aware with neutral
+  // fallbacks), so the builders just consume node.fill / stroke / color.
+  if (node.type === 'toggle') return renderToggle(node, dataAttr);
+  if (node.type === 'checkbox') return renderCheckbox(node, dataAttr);
+  if (node.type === 'radio') return renderRadio(node, dataAttr);
+  if (node.type === 'select') return renderSelect(node, dataAttr);
+
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
@@ -422,6 +430,90 @@ function buildStyles(node: SceneNode): string {
   if (node.fontVariationSettings) s.push(`font-variation-settings: ${node.fontVariationSettings}`);
 
   return s.join('; ');
+}
+
+// ── input primitives (Phase 16) ──────────────────────────────────────────────
+// Hand-rolled style strings: controls are leaf nodes with fixed internal
+// anatomy, so the generic buildStyles pipeline (layout/gap/padding) doesn't
+// apply. Shared bits: numeric width/height with control-appropriate defaults,
+// opacity passthrough (resolveVariables sets 0.5 for disabled).
+
+function controlSize(node: SceneNode, defW: number, defH: number): { w: number; h: number } {
+  return {
+    w: typeof node.width === 'number' ? node.width : defW,
+    h: typeof node.height === 'number' ? node.height : defH,
+  };
+}
+
+function controlOpacity(node: SceneNode): string[] {
+  return node.opacity !== undefined ? [`opacity: ${node.opacity}`] : [];
+}
+
+function renderToggle(node: SceneNode, dataAttr: string): string {
+  const { w, h } = controlSize(node, 44, 24);
+  const inset = Math.max(Math.round(h * 0.125), 2);
+  const knob = h - inset * 2;
+  const left = node.checked ? w - knob - inset : inset;
+  const track = [
+    'position: relative', 'flex-shrink: 0',
+    `width: ${w}px`, `height: ${h}px`, `border-radius: ${h / 2}px`,
+    `background-color: ${node.fill}`,
+    'transition: background-color 0.15s ease',
+    ...controlOpacity(node),
+  ].join('; ');
+  const knobStyle = [
+    'position: absolute', `top: ${inset}px`, `left: ${left}px`,
+    `width: ${knob}px`, `height: ${knob}px`, 'border-radius: 50%',
+    'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)',
+  ].join('; ');
+  return `<div${dataAttr} style="${escapeStyleValue(track)}"><div style="${escapeStyleValue(knobStyle)}"></div></div>`;
+}
+
+function renderCheckbox(node: SceneNode, dataAttr: string): string {
+  const { w, h } = controlSize(node, 18, 18);
+  const radius = node.cornerRadius !== undefined && typeof node.cornerRadius === 'number' ? node.cornerRadius : 4;
+  const box = [
+    'flex-shrink: 0', 'display: flex', 'align-items: center', 'justify-content: center',
+    `width: ${w}px`, `height: ${h}px`, `border-radius: ${radius}px`,
+    `border: 1.5px solid ${node.stroke}`, `background-color: ${node.fill}`,
+    ...controlOpacity(node),
+  ].join('; ');
+  const mark = node.checked ? (getIconSvg('check', Math.round(Math.min(w, h) * 0.78), '#FFFFFF') ?? '') : '';
+  return `<div${dataAttr} style="${escapeStyleValue(box)}">${mark}</div>`;
+}
+
+function renderRadio(node: SceneNode, dataAttr: string): string {
+  const { w, h } = controlSize(node, 18, 18);
+  const ring = [
+    'flex-shrink: 0', 'display: flex', 'align-items: center', 'justify-content: center',
+    `width: ${w}px`, `height: ${h}px`, 'border-radius: 50%',
+    `border: 1.5px solid ${node.stroke}`, 'background-color: transparent',
+    ...controlOpacity(node),
+  ].join('; ');
+  const dotSize = Math.max(Math.round(Math.min(w, h) * 0.45), 4);
+  const dot = node.checked
+    ? `<div style="${escapeStyleValue(`width: ${dotSize}px; height: ${dotSize}px; border-radius: 50%; background-color: ${node.fill}`)}"></div>`
+    : '';
+  return `<div${dataAttr} style="${escapeStyleValue(ring)}">${dot}</div>`;
+}
+
+function renderSelect(node: SceneNode, dataAttr: string): string {
+  const width = node.width !== undefined ? cssLength(node.width) : 'fit-content';
+  const radius = node.cornerRadius !== undefined && typeof node.cornerRadius === 'number' ? node.cornerRadius : 8;
+  const fontSize = node.fontSize ?? 14;
+  const isPlaceholder = !node.value;
+  const textColor = isPlaceholder ? '#9CA3AF' : node.color;
+  const frame = [
+    'display: flex', 'flex-direction: row', 'align-items: center', 'justify-content: space-between',
+    'gap: 8px', 'padding: 8px 12px', `width: ${width}`,
+    ...(typeof node.height === 'number' ? [`height: ${node.height}px`] : []),
+    `border-radius: ${radius}px`, `border: 1px solid ${node.stroke}`,
+    `background-color: ${node.fill}`,
+    ...controlOpacity(node),
+  ].join('; ');
+  const label = `<span style="${escapeStyleValue(`font-size: ${fontSize}px; color: ${textColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis`)}">${escapeHtml(node.value ?? 'Select…')}</span>`;
+  const chevron = getIconSvg('chevron-down', Math.round(fontSize * 1.15), textColor) ?? '';
+  return `<div${dataAttr} style="${escapeStyleValue(frame)}">${label}${chevron}</div>`;
 }
 
 function buildImageStyles(node: SceneNode): string {

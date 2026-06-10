@@ -42,7 +42,7 @@ Design tokens are a layered system (workspace > project > canvas). Reference the
 
 Core loop: design at one target width (referencing $tokens) → screenshot → review → iterate → canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing/contrast fixes.
 
-Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content.
+Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content. Input controls (toggle / checkbox / radio / select) are real node types ({ type: "toggle", checked: true }) styled from design tokens — never fake a control from frames + ellipses.
 
 Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
 
@@ -70,6 +70,7 @@ const WORKFLOW_CHEATSHEET = [
 
 const GOTCHAS = [
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
+  'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
   'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
@@ -432,12 +433,14 @@ Use "document" to reference the root node. Bind results to reuse IDs: header=I("
 Concatenate bindings: U(header+"/childId", {...})
 Returns { ok, nodeIds, results }: nodeIds maps each bound variable to the node ID it created (e.g. { "header": "n_a1b2" }) — record it and use those IDs to target nodes in later calls (bindings only live within a single call). results lists each op's outcome in order.
 
-Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance
-Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, textAlign, lineHeight, letterSpacing (px), textDecoration, textTransform ("uppercase" etc. — don't bake casing into content), fontVariationSettings (variable-font axes, e.g. '"wght" 650'), src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, iconStyle, d, viewBox, strokeLinecap, strokeLinejoin, animation, transition, componentId, overrides, responsive
+Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance, toggle, checkbox, radio, select
+Properties: fill, gradient, stroke, strokeWidth, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, textAlign, lineHeight, letterSpacing (px), textDecoration, textTransform ("uppercase" etc. — don't bake casing into content), fontVariationSettings (variable-font axes, e.g. '"wght" 650'), src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, iconStyle, checked, disabled, value, d, viewBox, strokeLinecap, strokeLinejoin, animation, transition, componentId, overrides, responsive
 
 Icons: two bundled sets render by name — use these instead of Unicode glyph stand-ins (✓ ● ▾):
   - Lucide (1,900+, stroke style): I("parent", { type: "icon", icon: "search", iconSize: 24, iconColor: "$primary" }) — browse at lucide.dev
   - Material Symbols (3,800+, fill style): icon: "material:check" + optional iconStyle: "outlined"|"rounded"|"sharp" (default outlined); "-fill" suffix selects the filled variant (e.g. "material:star-fill") — browse at fonts.google.com/icons
+
+Input controls: toggle / checkbox / radio / select are real node types — I("parent", { type: "toggle", checked: true }), I("parent", { type: "select", value: "Admin", width: 200 }). Colors default from design tokens ($accent / $border / $bg-surface / $text-primary, neutral fallbacks when unthemed); fill / stroke / color override. NEVER fake a control from frames + ellipses.
 
 Responsive layout (author desktop-first, adapt down):
   - responsive: "stack" — on a horizontal container, flips to vertical below 768px (multi-column layouts that should stack on mobile)

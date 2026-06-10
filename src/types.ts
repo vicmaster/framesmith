@@ -1,4 +1,6 @@
-export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document' | 'path';
+export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document' | 'path'
+  // Phase 16 — input primitives: static, token-styled control renders.
+  | 'toggle' | 'checkbox' | 'radio' | 'select';
 
 export interface SceneNode {
   id: string;
@@ -86,6 +88,15 @@ export interface SceneNode {
   iconColor?: string;
   /** Material Symbols style variant; ignored for Lucide. Default "outlined". */
   iconStyle?: 'outlined' | 'rounded' | 'sharp';
+
+  // Input primitives (toggle / checkbox / radio / select) — static renders;
+  // `checked` is a prop, not behavior. Colors default from design tokens
+  // ($accent / $border / $bg-surface / $text-primary with neutral fallbacks);
+  // fill / stroke / color override them.
+  checked?: boolean;
+  disabled?: boolean;
+  /** select only: the displayed value; absent renders a muted placeholder. */
+  value?: string;
 
   // SVG path (only for type: 'path'). Inherits fill/stroke/strokeWidth from
   // the standard SceneNode fields; viewBox defaults to `0 0 width height`.
