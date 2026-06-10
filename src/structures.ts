@@ -470,6 +470,158 @@ const catalogue: Structure = {
   ],
 };
 
+// ── component structures (Phase 16 slice D) ────────────────────────────────
+// Reusable fragments stamped under any target node via apply_structure
+// targetId, repeatably — template ids get re-keyed per stamp. Same theming
+// split as pages: literal geometry, $color tokens. Placeholder copy only (C8).
+
+const formField: Structure = {
+  name: 'form-field',
+  kind: 'component',
+  description: 'A labeled form field: label, input box, and help text. Stamp once per field; set the label/help via the returned id map.',
+  nodes: [{
+    id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 6,
+    children: [
+      { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 13, fontWeight: 600, color: COLOR.textPrimary },
+      {
+        id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 40, layout: 'horizontal', alignItems: 'center',
+        padding: [10, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 14, color: COLOR.textSecondary }],
+      },
+      { id: 'ff-help', type: 'text', content: 'Help text — to confirm', fontSize: 12, color: COLOR.textSecondary },
+    ],
+  }],
+};
+
+const toggleRow: Structure = {
+  name: 'toggle-row',
+  kind: 'component',
+  description: 'A settings row: label + description on the left, a toggle on the right. The workhorse of preference screens.',
+  nodes: [{
+    id: 'tr', type: 'frame', name: 'Toggle row', width: '100%', layout: 'horizontal', alignItems: 'center',
+    justifyContent: 'space-between', gap: 16, padding: [12, 16], cornerRadius: 10,
+    fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+    children: [
+      {
+        id: 'tr-copy', type: 'frame', layout: 'vertical', gap: 2,
+        children: [
+          { id: 'tr-label', type: 'text', content: 'Setting label', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
+          { id: 'tr-desc', type: 'text', content: 'Setting description — to confirm', fontSize: 12, color: COLOR.textSecondary },
+        ],
+      },
+      { id: 'tr-toggle', type: 'toggle', checked: true },
+    ],
+  }],
+};
+
+const statCard: Structure = {
+  name: 'stat-card',
+  kind: 'component',
+  description: 'A single stat block: value slot over a label. Stamp several in a horizontal frame for a stat band.',
+  nodes: [stat('sc')],
+};
+
+const toolbar: Structure = {
+  name: 'toolbar',
+  kind: 'component',
+  description: 'A list-view toolbar: search field on the left, a filter and a primary action on the right.',
+  nodes: [{
+    id: 'tb', type: 'frame', name: 'Toolbar', width: '100%', layout: 'horizontal', alignItems: 'center',
+    justifyContent: 'space-between', gap: 16,
+    children: [
+      {
+        id: 'tb-search', type: 'frame', name: 'Search', width: 280, height: 36, layout: 'horizontal', alignItems: 'center',
+        gap: 8, padding: [8, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        children: [
+          { id: 'tb-search-icon', type: 'icon', icon: 'search', iconSize: 16, iconColor: COLOR.textSecondary },
+          { id: 'tb-search-text', type: 'text', content: 'Search — to confirm', fontSize: 13, color: COLOR.textSecondary },
+        ],
+      },
+      {
+        id: 'tb-actions', type: 'frame', layout: 'horizontal', alignItems: 'center', gap: 8,
+        children: [
+          button('tb-filter', 'Filter', COLOR.bgElevated, COLOR.textPrimary, COLOR.border),
+          button('tb-primary', 'Primary action', COLOR.accent, COLOR.textPrimary),
+        ],
+      },
+    ],
+  }],
+};
+
+/** A data-table row: identity cell (avatar + name/email), role chip, status, actions. */
+function tableRow(id: string): SceneNode {
+  return {
+    id, type: 'frame', name: 'Row', width: '100%', layout: 'horizontal', alignItems: 'center',
+    padding: [12, 16], gap: 16, stroke: COLOR.border, strokeWidth: 1,
+    children: [
+      {
+        id: `${id}-identity`, type: 'frame', width: '40%', layout: 'horizontal', alignItems: 'center', gap: 12,
+        children: [
+          { id: `${id}-avatar`, type: 'ellipse', width: 32, height: 32, fill: COLOR.bgElevated },
+          {
+            id: `${id}-id-copy`, type: 'frame', layout: 'vertical', gap: 2,
+            children: [
+              { id: `${id}-name`, type: 'text', content: 'Name — to confirm', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
+              { id: `${id}-email`, type: 'text', content: 'email — to confirm', fontSize: 12, color: COLOR.textSecondary },
+            ],
+          },
+        ],
+      },
+      {
+        id: `${id}-role`, type: 'frame', width: '20%', layout: 'horizontal',
+        children: [{
+          id: `${id}-role-chip`, type: 'frame', layout: 'horizontal', alignItems: 'center', padding: [4, 10],
+          cornerRadius: 999, fill: COLOR.bgElevated,
+          children: [{ id: `${id}-role-text`, type: 'text', content: 'Role', fontSize: 12, color: COLOR.textSecondary }],
+        }],
+      },
+      {
+        id: `${id}-status`, type: 'frame', width: '25%', layout: 'horizontal', alignItems: 'center', gap: 8,
+        children: [
+          { id: `${id}-status-toggle`, type: 'toggle', checked: true, width: 36, height: 20 },
+          { id: `${id}-status-text`, type: 'text', content: 'Status', fontSize: 13, color: COLOR.textSecondary },
+        ],
+      },
+      {
+        id: `${id}-actions`, type: 'frame', width: '15%', layout: 'horizontal', justifyContent: 'end',
+        children: [{ id: `${id}-actions-icon`, type: 'icon', icon: 'ellipsis', iconSize: 18, iconColor: COLOR.textSecondary }],
+      },
+    ],
+  };
+}
+
+function tableHeaderCell(id: string, label: string, width: string, alignEnd = false): SceneNode {
+  return {
+    id, type: 'frame', width, layout: 'horizontal', ...(alignEnd ? { justifyContent: 'end' as const } : {}),
+    children: [{ id: `${id}-text`, type: 'text', content: label, fontSize: 11, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase', color: COLOR.textSecondary }],
+  };
+}
+
+const dataTable: Structure = {
+  name: 'data-table',
+  kind: 'component',
+  description: 'A high-fidelity data table: header row plus three placeholder rows (avatar + name/email, role chip, status toggle, actions). Copy rows with batch_design C ops to extend; ~80 hand-placed nodes for free.',
+  nodes: [{
+    id: 'dt', type: 'frame', name: 'Data table', width: '100%', layout: 'vertical',
+    cornerRadius: 12, overflow: 'hidden', fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+    children: [
+      {
+        id: 'dt-header', type: 'frame', name: 'Header', width: '100%', layout: 'horizontal', alignItems: 'center',
+        padding: [10, 16], gap: 16, fill: COLOR.bgElevated,
+        children: [
+          tableHeaderCell('dt-h-identity', 'Name', '40%'),
+          tableHeaderCell('dt-h-role', 'Role', '20%'),
+          tableHeaderCell('dt-h-status', 'Status', '25%'),
+          tableHeaderCell('dt-h-actions', 'Actions', '15%', true),
+        ],
+      },
+      tableRow('dt-row1'),
+      tableRow('dt-row2'),
+      tableRow('dt-row3'),
+    ],
+  }],
+};
+
 const structureMap = new Map<string, Structure>([
   ['marquee-hero', marqueeHero],
   ['bento-grid', bentoGrid],
@@ -477,10 +629,16 @@ const structureMap = new Map<string, Structure>([
   ['editorial-longform', editorialLongform],
   ['split-workbench', splitWorkbench],
   ['catalogue', catalogue],
+  // Phase 16 — component-level scaffolds
+  ['data-table', dataTable],
+  ['form-field', formField],
+  ['toolbar', toolbar],
+  ['stat-card', statCard],
+  ['toggle-row', toggleRow],
 ]);
 
-export function listStructures(): { name: string; description: string; axes: StructureAxes }[] {
-  return Array.from(structureMap.values()).map(({ name, description, axes }) => ({ name, description, axes }));
+export function listStructures(): { name: string; kind: 'page' | 'component'; description: string; axes?: StructureAxes }[] {
+  return Array.from(structureMap.values()).map(({ name, kind, description, axes }) => ({ name, kind: kind ?? 'page', description, ...(axes ? { axes } : {}) }));
 }
 
 export function getStructure(name: string): Structure | undefined {
@@ -522,13 +680,48 @@ function walkNodes(node: SceneNode, visit: (n: SceneNode) => void): void {
 
 export interface ApplyStructureResult {
   applied: string;
-  axes: StructureAxes;
-  /** Top-level node ids inserted under the canvas root. */
+  kind: 'page' | 'component';
+  axes?: StructureAxes;
+  /** Top-level node ids inserted under the canvas root (page) or target (component). */
   insertedNodeIds: string[];
+  /** Component stamps only: template id → live (re-keyed) id, for targeting follow-up ops. */
+  idMap?: Record<string, string>;
   /** Fillable placeholders (text/image) with their role label, for populating. */
   placeholders: { id: string; role: string }[];
   /** Color tokens seeded with neutral defaults because they were unresolved. */
   seededColors: string[];
+}
+
+function findById(root: SceneNode, id: string): SceneNode | null {
+  if (root.id === id) return root;
+  for (const child of root.children ?? []) {
+    const hit = findById(child, id);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** Re-key a cloned component subtree so repeat stamps never collide: every id
+ * gets a `<structureName>-<n>-` prefix, where n is the smallest counter no
+ * existing id in the canvas already uses (covers stamps AND agent-made copies
+ * of stamps, which keep the prefixed form). Returns templateId → liveId. */
+function rekeyComponentNodes(canvas: Canvas, structureName: string, nodes: SceneNode[]): Record<string, string> {
+  const existing = new Set<string>();
+  walkNodes(canvas.root, (n) => existing.add(n.id));
+
+  let n = 1;
+  const hasPrefix = (p: string) => [...existing].some((id) => id.startsWith(p));
+  while (hasPrefix(`${structureName}-${n}-`)) n++;
+  const prefix = `${structureName}-${n}-`;
+
+  const idMap: Record<string, string> = {};
+  for (const root of nodes) {
+    walkNodes(root, (node) => {
+      idMap[node.id] = `${prefix}${node.id}`;
+      node.id = `${prefix}${node.id}`;
+    });
+  }
+  return idMap;
 }
 
 /** Stamp a layout structure onto a canvas: insert its placeholder scaffold under
@@ -544,39 +737,61 @@ export interface ApplyStructureResult {
 export function applyStructure(
   canvas: Canvas,
   structureName: string,
-  opts: { replace?: boolean; existingColors?: Set<string> } = {},
+  opts: { replace?: boolean; existingColors?: Set<string>; targetId?: string } = {},
 ): ApplyStructureResult {
   const structure = getStructure(structureName);
   if (!structure) {
     throw new Error(`Structure "${structureName}" not found. Use list_structures to see available structures.`);
   }
+  const kind = structure.kind ?? 'page';
 
-  const existing = canvas.root.children ?? [];
-  if (existing.length > 0 && !opts.replace) {
-    throw new Error(
-      `Canvas root already has ${existing.length} child node(s). Pass replace: true to clear them and stamp "${structureName}", or use a fresh canvas.`,
-    );
+  let inserted: SceneNode[];
+  let idMap: Record<string, string> | undefined;
+
+  if (kind === 'component') {
+    // Component stamp (Phase 16 slice D): insert under any target, repeatably.
+    const targetId = opts.targetId ?? 'document';
+    const target = targetId === 'document' || targetId === canvas.root.id
+      ? canvas.root
+      : findById(canvas.root, targetId);
+    if (!target) throw new Error(`Target node "${targetId}" not found on this canvas.`);
+
+    inserted = structure.nodes.map((n) => structuredClone(n));
+    idMap = rekeyComponentNodes(canvas, structure.name, inserted);
+    target.children = [...(target.children ?? []), ...inserted];
+    // No empty-canvas guard, no page background, no provenance stamp (spec C9 —
+    // provenance.structure names the PAGE shape; component stamps don't shape it).
+  } else {
+    if (opts.targetId !== undefined && opts.targetId !== 'document' && opts.targetId !== canvas.root.id) {
+      throw new Error(`Structure "${structureName}" is a page scaffold — it stamps at the canvas root and does not take a targetId. Component structures (see list_structures kind) do.`);
+    }
+    const existing = canvas.root.children ?? [];
+    if (existing.length > 0 && !opts.replace) {
+      throw new Error(
+        `Canvas root already has ${existing.length} child node(s). Pass replace: true to clear them and stamp "${structureName}", or use a fresh canvas.`,
+      );
+    }
+
+    // Insert — clone so the registry template is never mutated.
+    inserted = structure.nodes.map((n) => structuredClone(n));
+    canvas.root.children = inserted;
+
+    // Give the document root a page background so the scaffold fills the viewport
+    // rather than showing browser-default white. createCanvas seeds a white root
+    // fill, so treat white/unset as the default backdrop and override it — but
+    // preserve any custom (non-white) fill or gradient the author already chose.
+    const currentFill = canvas.root.fill?.toUpperCase();
+    if ((!currentFill || currentFill === '#FFFFFF') && !canvas.root.gradient) {
+      canvas.root.fill = `$${PAGE_BG_TOKEN}`;
+    }
+
+    // Provenance into the open metadata bag (C3). `preset` is filled later by
+    // apply_preset (T7); `seed` is reserved (C6).
+    canvas.metadata = {
+      ...canvas.metadata,
+      provenance: { structure: structure.name, axes: structure.axes, at: new Date().toISOString() },
+    };
   }
-
-  // Insert — clone so the registry template is never mutated.
-  const inserted = structure.nodes.map((n) => structuredClone(n));
-  canvas.root.children = inserted;
-
-  // Give the document root a page background so the scaffold fills the viewport
-  // rather than showing browser-default white. createCanvas seeds a white root
-  // fill, so treat white/unset as the default backdrop and override it — but
-  // preserve any custom (non-white) fill or gradient the author already chose.
-  const currentFill = canvas.root.fill?.toUpperCase();
-  if ((!currentFill || currentFill === '#FFFFFF') && !canvas.root.gradient) {
-    canvas.root.fill = `$${PAGE_BG_TOKEN}`;
-  }
-
-  // Provenance into the open metadata bag (C3). `preset` is filled later by
-  // apply_preset (T7); `seed` is reserved (C6).
-  canvas.metadata = {
-    ...canvas.metadata,
-    provenance: { structure: structure.name, axes: structure.axes, at: new Date().toISOString() },
-  };
 
   // One pass: collect fillable placeholders + referenced color tokens.
   const placeholders: { id: string; role: string }[] = [];
@@ -593,7 +808,7 @@ export function applyStructure(
   }
 
   // The page background may only live on the root (not in the scanned children).
-  referenced.add(PAGE_BG_TOKEN);
+  if (kind === 'page') referenced.add(PAGE_BG_TOKEN);
 
   // Seed neutral defaults for referenced colors not already resolvable (A-P4).
   const existingColors = opts.existingColors ?? new Set<string>();
@@ -608,8 +823,10 @@ export function applyStructure(
 
   return {
     applied: structure.name,
-    axes: structure.axes,
+    kind,
+    ...(structure.axes ? { axes: structure.axes } : {}),
     insertedNodeIds: inserted.map((n) => n.id),
+    ...(idMap ? { idMap } : {}),
     placeholders,
     seededColors: seededColors.sort(),
   };

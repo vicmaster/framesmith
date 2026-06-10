@@ -144,8 +144,8 @@ export interface FontFace {
   /** Family name used in `fontFamily` (no quotes). */
   family: string;
   /** Direct binary URL (.woff2/.woff/.ttf/.otf) — `https://`, `http://`, or
-   * `data:` URIs are accepted. Stylesheet URLs (e.g. fonts.googleapis.com/css2)
-   * are not supported; reference the gstatic.com binary directly. */
+   * `data:` URIs. (Google Fonts css2 stylesheet URLs are accepted by the
+   * set_fonts tool, which extracts the binary faces before they land here.) */
   url: string;
   weight?: number | string;
   style?: 'normal' | 'italic';
@@ -170,7 +170,13 @@ export interface StructureAxes {
 export interface Structure {
   name: string;
   description: string;
-  axes: StructureAxes;
+  /** Phase 16 — granularity: 'page' (default) stamps a whole-page scaffold at
+   * the canvas root; 'component' stamps a reusable fragment (table, form
+   * field, …) under any target node, repeatably, with re-keyed IDs. */
+  kind?: 'page' | 'component';
+  /** Taxonomy tags — page structures only (the diversification signal and the
+   * "variety" rubric axis read them; component stamps don't shape the page). */
+  axes?: StructureAxes;
   /** Placeholder children inserted under `canvas.root` by `apply_structure`. */
   nodes: SceneNode[];
 }
