@@ -188,6 +188,9 @@ export interface Provenance {
   structure?: string;
   preset?: string;
   axes?: Partial<StructureAxes>;
+  /** Phase 17 — set when the canvas was imported from an implementation:
+   * 'html' for snippets, or the source URL. Auth material is never recorded. */
+  importedFrom?: string;
   /** Reserved for a future "pick a structure for me" auto-selector; unused in v1.1. */
   seed?: string;
   /** ISO-8601 timestamp when the stamp was written. */

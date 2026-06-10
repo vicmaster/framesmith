@@ -377,6 +377,33 @@ Stamp a layout structure onto a canvas and return the placeholder node IDs to po
 | `replace` | boolean? | Page scaffolds: if the root already has children, clear them before stamping. Default `false` (refuses on a non-empty canvas) |
 | `targetId` | string? | Component scaffolds: node to stamp under (default `"document"`) |
 
+### `canvas_import_html`
+
+Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of `export`. The markup renders headlessly and a computed-style DOM walk maps it to the scene graph:
+
+| Source | → Scene graph |
+|--------|---------------|
+| flex/grid/block container | `frame` + `layout`/`gap`/`padding`/`alignItems`/`justifyContent`/`wrap` (grid degrades to a vertical frame with a warning) |
+| text run | `text` (size, weight, color, family, line-height, letter-spacing, transform, align) |
+| `<img>` (absolute/data URL) | `image` |
+| inline `<svg>` | `icon` when the path data matches a bundled Lucide/Material glyph; else `path` |
+| checkbox / radio / `role="switch"` / `<select>` | the input-primitive node types, with live `checked`/selected state |
+| background / border / radius / shadow / opacity / overflow | `fill` / `stroke`+`strokeWidth` / `cornerRadius` / `shadows` / `opacity` / `overflow` |
+
+**Lossy by design.** Every import returns a `report` — counts, warnings (dropped background images, grid containers, truncations), unmatched icons/fonts — and that report is the contract; the goal is an *editable, honest* starting point, not a pixel-perfect clone. Single-child wrapper divs collapse, same-style text runs merge, invisible nodes drop (all tunable via `flatten`).
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `html` | string | The snippet to import |
+| `css` | string? | CSS to apply — e.g. the compiled Tailwind stylesheet. A bare Tailwind snippet has no runtime, so classes render unstyled without this |
+| `projectId` | string? | Project to create the canvas in (default project if omitted) |
+| `name` | string? | Canvas name (default `"Imported HTML"`) |
+| `selector` | string? | Import only the first match within the snippet |
+| `width` | number? | Container width layouts resolve against (default 1440) |
+| `flatten` | object? | `{ collapseWrappers, mergeTextRuns, dropInvisible, maxDepth }` |
+
+Returns `{ canvasId, rootId, report }`. Token re-mapping (`tokenMatch`, Tailwind class → `$token` intent mapping) and `canvas_import_url` land in the next Phase 17 slices.
+
 ### `import_design_md`
 
 Import a [DESIGN.md](https://github.com/VoltAgent/awesome-design-md) file as a design system preset. Parses the Google Stitch format and extracts colors, typography, spacing, and border radius. It also extracts reusable component skeletons (`button`, `card`, `badge`) from the "Component Styling" section — `apply_preset` then makes them available as instanceable components on the canvas. After importing, use `apply_preset` to apply it to any canvas.
