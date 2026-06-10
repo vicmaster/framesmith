@@ -16,9 +16,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import type { DesignVariables, SceneNode } from './types.js';
+import type { Canvas, DesignVariables, SceneNode } from './types.js';
 import { withPage, withIsolatedPage } from './screenshot.js';
 import { classesToProps } from './tailwind-map.js';
+import { renderToHtml } from './renderer.js';
+import { ensureFontsForRender } from './fonts.js';
 
 // ── walker output ────────────────────────────────────────────────────────────
 
@@ -706,6 +708,15 @@ export async function importHtml(html: string, opts: ImportHtmlOptions = {}): Pr
     }
     return { root, report, contentHeight: raw.rect.h };
   });
+}
+
+/** Render an imported tree the same way a canvas renders (Phase 16 font
+ * backstop included) WITHOUT creating a canvas — canvas_sync_from_url diffs
+ * this against the stored design (spec FR-D1: ephemeral, mutates nothing). */
+export async function renderImportedTree(root: SceneNode, width: number, height: number): Promise<string> {
+  const doc: SceneNode = { id: 'sync-doc', type: 'document', fill: '#FFFFFF', width, height, children: [root] };
+  const { extraFonts } = await ensureFontsForRender(doc, { fonts: [] } as unknown as Canvas, undefined);
+  return renderToHtml(doc, width, height, undefined, { extraFonts });
 }
 
 export interface ImportUrlOptions {
