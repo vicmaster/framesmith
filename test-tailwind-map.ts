@@ -53,11 +53,15 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   const { props: lit } = classesToProps(['bg-white', 'text-black']);
   expect('white/black → literals', lit.fill === '#FFFFFF' && lit.color === '#000000');
 
-  const { props: pal } = classesToProps(['bg-red-500', 'text-slate-50', 'bg-[#123456]']);
-  expect('palette + arbitrary colors fall through', pal.fill === undefined && pal.color === undefined);
+  const { props: pal, tokenRefs: palRefs } = classesToProps(['bg-red-500', 'text-slate-50']);
+  expect('palette classes → v4 hex literals (Chrome-generated)', pal.fill === '#fb2c36' && pal.color === '#f8fafc', JSON.stringify(pal));
+  expect('palette literals are NOT $token refs', palRefs.length === 0);
+
+  const { props: arb } = classesToProps(['bg-[#123456]']);
+  expect('arbitrary colors fall through', arb.fill === undefined);
 
   const { props: themed } = classesToProps(['bg-red-500'], { 'red-500': '#custom' });
-  expect('theme overrides palette fallthrough', themed.fill === '$red-500');
+  expect('theme overrides the palette', themed.fill === '$red-500');
 
   const { props: ambiguous } = classesToProps(['text-lg', 'text-secondary']);
   expect('text- disambiguates size vs color', ambiguous.fontSize === 18 && ambiguous.color === '$secondary');
@@ -87,6 +91,19 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   const { root: r2, report: rep2 } = domToSceneGraph(styled);
   expect('computed geometry wins over intent', r2.gap === 20, String(r2.gap));
   expect('token intent overrides computed color', r2.fill === '$surface' && rep2.snapped.some((s) => s.from === 'rgb(30, 30, 30)'));
+
+  // Palette literals are fill-gap only: bare snippet gets them, computed CSS keeps its value.
+  const barePalette = el({ tag: 'div', classes: ['bg-gray-200'], children: [el({ tag: 'span', text: 'x', styles: { display: 'inline', visibility: 'visible' } })] });
+  const { root: r3 } = domToSceneGraph(barePalette);
+  expect('palette fills an unstyled snippet', r3.fill === '#e5e7eb', String(r3.fill));
+
+  const styledPalette = el({
+    tag: 'div', classes: ['bg-gray-200'],
+    styles: { display: 'block', backgroundColor: 'rgb(1, 2, 3)', visibility: 'visible' },
+    children: [el({ tag: 'span', text: 'x', styles: { display: 'inline', visibility: 'visible' } })],
+  });
+  const { root: r4 } = domToSceneGraph(styledPalette);
+  expect('computed color beats the palette literal', r4.fill === 'rgb(1, 2, 3)', String(r4.fill));
 }
 
 // ── 4. parseCssColor ─────────────────────────────────────────────────────────

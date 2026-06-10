@@ -18,10 +18,9 @@
 // which names are treated as tokens.
 
 import type { SceneNode } from './types.js';
+import { TAILWIND_PALETTE } from './tailwind-palette.js';
 
 const SCALE = 4; // 1 unit = 0.25rem = 4px
-
-const PALETTE_RE = /^(red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-(50|[1-9]50|[1-9]00)$/;
 
 const TEXT_SIZES: Record<string, number> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60, '7xl': 72, '8xl': 96, '9xl': 128 };
 const FONT_WEIGHTS: Record<string, number> = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
@@ -38,14 +37,17 @@ function sizeValue(token: string): number | null {
   return null;
 }
 
-/** A color utility's value: literal hex for white/black, null to fall through
- * (palette/arbitrary — computed styles own those), or a `$name` token ref. */
+/** A color utility's value: literal hex for white/black and the v4 default
+ * palette (so a bare snippet styles without compiled CSS — palette colors are
+ * NOT design tokens, hence literals), null to fall through (arbitrary values —
+ * computed styles own those), or a `$name` token ref for custom names. A
+ * theme entry always wins over the palette (the project redefined the name). */
 function colorValue(name: string, theme?: Record<string, string>): string | null {
   if (name === 'white') return '#FFFFFF';
   if (name === 'black') return '#000000';
   if (name === 'transparent' || name === 'current' || name === 'inherit') return null;
   if (name.startsWith('[')) return null; // arbitrary value — computed styles cover it
-  if (PALETTE_RE.test(name) && !(theme && name in theme)) return null;
+  if (name in TAILWIND_PALETTE && !(theme && name in theme)) return TAILWIND_PALETTE[name];
   return `$${name}`;
 }
 

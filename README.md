@@ -406,7 +406,7 @@ Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of
 
 **Token re-mapping** makes the import a token-driven design instead of a pile of hex:
 
-- **Tailwind intent first** — class names carry intent a computed value can't: `bg-surface` → `fill: "$surface"`, `gap-4` → `16`, `rounded-xl` → `12`, `text-sm font-semibold uppercase` → typography props. Custom utilities resolve via `tailwind.theme`; palette classes (`bg-red-500`) and unknowns fall through to computed styles. Geometry intent only fills gaps the CSS didn't set; token-ref colors override computed literals.
+- **Tailwind intent first** — class names carry intent a computed value can't: `bg-surface` → `fill: "$surface"`, `gap-4` → `16`, `rounded-xl` → `12`, `text-sm font-semibold uppercase` → typography props. Custom utilities resolve via `tailwind.theme`; palette classes (`bg-red-500`) map to the **bundled v4 palette** as hex literals (generated from the official oklch values by Chrome itself — see `scripts/generate-tailwind-palette.ts`), so a bare snippet styles without compiled CSS; arbitrary values and unknowns fall through to computed styles. Geometry intent and palette literals only fill gaps the CSS didn't set; token-ref colors override computed literals.
 - **Nearest-color snapping second** — remaining literal colors snap to the matched design system within `tolerance` (exact matches always; near-ties between two tokens are *reported and left literal*, never guessed). Spacing/radius/fontSize values that equal a scale token are reported under `report.scaleMatches`.
 - Fonts seen in computed styles feed the font-by-name resolver, so the imported canvas renders in the same faces.
 
