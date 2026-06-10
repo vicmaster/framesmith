@@ -83,6 +83,7 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 - **Unicode glyphs as icon stand-ins.** `✓ ● ▾ ○` read as unfinished. Use the `icon` node type — two sets render by name as inline SVG: 1,900+ [Lucide](https://lucide.dev) (`icon: "check"`) and 3,800+ [Material Symbols](https://fonts.google.com/icons) (`icon: "material:check"`, `iconStyle: "outlined" | "rounded" | "sharp"`, `-fill` suffix for filled variants). `I("parent", { type: "icon", icon: "material:check", iconSize: 16, iconColor: "$primary" })`. For Material-style design systems, prefer the Material set.
 - **Baking uppercase into `content`.** Use `textTransform: "uppercase"` (with `letterSpacing` for tracking) so the underlying copy stays editable and case-styling lives in the design, not the data.
 - **Faking form controls from frames + ellipses.** `toggle`, `checkbox`, `radio`, and `select` are real node types: `I("parent", { type: "toggle", checked: true })`. They style themselves from `$accent`/`$border`/`$bg-surface` tokens (neutral fallbacks when unthemed) and stay pixel-consistent; `fill`/`stroke`/`color` override.
+- **Hand-building app furniture node by node.** A data table, form field, toolbar, stat card, or settings row is one `apply_structure` stamp: component-kind structures insert under any `targetId` with re-keyed IDs and return an `idMap` for populating. Stamp `data-table`, fill the placeholders, copy rows with `C()` — don't place ~80 nodes by hand.
 
 ## Design systems (workspace + project inheritance)
 

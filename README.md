@@ -352,25 +352,30 @@ Apply a style guide preset to a canvas. Merges preset design tokens into the can
 
 ### `list_structures`
 
-List available layout structures — named page scaffolds you stamp onto a canvas and then populate. Returns each structure's name, description, and taxonomy axes. Distinct from presets: structures define **layout skeleton**, presets define **color/token theme** — they compose.
+List available layout structures — named scaffolds you stamp onto a canvas and then populate. Returns each structure's name, `kind`, description, and (for pages) taxonomy axes. Distinct from presets: structures define **layout skeleton**, presets define **color/token theme** — they compose.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `projectId` | string? | If given, also return a `diversification` signal for the project (recently-built structures + a hint to differ on ≥ 1 axis), so you pick a shape that contrasts with recent work. Omit it to get just the structure list. |
 
-Built-in: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout.
+Two kinds:
+
+- **`page`** — whole-page scaffolds stamped once at the canvas root: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout.
+- **`component`** — reusable fragments stamped under **any** node via `targetId`, repeatably: `data-table` (header + 3 rows with avatar/name/email, role chip, status toggle, actions), `form-field`, `toolbar`, `stat-card`, `toggle-row`. A high-fidelity table costs one stamp instead of ~80 hand-placed nodes.
 
 ### `apply_structure`
 
-Stamp a layout structure onto a canvas: inserts the scaffold of labeled placeholder nodes under the canvas root, records provenance, and returns the placeholder node IDs to populate. Seeds neutral default colors so the scaffold renders even before a preset is applied. Populate the placeholders with `batch_design` `U` ops, then `screenshot` to verify.
+Stamp a layout structure onto a canvas and return the placeholder node IDs to populate. Seeds neutral default colors so the scaffold renders even before a preset is applied. Populate the placeholders with `batch_design` `U` ops, then `screenshot` to verify.
 
-The chosen structure + axes are stamped onto the canvas (`metadata.provenance`) and appended to a **per-project build log**, which feeds the `diversification` signal on `canvas_create` / `list_structures`. Provenance is shown on the canvas's viewer detail page.
+- **Page scaffolds** insert at the canvas root (refusing on a non-empty canvas unless `replace`), record provenance (`metadata.provenance`), and append to the **per-project build log** that feeds the `diversification` signal.
+- **Component scaffolds** insert under `targetId` (default root), repeatably — every stamp re-keys its node IDs (`form-field-1-…`, `form-field-2-…`) and returns an `idMap` (template ID → live ID) for follow-up ops. Component stamps don't touch provenance or the build log: they don't shape the page.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID |
-| `structure` | string | Structure name (use `list_structures`, e.g. `"marquee-hero"`, `"bento-grid"`) |
-| `replace` | boolean? | If the root already has children, clear them before stamping. Default `false` (refuses on a non-empty canvas) |
+| `structure` | string | Structure name (use `list_structures`, e.g. `"marquee-hero"`, `"data-table"`) |
+| `replace` | boolean? | Page scaffolds: if the root already has children, clear them before stamping. Default `false` (refuses on a non-empty canvas) |
+| `targetId` | string? | Component scaffolds: node to stamp under (default `"document"`) |
 
 ### `import_design_md`
 

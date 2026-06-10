@@ -46,6 +46,8 @@ Icons & typography: two bundled icon sets render by name via the icon node type 
 
 Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
 
+Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
+
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
 - import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.`;
@@ -71,6 +73,7 @@ const WORKFLOW_CHEATSHEET = [
 const GOTCHAS = [
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
+  'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
   'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
@@ -852,7 +855,10 @@ server.tool(
 // --- list_structures ---
 server.tool(
   'list_structures',
-  'List available layout structures — named page scaffolds (e.g. marquee-hero, bento-grid) you stamp onto a canvas and then populate. Each is tagged on four taxonomy axes (heroTreatment, density, rhythm, alignment) so you can deliberately vary page shape rather than defaulting to the same layout. Distinct from presets: structures define layout skeleton, presets define color/token theme. Pass projectId to also get a diversification signal (recently-built structures + a hint to differ) so you pick a shape that contrasts with recent work. Apply one with apply_structure, then screenshot and verify before populating.',
+  `List available layout structures, two kinds:
+  - kind "page" — whole-page scaffolds (marquee-hero, bento-grid, …) stamped once at the canvas root, tagged on four taxonomy axes (heroTreatment, density, rhythm, alignment) so you deliberately vary page shape.
+  - kind "component" — reusable fragments (data-table, form-field, toolbar, stat-card, toggle-row) stamped under ANY node via apply_structure targetId, repeatably — a high-fidelity table costs one stamp instead of ~80 hand-placed nodes.
+Distinct from presets: structures define layout skeleton, presets define color/token theme. Pass projectId to also get a diversification signal (recently-built page structures + a hint to differ). Apply one with apply_structure, then screenshot and verify before populating.`,
   {
     projectId: z.string().optional().describe('If given, also return a diversification signal for this project: the recently-built structures and a hint to differ on >= 1 taxonomy axis. Use project_list to see projects.'),
   },
@@ -871,27 +877,37 @@ server.tool(
 // --- apply_structure ---
 server.tool(
   'apply_structure',
-  'Stamp a layout structure (see list_structures) onto a canvas: inserts the named scaffold of labeled placeholder nodes under the canvas root and records provenance. Refuses if the root already has content unless replace is true (which clears it first). Seeds neutral default colors so the scaffold renders even before a preset is applied. Returns the placeholder node ids to populate — fill them with batch_design U ops, then call screenshot to verify the layout.',
+  `Stamp a layout structure (see list_structures) onto a canvas. Two kinds:
+  - page scaffolds insert at the canvas root and record provenance; refuses if the root already has content unless replace is true.
+  - component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) insert under targetId (default root), repeatably — every stamp re-keys its node IDs and returns an idMap (templateId → live id) for follow-up batch_design ops.
+Seeds neutral default colors so the scaffold renders even before a preset is applied. Returns the placeholder node ids to populate — fill them with batch_design U ops, then call screenshot to verify the layout.`,
   {
     canvasId: z.string().describe('Canvas ID'),
-    structure: z.string().describe('Structure name (use list_structures, e.g. marquee-hero, bento-grid)'),
-    replace: z.boolean().optional().describe('If the root already has children, clear them before stamping. Default false (refuses on a non-empty canvas).'),
+    structure: z.string().describe('Structure name (use list_structures, e.g. marquee-hero, data-table)'),
+    replace: z.boolean().optional().describe('Page scaffolds only: if the root already has children, clear them before stamping. Default false (refuses on a non-empty canvas).'),
+    targetId: z.string().optional().describe('Component scaffolds only: node to stamp under (default "document"). Page scaffolds always stamp at the root.'),
   },
-  async ({ canvasId, structure, replace }) => {
+  async ({ canvasId, structure, replace, targetId }) => {
+    ensureFresh(canvasId);
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
       const existingColors = new Set(Object.keys(getCanvasTokens(canvas).colors ?? {}));
-      const result = applyStructure(canvas, structure, { replace, existingColors });
+      const result = applyStructure(canvas, structure, { replace, existingColors, targetId });
       // Record provenance in the per-project build log (feeds the diversification
-      // signal). applyStructure stamped canvas.metadata.provenance just above.
-      const prov = canvas.metadata?.provenance;
-      if (prov) appendBuildLog(canvas.projectId, { ...prov, canvasId: canvas.id, canvasName: canvas.name });
+      // signal) — page stamps only: component stamps don't shape the page, and
+      // logging them would pollute the diversification signal (spec C9).
+      if (result.kind === 'page') {
+        const prov = canvas.metadata?.provenance;
+        if (prov) appendBuildLog(canvas.projectId, { ...prov, canvasId: canvas.id, canvasName: canvas.name });
+      }
       touchCanvas(canvasId);
       return { content: [{ type: 'text', text: JSON.stringify({
         ...result,
-        instruction: 'Populate each placeholder by id with batch_design U ops (replace the role-labeled content), then call screenshot to verify the layout before refining.',
+        instruction: result.kind === 'component'
+          ? 'Populate the placeholders via the idMap with batch_design U ops (e.g. U(idMap["dt-row1-name"], { content: "..." })); copy repeated fragments with C ops; then screenshot to verify.'
+          : 'Populate each placeholder by id with batch_design U ops (replace the role-labeled content), then call screenshot to verify the layout before refining.',
       }, null, 2) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
