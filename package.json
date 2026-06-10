@@ -1,6 +1,6 @@
 {
   "name": "framesmith",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "MCP server that gives any AI assistant a visual design canvas",
   "type": "module",
   "bin": {
