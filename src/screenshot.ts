@@ -1,6 +1,6 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import puppeteer, { type Browser } from 'puppeteer';
+import puppeteer, { type Browser, type Page } from 'puppeteer';
 
 let browser: Browser | null = null;
 
@@ -35,6 +35,19 @@ async function getBrowser(): Promise<Browser> {
     }
   }
   return browser;
+}
+
+/** Run a callback against a fresh page on the shared browser (Phase 17 —
+ * the import engine reuses the singleton + its launch hardening instead of
+ * spawning a second Chrome). The page is always closed afterwards. */
+export async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
+  const b = await getBrowser();
+  const page = await b.newPage();
+  try {
+    return await fn(page);
+  } finally {
+    await page.close();
+  }
 }
 
 export interface ScreenshotOptions {

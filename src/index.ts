@@ -19,6 +19,7 @@ import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots,
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
+import { importHtml } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
@@ -48,6 +49,8 @@ Fonts load by name: set fontFamily in a typography token (or on a node) and the 
 
 Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
+Import from implementation: canvas_import_html turns an HTML snippet (+ optional CSS) into an editable canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives. Lossy by design: READ the returned report (warnings/literals) instead of assuming fidelity.
+
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
 - import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.`;
@@ -74,6 +77,7 @@ const GOTCHAS = [
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
+  'canvas_import_html: a bare Tailwind snippet has no Tailwind runtime — pass the compiled CSS via the css param, or the classes render unstyled. Always read the returned report; the import is honest about what it dropped.',
   'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
@@ -956,6 +960,55 @@ server.tool(
       out.note = `Kept ${merge.preserved.length} token(s) inherited from the workspace/project design system rather than overwriting them with the preset's. Set them explicitly via set_variables if you do want the preset values.`;
     }
     return { content: [{ type: 'text', text: JSON.stringify(out, null, 2) }] };
+  }
+);
+
+// --- canvas_import_html ---
+server.tool(
+  'canvas_import_html',
+  `Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of export. Renders the markup headlessly and walks the DOM's computed styles into a scene graph: flex containers → frames (layout/gap/padding/align), text runs → text nodes (size/weight/color/spacing/transform), <img> → image, inline SVGs → icon nodes when they match a bundled Lucide/Material glyph (else path), checkboxes/radios/switches/selects → the input-primitive node types with their live checked/value state.
+
+LOSSY BY DESIGN — read the returned report: it lists what was dropped (pseudo-elements, background images, grid intricacies), unmatched fonts/icons, and warnings. The import is an editable starting point that honestly tells you where it degraded, not a pixel-perfect clone.
+
+Note: a bare Tailwind snippet has no Tailwind runtime — pass the compiled CSS via \`css\` for faithful styling (Tailwind utility-class intent mapping lands in a later slice).`,
+  {
+    html: z.string().min(1).describe('The HTML snippet to import'),
+    css: z.string().optional().describe('CSS to apply (e.g. the compiled Tailwind stylesheet). Without it, only inline styles and browser defaults render.'),
+    projectId: z.string().optional().describe('Project to create the canvas in (default: the default project)'),
+    name: z.string().optional().describe('Canvas name (default: "Imported HTML")'),
+    selector: z.string().optional().describe('Import only the first element matching this CSS selector within the snippet'),
+    width: z.number().optional().describe('Container width the layout resolves against (default 1440)'),
+    flatten: z.object({
+      collapseWrappers: z.boolean().optional().describe('Collapse single-child wrapper divs with no visual props (default true)'),
+      mergeTextRuns: z.boolean().optional().describe('Merge adjacent text runs with identical style (default true)'),
+      dropInvisible: z.boolean().optional().describe('Drop display:none / zero-size / aria-hidden nodes (default true)'),
+      maxDepth: z.number().optional().describe('Truncate subtrees deeper than this (default 24)'),
+    }).optional().describe('Tree-simplification knobs'),
+  },
+  async ({ html, css, projectId, name, selector, width, flatten }) => {
+    if (projectId && !getProject(projectId)) {
+      return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see projects.` }], isError: true };
+    }
+    try {
+      const { root, report, contentHeight } = await importHtml(html, { css, selector, width, flatten });
+      const canvas = createCanvas(name ?? 'Imported HTML', projectId);
+      canvas.root.width = width ?? 1440;
+      canvas.root.height = Math.max(contentHeight, 100);
+      canvas.root.children = [root];
+      canvas.metadata = {
+        ...canvas.metadata,
+        provenance: { importedFrom: 'html', at: new Date().toISOString() },
+      };
+      touchCanvas(canvas.id);
+      return { content: [{ type: 'text', text: JSON.stringify({
+        canvasId: canvas.id,
+        rootId: root.id,
+        report,
+        instruction: 'Screenshot the canvas to review fidelity, then check report.warnings and report.literals for what needs hand-finishing.',
+      }, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
   }
 );
 
