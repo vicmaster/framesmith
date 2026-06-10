@@ -229,9 +229,9 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order.
 
-**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`
+**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
 
 Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
@@ -627,6 +627,21 @@ I("parent", { type: "icon", icon: "material:star-fill" })   # "-fill" suffix = f
 ```
 
 `iconStyle` picks the Material variant (`"outlined"` default, `"rounded"`, `"sharp"`); it's ignored for Lucide.
+
+## Input controls
+
+`toggle`, `checkbox`, `radio`, and `select` are first-class node types — static renders with a `checked` / `value` / `disabled` state, so app UI doesn't have to be faked from frames and ellipses:
+
+```
+I("parent", { type: "toggle", checked: true })
+I("parent", { type: "checkbox", checked: true })
+I("parent", { type: "radio" })
+I("parent", { type: "select", value: "Administrator", width: 220 })
+I("parent", { type: "select" })                      # renders a muted "Select…" placeholder
+I("parent", { type: "toggle", checked: true, disabled: true })   # 50% opacity
+```
+
+Colors default from the design system — `$accent` (falling back to `$primary`) for active states, `$border` for outlines, `$bg-surface` / `$text-primary` for the select — with neutral fallbacks on unthemed canvases. Explicit `fill` / `stroke` / `color` override. Defaults: toggle 44×24, checkbox/radio 18×18, select `fit-content` (give it a `width` for form layouts).
 
 ## SVG Paths
 
