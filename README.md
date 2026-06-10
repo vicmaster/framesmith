@@ -231,7 +231,9 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
+
+Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
 ### `screenshot`
 
@@ -788,6 +790,7 @@ npm run build
 |----------|---------|
 | `FRAMESMITH_VIEWER_URL` | Point the MCP server at an external viewer (skips starting an embedded one). |
 | `FRAMESMITH_VIEWER_PORT` | Override the standalone viewer's port. |
+| `FRAMESMITH_CHROME_PATH` | Chrome binary for screenshots/exports (falls back to `PUPPETEER_EXECUTABLE_PATH`, then the Puppeteer-managed Chrome). Set it in the MCP server's env config — clients often launch servers with a minimal env. |
 
 ### Conventions
 

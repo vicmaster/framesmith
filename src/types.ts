@@ -71,6 +71,9 @@ export interface SceneNode {
   letterSpacing?: number;
   textDecoration?: string;
   textTransform?: string;
+  /** Raw CSS font-variation-settings value, e.g. `"wght" 650, "opsz" 24`.
+   * Needed for variable fonts and icon fonts whose axes aren't covered by fontWeight. */
+  fontVariationSettings?: string;
 
   // Image
   src?: string;

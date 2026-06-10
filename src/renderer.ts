@@ -399,6 +399,7 @@ function buildStyles(node: SceneNode): string {
   if (node.letterSpacing !== undefined) s.push(`letter-spacing: ${node.letterSpacing}px`);
   if (node.textDecoration) s.push(`text-decoration: ${node.textDecoration}`);
   if (node.textTransform) s.push(`text-transform: ${node.textTransform}`);
+  if (node.fontVariationSettings) s.push(`font-variation-settings: ${node.fontVariationSettings}`);
 
   return s.join('; ');
 }
