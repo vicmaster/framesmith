@@ -79,10 +79,13 @@ export interface SceneNode {
   src?: string;
   objectFit?: 'cover' | 'contain' | 'fill' | 'none';
 
-  // Icon
+  // Icon — `icon` accepts a Lucide name ("search") or a Material Symbols
+  // reference ("material:check"; "-fill" suffix = filled variant).
   icon?: string;
   iconSize?: number;
   iconColor?: string;
+  /** Material Symbols style variant; ignored for Lucide. Default "outlined". */
+  iconStyle?: 'outlined' | 'rounded' | 'sharp';
 
   // SVG path (only for type: 'path'). Inherits fill/stroke/strokeWidth from
   // the standard SceneNode fields; viewBox defaults to `0 0 width height`.

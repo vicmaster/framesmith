@@ -384,7 +384,7 @@ A fresh agent connection gets tool names and schemas but no *model* of how to us
 A hand-built canvas comes out as a *look-alike*, not the exact reference: declared fonts silently fall back to the system stack, the icon set doesn't cover Material-style systems, form controls get faked from frames + ellipses, and a data table costs ~80 hand-placed nodes. Close the parity gaps so a canvas can reproduce what ships. (The discoverability slice of #77 — surfacing Lucide + text props, Chrome launch hardening — shipped separately in PR #79.)
 
 - [x] Fonts by name — a family named in a typography token or node renders in that face: Google Fonts resolution at write-time + a cache-first render backstop (`~/.framesmith/fonts/`), css2 stylesheet URLs accepted by `set_fonts`, `typography.body.fontFamily` becomes the document default; unresolvable families degrade to fallback + an explicit warning, never silently
-- [ ] Material Symbols — second bundled icon set via `icon: "material:<name>"` (+ `iconStyle`: outlined/rounded/sharp); unprefixed names stay Lucide
+- [x] Material Symbols — second bundled icon set via `icon: "material:<name>"` (+ `iconStyle`: outlined/rounded/sharp); unprefixed names stay Lucide
 - [ ] Input primitives — `toggle`, `checkbox`, `radio`, `select` node types with `checked`/`value`/`disabled`, styled from `$tokens` with neutral fallbacks
 - [ ] Component-level structures — `apply_structure` stamps `kind: "component"` scaffolds (`data-table`, `form-field`, `toolbar`, `stat-card`, `toggle-row`) under a `targetId` with re-keyed IDs + an ID map; page structures unchanged
 - [ ] Every capability discoverable from the MCP surface (docstrings, server instructions, GUIDELINES) — the Phase 15 lesson, enforced per-slice

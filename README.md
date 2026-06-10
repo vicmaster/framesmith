@@ -231,7 +231,7 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"`), `gap`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `animation`, `transition`, `componentId`, `overrides`
 
 Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
@@ -609,14 +609,24 @@ The legacy `shadow` string property still works for simple cases.
 
 ## Icons
 
-1,900+ icons from [Lucide](https://lucide.dev) are available via the `icon` node type:
+Two bundled sets are available via the `icon` node type, rendering as inline SVGs with configurable size and color:
+
+**Lucide** (1,900+, stroke style) — unprefixed names, [browse here](https://lucide.dev):
 
 ```
 I("parent", { type: "icon", icon: "search", iconSize: 24, iconColor: "#888" })
 I("parent", { type: "icon", icon: "heart", iconSize: 32, iconColor: "#ef4444" })
 ```
 
-Icons render as inline SVGs with configurable size and color.
+**Material Symbols** (3,800+, fill style) — `material:` prefix, [browse here](https://fonts.google.com/icons):
+
+```
+I("parent", { type: "icon", icon: "material:check", iconSize: 24, iconColor: "#b71421" })
+I("parent", { type: "icon", icon: "material:settings", iconStyle: "rounded" })
+I("parent", { type: "icon", icon: "material:star-fill" })   # "-fill" suffix = filled variant
+```
+
+`iconStyle` picks the Material variant (`"outlined"` default, `"rounded"`, `"sharp"`); it's ignored for Lucide.
 
 ## SVG Paths
 
