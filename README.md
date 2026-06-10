@@ -401,8 +401,16 @@ Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of
 | `selector` | string? | Import only the first match within the snippet |
 | `width` | number? | Container width layouts resolve against (default 1440) |
 | `flatten` | object? | `{ collapseWrappers, mergeTextRuns, dropInvisible, maxDepth }` |
+| `tokenMatch` | object? | `{ source: "workspace" \| "designMd" \| "tailwind" \| "none", tolerance?, designMd? }` — snap concrete values back to `$token` refs (default: the target project's merged design system) |
+| `tailwind` | object? | `{ theme: { name: value } }` — the project's `@theme` map; widens which class names map to `$tokens` |
 
-Returns `{ canvasId, rootId, report }`. Token re-mapping (`tokenMatch`, Tailwind class → `$token` intent mapping) and `canvas_import_url` land in the next Phase 17 slices.
+**Token re-mapping** makes the import a token-driven design instead of a pile of hex:
+
+- **Tailwind intent first** — class names carry intent a computed value can't: `bg-surface` → `fill: "$surface"`, `gap-4` → `16`, `rounded-xl` → `12`, `text-sm font-semibold uppercase` → typography props. Custom utilities resolve via `tailwind.theme`; palette classes (`bg-red-500`) and unknowns fall through to computed styles. Geometry intent only fills gaps the CSS didn't set; token-ref colors override computed literals.
+- **Nearest-color snapping second** — remaining literal colors snap to the matched design system within `tolerance` (exact matches always; near-ties between two tokens are *reported and left literal*, never guessed). Spacing/radius/fontSize values that equal a scale token are reported under `report.scaleMatches`.
+- Fonts seen in computed styles feed the font-by-name resolver, so the imported canvas renders in the same faces.
+
+Returns `{ canvasId, rootId, report }` — `report.snapped` / `literals` / `scaleMatches` / `warnings` are the contract. `canvas_import_url` and `canvas_sync_from_url` land in the next Phase 17 slices.
 
 ### `import_design_md`
 
