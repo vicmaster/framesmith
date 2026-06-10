@@ -389,7 +389,18 @@ A hand-built canvas comes out as a *look-alike*, not the exact reference: declar
 - [x] Component-level structures — `apply_structure` stamps `kind: "component"` scaffolds (`data-table`, `form-field`, `toolbar`, `stat-card`, `toggle-row`) under a `targetId` with re-keyed IDs + an ID map; page structures unchanged
 - [ ] Every capability discoverable from the MCP surface (docstrings, server instructions, GUIDELINES) — the Phase 15 lesson, enforced per-slice
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-16-SPEC.md`](docs/specs/PHASE-16-SPEC.md). Phase 17 candidate: issue #78 (import-from-implementation), which consumes this phase's icons + primitives._
+_Full spec-driven breakdown in [`docs/specs/PHASE-16-SPEC.md`](docs/specs/PHASE-16-SPEC.md). Phase 16 complete._
+
+### Phase 17 — Import from implementation (from issue #78)
+
+A screen that already ships must be hand-redrawn (~80 nodes for a table) to exist as a design — never exact, and itself the reverse-engineering design-first should kill. Add the reverse of `export`: implementation → editable, token-mapped canvas, plus drift detection that keeps the design-of-record honest. Lossy by design — every import returns a mapping report (snapped vs literal vs dropped); the report is the contract, not pixel-perfection.
+
+- [ ] `canvas_import_html` — HTML/Tailwind snippet (+ optional CSS) → canvas via a Puppeteer computed-style DOM walk (no jsdom/parse5); flatten knobs (collapseWrappers / mergeTextRuns / dropInvisible / maxDepth); controls map to Phase 16 primitives, recognized SVGs to icon nodes
+- [ ] Token re-mapping — Tailwind utility classes map to intent directly (`bg-surface` → `fill: "$surface"`, `gap-4` → 16, custom utilities via a supplied theme); computed values snap to the design system (nearest-color within tolerance, scale snapping for spacing/radius/fontSize); ties and unsnapped literals reported, never guessed
+- [ ] `canvas_import_url` — live page import (viewport / selector / waitFor / auth in a throwaway incognito context, auth never persisted); computed fonts feed the Phase 16 resolver
+- [ ] `canvas_sync_from_url` — ephemeral re-import + `canvas_diff` → drift percentage + diff image; the CI failure pattern documented (not shipped)
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-17-SPEC.md`](docs/specs/PHASE-17-SPEC.md)._
 
 ---
 
