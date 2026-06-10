@@ -38,7 +38,11 @@ I(card, {type: "text", content: "Inner padding shrinks on narrow viewports.", fo
   `, c);
 
   const resolved = resolveVariables(c.root, c.variables);
-  const html = renderToHtml(resolved, 1440, 900, c);
+  // Per-breakpoint render so the body scaffold matches each viewport — the
+  // same callback contract takeResponsiveScreenshots has had since the
+  // true-reflow change (and the screenshot_responsive tool uses).
+  const renderAt = (width: number, height: number) => renderToHtml(resolved, width, height, c);
+  const html = renderAt(1440, 900);
 
   await writeFile(join(OUT, 'rendered.html'), html);
   console.log('   → rendered.html (inspect clamp() output)');
@@ -64,7 +68,7 @@ I(card, {type: "text", content: "Inner padding shrinks on narrow viewports.", fo
     { label: 'tablet', width: 768, height: 1024 },
     { label: 'desktop', width: 1440, height: 900 },
   ];
-  const shots = await takeResponsiveScreenshots(html, bps);
+  const shots = await takeResponsiveScreenshots((bp) => renderAt(bp.width, bp.height), bps);
   for (const s of shots) {
     await writeFile(join(OUT, `${s.label}.png`), Buffer.from(s.data, 'base64'));
     console.log(`   → ${s.label}.png (${s.width}x${s.height})`);
@@ -72,6 +76,7 @@ I(card, {type: "text", content: "Inner padding shrinks on narrow viewports.", fo
 
   console.log(`\nOpen: open ${OUT}`);
   await shutdown();
+  if (pass !== checks.length || shots.length !== bps.length) process.exit(1);
 }
 
 main().catch((err) => {
