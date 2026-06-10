@@ -242,7 +242,7 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
   }
 
   if (node.type === 'icon') {
-    const svg = getIconSvg(node.icon ?? '', node.iconSize ?? 24, node.iconColor);
+    const svg = getIconSvg(node.icon ?? '', node.iconSize ?? 24, node.iconColor, node.iconStyle);
     const iconHtml = svg ?? `<!-- unknown icon: ${escapeHtml(node.icon ?? '')} -->`;
     return `<div${dataAttr}${styleAttr}>${iconHtml}</div>`;
   }
