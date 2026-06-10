@@ -19,7 +19,7 @@ import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots,
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
-import { importHtml, importUrl, snapToTokens } from './import.js';
+import { importHtml, importUrl, renderImportedTree, snapToTokens } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
@@ -49,7 +49,7 @@ Fonts load by name: set fontFamily in a typography token (or on a node) and the 
 
 Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
-Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. Lossy by design: READ the returned report (snapped/literals/warnings) instead of assuming fidelity.
+Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/warnings) instead of assuming fidelity.
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
@@ -1114,6 +1114,63 @@ LOSSY BY DESIGN — read the returned report (snapped/literals/warnings). Fonts 
         tokenMatch,
         tailwindTheme: tailwind?.theme,
       });
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+// --- canvas_sync_from_url ---
+server.tool(
+  'canvas_sync_from_url',
+  `Drift detection: re-import a live page EPHEMERALLY (no canvas is created, nothing is mutated) and pixel-diff it against an existing canvas — "has the shipped app diverged from the approved design?" as a number, not a vibe. Returns the diff image (changed regions in red), changePercent, and the import report.
+
+The design-of-record becomes a living contract: run this after deploys, or wire it into CI and fail when changePercent exceeds a threshold. Same live-page controls as canvas_import_url (viewport / selector / waitFor / auth — auth stays in a throwaway context, never persisted). Both sides render at the same viewport, scale 1, so changePercent is comparable run-to-run.`,
+  {
+    canvasId: z.string().describe('The canvas that is the design-of-record'),
+    url: z.string().regex(/^https?:\/\//i).describe('The live page to compare against (http/https)'),
+    viewport: z.object({
+      width: z.number().optional().describe('Compare width (default: the canvas root width, else 1440)'),
+      height: z.number().optional().describe('Compare height (default: the canvas root height, else 900)'),
+    }).optional(),
+    selector: z.string().optional().describe('Compare against one component instead of the whole page'),
+    waitFor: z.union([z.string(), z.number()]).optional().describe('CSS selector to await, or delay in ms — for JS-rendered pages'),
+    auth: z.object({
+      headers: z.record(z.string()).optional(),
+      cookies: z.array(z.object({ name: z.string(), value: z.string(), domain: z.string().optional(), path: z.string().optional() })).optional(),
+    }).optional().describe('Credentials for gated pages — throwaway context, never persisted'),
+  },
+  async ({ canvasId, url, viewport, selector, waitFor, auth }) => {
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    try {
+      const w = viewport?.width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
+      const h = viewport?.height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
+
+      const imported = await importUrl(url, { viewport: { width: w, height: h }, selector, waitFor, auth });
+      const liveHtml = await renderImportedTree(imported.root, w, h);
+
+      const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas);
+      const canvasHtml = renderToHtml(resolved, w, h, canvas, renderOpts);
+
+      const diff = await computeDiff(canvasHtml, liveHtml, w, h, 1);
+
+      return {
+        content: [
+          { type: 'image', data: diff.diffImage, mimeType: 'image/png' },
+          { type: 'text', text: JSON.stringify({
+            changePercent: diff.changePercent,
+            changedPixels: diff.changedPixels,
+            totalPixels: diff.totalPixels,
+            report: imported.report,
+            verdict: diff.changePercent < 1
+              ? 'In sync — the live page matches the design-of-record.'
+              : `Drifted ${diff.changePercent}% — red regions in the diff image show where the shipped app diverges from the approved design.`,
+          }, null, 2) },
+          ...fontWarningContent(fontWarnings),
+        ],
+      };
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
     }

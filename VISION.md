@@ -398,7 +398,7 @@ A screen that already ships must be hand-redrawn (~80 nodes for a table) to exis
 - [x] `canvas_import_html` — HTML/Tailwind snippet (+ optional CSS) → canvas via a Puppeteer computed-style DOM walk (no jsdom/parse5); flatten knobs (collapseWrappers / mergeTextRuns / dropInvisible / maxDepth); controls map to Phase 16 primitives, recognized SVGs to icon nodes
 - [x] Token re-mapping — Tailwind utility classes map to intent directly (`bg-surface` → `fill: "$surface"`, `gap-4` → 16, custom utilities via a supplied theme); computed values snap to the design system (nearest-color within tolerance, scale snapping for spacing/radius/fontSize); ties and unsnapped literals reported, never guessed
 - [x] `canvas_import_url` — live page import (viewport / selector / waitFor / auth in a throwaway incognito context, auth never persisted); computed fonts feed the Phase 16 resolver
-- [ ] `canvas_sync_from_url` — ephemeral re-import + `canvas_diff` → drift percentage + diff image; the CI failure pattern documented (not shipped)
+- [x] `canvas_sync_from_url` — ephemeral re-import + `canvas_diff` → drift percentage + diff image; the CI failure pattern documented (not shipped)
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-17-SPEC.md`](docs/specs/PHASE-17-SPEC.md)._
 

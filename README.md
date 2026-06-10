@@ -425,7 +425,22 @@ Import a **live page** as an editable, token-mapped canvas — point at a runnin
 | `auth` | object? | `{ headers?, cookies? }` for gated pages — used in a **throwaway browser context**, never persisted to the canvas, provenance, or report |
 | `projectId` / `name` / `flatten` / `tokenMatch` / `tailwind` | — | Same as `canvas_import_html` |
 
-Relative image URLs resolve against the page; fonts seen in computed styles load through the font-by-name resolver so the canvas renders in the same faces. The source URL (never auth) is recorded in `metadata.provenance.importedFrom`. `canvas_sync_from_url` (drift detection) lands in the final Phase 17 slice.
+Relative image URLs resolve against the page; fonts seen in computed styles load through the font-by-name resolver so the canvas renders in the same faces. The source URL (never auth) is recorded in `metadata.provenance.importedFrom`.
+
+### `canvas_sync_from_url`
+
+Drift detection — the design-of-record as a **living contract**. Re-imports a live page *ephemerally* (no canvas created, nothing mutated) and pixel-diffs it against an existing canvas at the same viewport:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | The canvas that is the design-of-record |
+| `url` | string | The live page to compare (http/https) |
+| `viewport` | object? | Compare size (defaults to the canvas root size) |
+| `selector` / `waitFor` / `auth` | — | Same as `canvas_import_url` (auth in a throwaway context, never persisted) |
+
+Returns the diff image (changed regions in red), `changePercent`, `changedPixels`/`totalPixels`, and the import report. Both sides render at scale 1, so the percentage is comparable run-to-run — an unchanged page diffs at ~0%.
+
+**CI pattern** (a pattern, not a shipped feature): after deploy, call `canvas_sync_from_url` for each route ↔ canvas pair and fail the job when `changePercent` exceeds your threshold — design ↔ code divergence becomes a build failure instead of a surprise.
 
 ### `import_design_md`
 
