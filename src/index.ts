@@ -13,7 +13,8 @@ import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, regi
 import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables, applyPresetTokens } from './variables.js';
-import { renderToHtml } from './renderer.js';
+import { renderToHtml, type RenderOptions } from './renderer.js';
+import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl } from './fonts.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
@@ -23,7 +24,7 @@ import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
 import { reviseCanvas } from './reviser.js';
 import { stampCritique, runReviseLoop } from './critique.js';
-import type { SceneNode } from './types.js';
+import type { Canvas, FontFace, SceneNode } from './types.js';
 
 /** Server `instructions` — sent in the MCP initialize response and loaded into
  * the client's context on connect, so a fresh agent has framesmith's operating
@@ -42,6 +43,8 @@ Design tokens are a layered system (workspace > project > canvas). Reference the
 Core loop: design at one target width (referencing $tokens) → screenshot → review → iterate → canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing/contrast fixes.
 
 Icons & typography: 1,900+ Lucide icons render by name via the icon node type ({ type: "icon", icon: "search" }) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content.
+
+Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
@@ -67,6 +70,7 @@ const WORKFLOW_CHEATSHEET = [
 
 const GOTCHAS = [
   'Icons: 1,900+ Lucide icons render by name ({ type: "icon", icon: "search" }) — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
+  'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
@@ -338,7 +342,7 @@ server.tool(
   async ({ workspaceId, variables }) => {
     if (!getWorkspace(workspaceId)) return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
     const result = setWorkspaceDesignSystem(workspaceId, variables);
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }, ...await warmFontsContent(variables)] };
   }
 );
 
@@ -381,7 +385,7 @@ server.tool(
   async ({ projectId, variables }) => {
     if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
     const result = setProjectDesignSystem(projectId, variables);
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }, ...await warmFontsContent(variables)] };
   }
 );
 
@@ -465,6 +469,35 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
   }
 );
 
+/** Phase 16 Slice A — shared pre-render step for every Chrome-rendering tool:
+ * merge tokens, resolve $refs, and run the font backstop so any referenced
+ * family renders in its real face (cache-first; resolution failure degrades to
+ * the fallback stack + a warning, never a render failure). */
+async function prepareRender(canvas: Canvas): Promise<{ resolved: SceneNode; renderOpts: RenderOptions; fontWarnings: string[] }> {
+  const merged = getCanvasTokens(canvas);
+  const resolved = resolveVariables(canvas.root, merged);
+  const { extraFonts, warnings } = await ensureFontsForRender(resolved, canvas, merged);
+  return { resolved, renderOpts: { extraFonts, bodyFontFamily: bodyFontFamilyFromTokens(merged) }, fontWarnings: warnings };
+}
+
+/** Warnings as an extra content item — empty array when there's nothing to say. */
+function fontWarningContent(warnings: string[]): { type: 'text'; text: string }[] {
+  return warnings.length ? [{ type: 'text' as const, text: `Font warnings:\n- ${warnings.join('\n- ')}` }] : [];
+}
+
+/** Write-time font warm-up (spec FR-A2): resolving when the token is declared
+ * means the first screenshot is already correct and offline. Failures are
+ * reported as an extra content item, never block the token write. */
+async function warmFontsContent(vars: Parameters<typeof warmFamilies>[0]): Promise<{ type: 'text'; text: string }[]> {
+  const { resolved, failed } = await warmFamilies(vars);
+  if (!resolved.length && !failed.length) return [];
+  const lines = [
+    ...resolved.map((f) => `- "${f}" resolved + cached — renders in the real face from the next screenshot`),
+    ...failed.map((f) => `- "${f.family}" could not be resolved (${f.error}) — will render with the fallback stack unless registered via set_fonts`),
+  ];
+  return [{ type: 'text' as const, text: `Fonts:\n${lines.join('\n')}` }];
+}
+
 // --- screenshot ---
 server.tool(
   'screenshot',
@@ -480,10 +513,10 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+    const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas);
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
-    const html = renderToHtml(resolved, w, h, canvas);
+    const html = renderToHtml(resolved, w, h, canvas, renderOpts);
     const base64 = await takeScreenshot(html, { width: w, height: h, scale, nodeId });
 
     return {
@@ -493,6 +526,7 @@ server.tool(
           data: base64,
           mimeType: 'image/png',
         },
+        ...fontWarningContent(fontWarnings),
       ],
     };
   }
@@ -539,13 +573,15 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+    // Fonts go through the backstop here too — a custom face changes glyph
+    // metrics, so layout rects must measure the same font the screenshot shows.
+    const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas);
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-    const html = renderToHtml(resolved, w, h, canvas);
+    const html = renderToHtml(resolved, w, h, canvas, renderOpts);
     const layout = await computeLayout(html, nodeId, maxDepth);
 
-    return { content: [{ type: 'text', text: JSON.stringify(layout, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(layout, null, 2) }, ...fontWarningContent(fontWarnings)] };
   }
 );
 
@@ -585,7 +621,7 @@ server.tool(
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = setVariables(canvas, variables);
     touchCanvas(canvasId);
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }, ...await warmFontsContent(variables)] };
   }
 );
 
@@ -604,27 +640,63 @@ server.tool(
 // --- set_fonts ---
 server.tool(
   'set_fonts',
-  'Replace the custom font face declarations on a canvas. Each entry needs `family` (CSS family name, no quotes) and `url` (https://, http://, or data: URI pointing at a .woff2/.woff/.ttf/.otf binary). Google Fonts CSS stylesheet URLs (fonts.googleapis.com/css2) are NOT supported — use the gstatic.com binary URL directly. Pass an empty array to clear.',
+  `Register custom fonts on a canvas. Three ways, combinable:
+  - families: ["Inter"] — EASIEST: resolve by name from Google Fonts (weights 400-700, cached locally). Merged into the existing declarations.
+  - fonts: [{ family, url }] with a binary URL (.woff2/.woff/.ttf/.otf, https:// or data:) — replaces existing declarations wholesale. Pass [] to clear.
+  - fonts: [{ family, url }] with a Google Fonts CSS URL (fonts.googleapis.com/css2?...) — the faces are extracted from the stylesheet automatically.
+Fonts named in typography tokens load automatically at render time — you only need set_fonts for families outside the token system or from non-Google sources.`,
   {
     canvasId: z.string().describe('Canvas ID'),
     fonts: z.array(z.object({
       family: z.string().min(1).describe('CSS font-family name (no surrounding quotes)'),
-      url: z.string().regex(/^(https?:\/\/|data:)/i).describe('Direct font binary URL'),
+      url: z.string().regex(/^(https?:\/\/|data:)/i).describe('Font binary URL, or a Google Fonts css2 stylesheet URL to extract faces from'),
       weight: z.union([z.string(), z.number()]).optional().describe('font-weight (e.g. 400, 700, "bold")'),
       style: z.enum(['normal', 'italic']).optional(),
-    })).describe('Font declarations. Replaces existing fonts wholesale.'),
+    })).optional().describe('Explicit font declarations. Replaces existing fonts wholesale when provided.'),
+    families: z.array(z.string().min(1)).optional().describe('Family names to resolve from Google Fonts and merge in (e.g. ["Inter", "JetBrains Mono"])'),
   },
-  async ({ canvasId, fonts }) => {
+  async ({ canvasId, fonts, families }) => {
     ensureFresh(canvasId);
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    if (!fonts && !families?.length) return { content: [{ type: 'text', text: 'Error: Pass `fonts` (declarations) and/or `families` (names to resolve).' }], isError: true };
     const unsafeFamily = /["';{}\n\r<>]/;
     const unsafeUrl = /["\n\r<>]/;
-    const bad = fonts.find((f) => unsafeFamily.test(f.family) || unsafeUrl.test(f.url));
+    const bad = fonts?.find((f) => unsafeFamily.test(f.family) || unsafeUrl.test(f.url));
     if (bad) return { content: [{ type: 'text', text: `Error: Unsafe characters in font ${JSON.stringify(bad)} — family must not contain quotes/semicolons/braces/angle brackets/newlines; url must not contain quotes/newlines/angle brackets.` }], isError: true };
-    canvas.fonts = fonts;
+
+    // `fonts` keeps its replace-wholesale contract; `families` merges.
+    let next: FontFace[] = fonts !== undefined ? [] : [...(canvas.fonts ?? [])];
+    const failed: { family: string; error: string }[] = [];
+
+    for (const f of fonts ?? []) {
+      if (isStylesheetUrl(f.url)) {
+        try {
+          next.push(...await resolveStylesheetUrl(f.url));
+        } catch (err) {
+          return { content: [{ type: 'text', text: `Error: Could not extract fonts from stylesheet ${f.url}: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
+        }
+      } else {
+        next.push(f);
+      }
+    }
+
+    for (const family of families ?? []) {
+      try {
+        const { faces } = await resolveFamily(family);
+        next = next.filter((f) => f.family.toLowerCase() !== family.toLowerCase()); // replace same-family entries
+        next.push(...faces);
+      } catch (err) {
+        failed.push({ family, error: err instanceof Error ? err.message : String(err) });
+      }
+    }
+
+    canvas.fonts = next;
     touchCanvas(canvasId);
-    return { content: [{ type: 'text', text: JSON.stringify(canvas.fonts, null, 2) }] };
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ fonts: canvas.fonts, ...(failed.length ? { failed } : {}) }, null, 2) }],
+      ...(failed.length && !next.length ? { isError: true as const } : {}),
+    };
   }
 );
 
@@ -645,10 +717,10 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+    const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas);
     const w = width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
     const h = height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
-    const html = renderToHtml(resolved, w, h, canvas);
+    const html = renderToHtml(resolved, w, h, canvas, renderOpts);
 
     const exportedFiles: string[] = [];
 
@@ -662,7 +734,7 @@ server.tool(
       exportedFiles.push(filePath);
     }
 
-    return { content: [{ type: 'text', text: JSON.stringify({ exported: exportedFiles }, null, 2) }] };
+    return { content: [{ type: 'text', text: JSON.stringify({ exported: exportedFiles }, null, 2) }, ...fontWarningContent(fontWarnings)] };
   }
 );
 
@@ -683,7 +755,7 @@ server.tool(
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+    const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas);
     const defaultBreakpoints = [
       { label: 'mobile', width: 390, height: 844 },
       { label: 'tablet', width: 768, height: 1024 },
@@ -695,17 +767,20 @@ server.tool(
     // viewport. The viewport change alone would let @media rules fire, but
     // matching the scaffold avoids min-height inflated to the largest breakpoint.
     const results = await takeResponsiveScreenshots(
-      (bp) => renderToHtml(resolved, bp.width, bp.height, canvas),
+      (bp) => renderToHtml(resolved, bp.width, bp.height, canvas, renderOpts),
       bps,
       scale,
     );
 
     return {
-      content: results.map((r) => ({
-        type: 'image' as const,
-        data: r.data,
-        mimeType: 'image/png' as const,
-      })),
+      content: [
+        ...results.map((r) => ({
+          type: 'image' as const,
+          data: r.data,
+          mimeType: 'image/png' as const,
+        })),
+        ...fontWarningContent(fontWarnings),
+      ],
     };
   }
 );
@@ -731,10 +806,10 @@ server.tool(
     const h = height ?? 900;
     const s = scale ?? 1;
 
-    const resolved1 = resolveVariables(canvas1.root, getCanvasTokens(canvas1));
-    const resolved2 = resolveVariables(canvas2.root, getCanvasTokens(canvas2));
-    const html1 = renderToHtml(resolved1, w, h, canvas1);
-    const html2 = renderToHtml(resolved2, w, h, canvas2);
+    const prep1 = await prepareRender(canvas1);
+    const prep2 = await prepareRender(canvas2);
+    const html1 = renderToHtml(prep1.resolved, w, h, canvas1, prep1.renderOpts);
+    const html2 = renderToHtml(prep2.resolved, w, h, canvas2, prep2.renderOpts);
 
     const diff = await computeDiff(html1, html2, w, h, s);
 
@@ -753,6 +828,7 @@ server.tool(
             changePercent: diff.changePercent,
           }, null, 2),
         },
+        ...fontWarningContent([...new Set([...prep1.fontWarnings, ...prep2.fontWarnings])]),
       ],
     };
   }
@@ -911,7 +987,7 @@ where value is a color (\`#hex\`, \`rgba(...)\`) for colors, \`Npx\` for spacing
           components: Object.keys(preset.components || {}),
           usage: `Use apply_preset with preset="${preset.name}" to apply this design system (tokens + components) to a canvas.`,
         }, null, 2),
-      }],
+      }, ...await warmFontsContent(preset.variables)],
     };
   }
 );
@@ -943,10 +1019,10 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 
     if (mode === 'llm') {
       try {
-        const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+        const { resolved, renderOpts } = await prepareRender(canvas);
         const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
         const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-        const html = renderToHtml(resolved, w, h, canvas);
+        const html = renderToHtml(resolved, w, h, canvas, renderOpts);
         const screenshotPng = await takeScreenshot(html, { width: w, height: h, scale: 1 });
         const critique = await judgeCanvas(screenshotPng, { floor });
         result.llmCritique = critique;
@@ -1018,10 +1094,10 @@ server.tool(
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const render = async () => {
-      const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas));
+      const { resolved, renderOpts } = await prepareRender(canvas);
       const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
       const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-      return takeScreenshot(renderToHtml(resolved, w, h, canvas), { width: w, height: h, scale: 1 });
+      return takeScreenshot(renderToHtml(resolved, w, h, canvas, renderOpts), { width: w, height: h, scale: 1 });
     };
 
     try {

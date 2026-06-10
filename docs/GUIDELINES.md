@@ -106,22 +106,20 @@ Merge semantics are per-category: a project that only sets `colors` doesn't rese
 
 ## Custom fonts
 
-The renderer ships system-stack typography by default. To use a hosted face, attach declarations to the canvas with `set_fonts` — once registered, any node can reference the family via `fontFamily`.
-
-- **Use direct binary URLs.** `set_fonts` expects `.woff2` / `.woff` / `.ttf` / `.otf` URLs (e.g. `https://fonts.gstatic.com/s/inter/v18/...`), **not** Google Fonts CSS stylesheet URLs (`fonts.googleapis.com/css2`). The renderer emits `@font-face` itself and adds `<link rel="preconnect">` per unique origin so the connection warms during HTML parsing.
-- **One family, multiple weights.** Pass one entry per weight/style combination — they share a family name and the browser picks the right face for each text node.
-- **`font-display: swap` is automatic.** Paint isn't blocked on slow fonts; the system stack shows first, then the custom face swaps in. Visible FOUT is the tradeoff for not blocking paint.
-- **Reference the family in nodes.** After registering Inter, set `fontFamily: "Inter, system-ui, sans-serif"` on text nodes. The stack tail is the fallback while the font loads (and the only typeface visible if the URL is unreachable).
+**Name the family and it loads.** Set `fontFamily` in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically — at token-write time and again as a render-time backstop. Binaries are cached under `~/.framesmith/fonts/`, so after the first resolve, rendering is offline and deterministic. A family that can't be resolved degrades to the system fallback stack **with a warning in the tool result** — if a screenshot reports a font warning, act on it; the render is not showing the face you asked for.
 
 ```js
-set_fonts({
-  canvasId,
-  fonts: [
-    { family: 'Inter', url: 'https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTc2vU.woff2', weight: 400 },
-    { family: 'Inter', url: 'https://fonts.gstatic.com/s/inter/v18/UcCo3FwrK3iLTcvneQg7Ca725JhhKnNqk4j1ebLhAm8SrXTc2vV.woff2', weight: 700 },
-  ],
+// This is the whole happy path — no set_fonts call needed:
+workspace_set_design_system({
+  workspaceId,
+  variables: { typography: { body: { fontSize: 16, fontFamily: 'Inter' }, code: { fontSize: 13, fontFamily: 'JetBrains Mono' } } },
 });
 ```
+
+- **`typography.body.fontFamily` is the document default** (alias: `base`). Text nodes without an explicit `fontFamily` render in it — set it once at the workspace and the whole canvas follows.
+- **`set_fonts` is for everything else:** non-Google sources (direct `.woff2`/`.ttf` binary URLs, `data:` URIs), explicit registration by name (`families: ["Inter"]`), or pasting a Google Fonts stylesheet URL (`fonts.googleapis.com/css2?...` — faces are extracted automatically).
+- **`font-display: swap` is automatic.** Paint isn't blocked on slow fonts.
+- **System families never resolve** (`system-ui`, `Roboto`, `Arial`, …) — they're already on every render's fallback stack. Only the first non-system family of a stack is loaded.
 
 ## After designing
 

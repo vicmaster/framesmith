@@ -40,13 +40,33 @@ function boxShadowCss(shadows: unknown, shadow: unknown): string | null {
   return null;
 }
 
-export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas): string {
+const SYSTEM_FONT_STACK = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
+export interface RenderOptions {
+  /** Render-ephemeral @font-face entries (Phase 16 — cached families as data:
+   * URIs from ensureFontsForRender). Appended after canvas.fonts; never
+   * persisted onto the canvas. */
+  extraFonts?: FontFace[];
+  /** Document-default family (Phase 16 — typography.body token). Prepended to
+   * the system stack on <body>. */
+  bodyFontFamily?: string;
+}
+
+export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
   const body = renderNode(root, canvas);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Hoist the root's fill/gradient to <html> so wide viewports show the design
   // background instead of browser-default white on the sidebars.
   const rootBg = rootBackgroundCss(root);
-  const { preconnect, fontFaceCss } = buildFontHead(canvas);
+  const { preconnect, fontFaceCss } = buildFontHead(canvas, opts?.extraFonts);
+  // typography.body token becomes the document default; quote a bare multi-word
+  // family, pass a full stack through as-is. Unsafe values fall back silently.
+  let bodyFont = SYSTEM_FONT_STACK;
+  const tokenFamily = opts?.bodyFontFamily?.trim();
+  if (tokenFamily && isSafeFamily(tokenFamily)) {
+    const lead = tokenFamily.includes(',') ? tokenFamily : /\s/.test(tokenFamily) ? `"${tokenFamily}"` : tokenFamily;
+    bodyFont = `${lead}, ${SYSTEM_FONT_STACK}`;
+  }
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -54,7 +74,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
 ${preconnect}<style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { min-height: 100vh;${rootBg ? ` ${rootBg};` : ''} }
-  body { width: 100%; max-width: ${width}px; min-height: ${height}px; margin: 0 auto; overflow-x: hidden; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  body { width: 100%; max-width: ${width}px; min-height: ${height}px; margin: 0 auto; overflow-x: hidden; font-family: ${bodyFont}; }
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
 ${fontFaceCss}${responsiveCss}
@@ -157,9 +177,9 @@ function guessFontFormat(url: string): string | undefined {
   return undefined;
 }
 
-function buildFontHead(canvas?: Canvas): { preconnect: string; fontFaceCss: string } {
-  const fonts = canvas?.fonts;
-  if (!fonts?.length) return { preconnect: '', fontFaceCss: '' };
+function buildFontHead(canvas?: Canvas, extraFonts?: FontFace[]): { preconnect: string; fontFaceCss: string } {
+  const fonts = [...(canvas?.fonts ?? []), ...(extraFonts ?? [])];
+  if (!fonts.length) return { preconnect: '', fontFaceCss: '' };
 
   const valid = fonts.filter(isValidFontFace);
   if (!valid.length) return { preconnect: '', fontFaceCss: '' };
