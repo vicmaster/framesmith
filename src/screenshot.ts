@@ -50,6 +50,20 @@ export async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
   }
 }
 
+/** Like withPage, but in a throwaway browser context — canvas_import_url runs
+ * here so auth headers/cookies never touch the shared default context and are
+ * gone when the context closes (spec FR-C2). */
+export async function withIsolatedPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
+  const b = await getBrowser();
+  const context = await b.createBrowserContext();
+  try {
+    const page = await context.newPage();
+    return await fn(page);
+  } finally {
+    await context.close();
+  }
+}
+
 export interface ScreenshotOptions {
   width?: number;
   height?: number;

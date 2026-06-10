@@ -17,7 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import type { DesignVariables, SceneNode } from './types.js';
-import { withPage } from './screenshot.js';
+import { withPage, withIsolatedPage } from './screenshot.js';
 import { classesToProps } from './tailwind-map.js';
 
 // ── walker output ────────────────────────────────────────────────────────────
@@ -102,7 +102,10 @@ export const DOM_WALKER_SOURCE = `(function (rootSelector, whitelist) {
       node.attrs.selectValue = opt ? opt.textContent.trim() : undefined;
     }
     if (el.tagName === 'IMG') {
-      node.attrs.src = el.getAttribute('src') || undefined;
+      // currentSrc/src are URL-resolved against the page (absolute on live
+      // pages; empty for unresolvable snippet-relative paths) — fall back to
+      // the raw attribute so the report can still name the source.
+      node.attrs.src = el.currentSrc || el.src || el.getAttribute('src') || undefined;
       node.attrs.alt = el.getAttribute('alt') || undefined;
     }
     var role = el.getAttribute('role');
@@ -701,6 +704,55 @@ export async function importHtml(html: string, opts: ImportHtmlOptions = {}): Pr
       // The synthetic container div is not part of the user's markup.
       root.width = '100%';
     }
+    return { root, report, contentHeight: raw.rect.h };
+  });
+}
+
+export interface ImportUrlOptions {
+  viewport?: { width?: number; height?: number };
+  selector?: string;
+  /** CSS selector to await (JS-rendered pages), or a delay in ms. */
+  waitFor?: string | number;
+  /** Auth lives ONLY in the throwaway browser context — never persisted to
+   * the canvas, provenance, or report (spec FR-C2). */
+  auth?: {
+    headers?: Record<string, string>;
+    cookies?: { name: string; value: string; domain?: string; path?: string }[];
+  };
+  flatten?: FlattenOptions;
+  tailwindTheme?: Record<string, string>;
+}
+
+/** Import a live page (spec FR-C1). Same walk as importHtml; the page loads in
+ * an isolated context with optional headers/cookies, waits for networkidle (+
+ * an explicit waitFor for client-rendered UI), then walks `selector` or body. */
+export async function importUrl(url: string, opts: ImportUrlOptions = {}): Promise<{ root: SceneNode; report: ImportReport; contentHeight: number }> {
+  if (!/^https?:\/\//i.test(url)) throw new Error('canvas_import_url requires an http(s):// URL.');
+  const width = opts.viewport?.width ?? 1440;
+  const height = opts.viewport?.height ?? 900;
+
+  return withIsolatedPage(async (page) => {
+    await page.setViewport({ width, height });
+    if (opts.auth?.headers) await page.setExtraHTTPHeaders(opts.auth.headers);
+    if (opts.auth?.cookies?.length) {
+      await page.setCookie(...opts.auth.cookies.map((c) => ({
+        name: c.name, value: c.value,
+        ...(c.domain ? { domain: c.domain, path: c.path ?? '/' } : { url }),
+      })));
+    }
+
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30_000 });
+    if (typeof opts.waitFor === 'number') await new Promise((r) => setTimeout(r, Math.min(opts.waitFor as number, 15_000)));
+    else if (typeof opts.waitFor === 'string') await page.waitForSelector(opts.waitFor, { timeout: 15_000 });
+
+    const rootSelector = opts.selector ?? 'body';
+    const raw = (await page.evaluate(
+      `(${DOM_WALKER_SOURCE})(${JSON.stringify(rootSelector)}, ${JSON.stringify(STYLE_WHITELIST)})`,
+    )) as RawDomNode | null;
+    if (!raw) throw new Error(`Selector "${rootSelector}" matched nothing at ${url}.`);
+
+    const { root, report } = domToSceneGraph(raw, { flatten: opts.flatten, containerWidth: width, tailwindTheme: opts.tailwindTheme });
+    if (opts.selector === undefined && root.type === 'frame') root.width = '100%';
     return { root, report, contentHeight: raw.rect.h };
   });
 }

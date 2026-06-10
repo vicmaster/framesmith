@@ -410,7 +410,22 @@ Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of
 - **Nearest-color snapping second** — remaining literal colors snap to the matched design system within `tolerance` (exact matches always; near-ties between two tokens are *reported and left literal*, never guessed). Spacing/radius/fontSize values that equal a scale token are reported under `report.scaleMatches`.
 - Fonts seen in computed styles feed the font-by-name resolver, so the imported canvas renders in the same faces.
 
-Returns `{ canvasId, rootId, report }` — `report.snapped` / `literals` / `scaleMatches` / `warnings` are the contract. `canvas_import_url` and `canvas_sync_from_url` land in the next Phase 17 slices.
+Returns `{ canvasId, rootId, report }` — `report.snapped` / `literals` / `scaleMatches` / `warnings` are the contract.
+
+### `canvas_import_url`
+
+Import a **live page** as an editable, token-mapped canvas — point at a running app and the screen becomes the design-of-record without redrawing. Same engine and token re-mapping as `canvas_import_html`, plus live-page controls:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `url` | string | The page to import (http/https only) |
+| `viewport` | object? | `{ width, height }` — the width layouts resolve against (default 1440×900) |
+| `selector` | string? | Import one component instead of the whole page (default `body`) |
+| `waitFor` | string \| number? | CSS selector to await, or a delay in ms — for client-rendered UI |
+| `auth` | object? | `{ headers?, cookies? }` for gated pages — used in a **throwaway browser context**, never persisted to the canvas, provenance, or report |
+| `projectId` / `name` / `flatten` / `tokenMatch` / `tailwind` | — | Same as `canvas_import_html` |
+
+Relative image URLs resolve against the page; fonts seen in computed styles load through the font-by-name resolver so the canvas renders in the same faces. The source URL (never auth) is recorded in `metadata.provenance.importedFrom`. `canvas_sync_from_url` (drift detection) lands in the final Phase 17 slice.
 
 ### `import_design_md`
 
