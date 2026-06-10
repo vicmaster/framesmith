@@ -4,12 +4,35 @@ import puppeteer, { type Browser } from 'puppeteer';
 
 let browser: Browser | null = null;
 
+/** Chrome binary override. FRAMESMITH_CHROME_PATH wins so users can point the MCP
+ * server at a specific Chrome without disturbing other Puppeteer consumers;
+ * PUPPETEER_EXECUTABLE_PATH is passed through explicitly because env-based config
+ * isn't picked up when the server is launched by an MCP client with a stripped env. */
+function chromeExecutablePath(): string | undefined {
+  return process.env.FRAMESMITH_CHROME_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
+}
+
 async function getBrowser(): Promise<Browser> {
   if (!browser || !browser.connected) {
-    browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
-    });
+    const executablePath = chromeExecutablePath();
+    try {
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to launch Chrome for rendering.\n` +
+        `Tried: ${executablePath ?? 'the Puppeteer-managed Chrome (~/.cache/puppeteer)'}\n` +
+        `Fixes, in order:\n` +
+        `  1. Install the managed browser: npx puppeteer browsers install chrome\n` +
+        `  2. Or point at an existing Chrome: set FRAMESMITH_CHROME_PATH (or PUPPETEER_EXECUTABLE_PATH) in the MCP server's env config — note MCP clients often launch servers with a minimal env, so set it in the server config, not your shell profile.\n` +
+        `  3. macOS: if the binary was quarantined, run: xattr -dr com.apple.quarantine <chrome dir>\n` +
+        `Underlying error: ${detail}`,
+      );
+    }
   }
   return browser;
 }

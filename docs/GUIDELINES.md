@@ -80,6 +80,8 @@ bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "f
 - **Setting `margin` on every node.** Use `gap` on the parent flex container and `padding` on the child. The renderer doesn't surface `margin`.
 - **Setting `fontFamily` on every text node.** The renderer defaults to a system sans-serif stack at the body level. Only set `fontFamily` when you want a *different* face — and prefer `system-ui, -apple-system, sans-serif`-style stacks; if you need quoted multi-word names (`'Segoe UI'`), they're supported, but keep them inside the double-quoted value.
 - **Hardcoding pixel font sizes everywhere.** Large sizes get a `clamp()` treatment by the renderer to scale down on small viewports — only set `fontSize` to the *desktop* value and let the renderer handle the rest.
+- **Unicode glyphs as icon stand-ins.** `✓ ● ▾ ○` read as unfinished. Use the `icon` node type — 1,900+ [Lucide](https://lucide.dev) icons render by name as inline SVG: `I("parent", { type: "icon", icon: "check", iconSize: 16, iconColor: "$primary" })`.
+- **Baking uppercase into `content`.** Use `textTransform: "uppercase"` (with `letterSpacing` for tracking) so the underlying copy stays editable and case-styling lives in the design, not the data.
 
 ## Design systems (workspace + project inheritance)
 
