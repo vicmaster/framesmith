@@ -19,7 +19,7 @@ import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots,
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
-import { importHtml, snapToTokens } from './import.js';
+import { importHtml, importUrl, snapToTokens } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
 import { judgeCanvas, LLMJudgeUnavailableError } from './llm-judge.js';
@@ -49,7 +49,7 @@ Fonts load by name: set fontFamily in a typography token (or on a node) and the 
 
 Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
-Import from implementation: canvas_import_html turns an HTML snippet (+ optional CSS) into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. Lossy by design: READ the returned report (snapped/literals/warnings) instead of assuming fidelity.
+Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. Lossy by design: READ the returned report (snapped/literals/warnings) instead of assuming fidelity.
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
@@ -963,6 +963,59 @@ server.tool(
   }
 );
 
+// ── shared import finishing (Phase 17) ──────────────────────────────────────
+
+type ImportTokenMatch = { source?: 'workspace' | 'designMd' | 'tailwind' | 'none'; tolerance?: number; designMd?: string };
+
+function validateImportArgs(projectId: string | undefined, tokenMatch: ImportTokenMatch | undefined): { content: { type: 'text'; text: string }[]; isError: true } | null {
+  if (projectId && !getProject(projectId)) {
+    return { content: [{ type: 'text' as const, text: `Error: Project "${projectId}" not found. Use project_list to see projects.` }], isError: true };
+  }
+  if (tokenMatch?.source === 'designMd' && !tokenMatch.designMd) {
+    return { content: [{ type: 'text' as const, text: 'Error: tokenMatch.source "designMd" requires tokenMatch.designMd content.' }], isError: true };
+  }
+  return null;
+}
+
+/** Create + persist the canvas for an import result: token snapping (FR-B2,
+ * default source = the canvas's merged inheritance chain), font warm-up
+ * through the Phase 16 resolver, and the provenance stamp (URL or 'html' —
+ * never auth material). */
+async function finishImport(
+  imported: { root: SceneNode; report: import('./import.js').ImportReport; contentHeight: number },
+  opts: { name: string; projectId?: string; width: number; importedFrom: string; tokenMatch?: ImportTokenMatch; tailwindTheme?: Record<string, string> },
+): Promise<{ content: { type: 'text'; text: string }[] }> {
+  const { root, report, contentHeight } = imported;
+  const canvas = createCanvas(opts.name, opts.projectId);
+  canvas.root.width = opts.width;
+  canvas.root.height = Math.max(contentHeight, 100);
+  canvas.root.children = [root];
+
+  const source = opts.tokenMatch?.source ?? 'workspace';
+  if (source !== 'none') {
+    const vars = source === 'designMd' ? parseDesignMd(opts.tokenMatch!.designMd!).variables
+      : source === 'tailwind' ? { colors: opts.tailwindTheme ?? {} }
+      : getCanvasTokens(canvas);
+    snapToTokens(root, vars, report, { tolerance: opts.tokenMatch?.tolerance });
+  }
+
+  for (const family of collectReferencedFamilies(root)) {
+    try { await resolveFamily(family); } catch { report.unmatchedFonts.push(family); }
+  }
+
+  canvas.metadata = {
+    ...canvas.metadata,
+    provenance: { importedFrom: opts.importedFrom, at: new Date().toISOString() },
+  };
+  touchCanvas(canvas.id);
+  return { content: [{ type: 'text' as const, text: JSON.stringify({
+    canvasId: canvas.id,
+    rootId: root.id,
+    report,
+    instruction: 'Screenshot the canvas to review fidelity, then check report.warnings and report.literals for what needs hand-finishing.',
+  }, null, 2) }] };
+}
+
 // --- canvas_import_html ---
 server.tool(
   'canvas_import_html',
@@ -996,46 +1049,71 @@ Note: a bare Tailwind snippet has no Tailwind runtime — the class intent mappe
     }).optional().describe('Tailwind-specific import options'),
   },
   async ({ html, css, projectId, name, selector, width, flatten, tokenMatch, tailwind }) => {
-    if (projectId && !getProject(projectId)) {
-      return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see projects.` }], isError: true };
-    }
-    if (tokenMatch?.source === 'designMd' && !tokenMatch.designMd) {
-      return { content: [{ type: 'text', text: 'Error: tokenMatch.source "designMd" requires tokenMatch.designMd content.' }], isError: true };
-    }
+    const invalid = validateImportArgs(projectId, tokenMatch);
+    if (invalid) return invalid;
     try {
-      const { root, report, contentHeight } = await importHtml(html, { css, selector, width, flatten, tailwindTheme: tailwind?.theme });
-      const canvas = createCanvas(name ?? 'Imported HTML', projectId);
-      canvas.root.width = width ?? 1440;
-      canvas.root.height = Math.max(contentHeight, 100);
-      canvas.root.children = [root];
+      const imported = await importHtml(html, { css, selector, width, flatten, tailwindTheme: tailwind?.theme });
+      return finishImport(imported, { name: name ?? 'Imported HTML', projectId, width: width ?? 1440, importedFrom: 'html', tokenMatch, tailwindTheme: tailwind?.theme });
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
 
-      // Token snapping (FR-B2) — against the canvas's merged inheritance chain
-      // by default, so workspace/project design systems apply without setup.
-      const source = tokenMatch?.source ?? 'workspace';
-      if (source !== 'none') {
-        const vars = source === 'designMd' ? parseDesignMd(tokenMatch!.designMd!).variables
-          : source === 'tailwind' ? { colors: tailwind?.theme ?? {} }
-          : getCanvasTokens(canvas);
-        snapToTokens(root, vars, report, { tolerance: tokenMatch?.tolerance });
-      }
+// --- canvas_import_url ---
+server.tool(
+  'canvas_import_url',
+  `Import a LIVE page as an editable, token-mapped canvas — point at a running app (or a deployed URL) and the screen becomes the design-of-record without redrawing. Same engine as canvas_import_html (computed-style DOM walk: frames/text/images/icons/input primitives, Tailwind intent mapping, design-system token snapping) plus live-page controls:
+  - viewport (default 1440×900) — the width layouts resolve against
+  - selector — import one component instead of the whole page
+  - waitFor — a CSS selector to await or a delay in ms, for client-rendered UI
+  - auth — headers/cookies for gated pages; they live ONLY in a throwaway browser context and are never persisted to the canvas, provenance, or report
 
-      // Fonts seen in computed styles feed the Phase 16 resolver so the
-      // imported canvas renders in the same faces (failures → report).
-      for (const family of collectReferencedFamilies(root)) {
-        try { await resolveFamily(family); } catch { report.unmatchedFonts.push(family); }
-      }
-
-      canvas.metadata = {
-        ...canvas.metadata,
-        provenance: { importedFrom: 'html', at: new Date().toISOString() },
-      };
-      touchCanvas(canvas.id);
-      return { content: [{ type: 'text', text: JSON.stringify({
-        canvasId: canvas.id,
-        rootId: root.id,
-        report,
-        instruction: 'Screenshot the canvas to review fidelity, then check report.warnings and report.literals for what needs hand-finishing.',
-      }, null, 2) }] };
+LOSSY BY DESIGN — read the returned report (snapped/literals/warnings). Fonts seen on the page load through the font-by-name resolver so the canvas renders in the same faces.`,
+  {
+    url: z.string().regex(/^https?:\/\//i).describe('The page to import (http/https)'),
+    projectId: z.string().optional().describe('Project to create the canvas in (default: the default project)'),
+    name: z.string().optional().describe('Canvas name (default: "Imported — <hostname>")'),
+    viewport: z.object({
+      width: z.number().optional().describe('Viewport width (default 1440)'),
+      height: z.number().optional().describe('Viewport height (default 900)'),
+    }).optional(),
+    selector: z.string().optional().describe('Import only the first element matching this CSS selector (default: body)'),
+    waitFor: z.union([z.string(), z.number()]).optional().describe('CSS selector to await, or delay in ms (max 15s) — for JS-rendered pages'),
+    auth: z.object({
+      headers: z.record(z.string()).optional().describe('Extra HTTP headers (e.g. Authorization)'),
+      cookies: z.array(z.object({
+        name: z.string(), value: z.string(),
+        domain: z.string().optional(), path: z.string().optional(),
+      })).optional(),
+    }).optional().describe('Credentials for gated pages — used in a throwaway context, never persisted'),
+    flatten: z.object({
+      collapseWrappers: z.boolean().optional(), mergeTextRuns: z.boolean().optional(),
+      dropInvisible: z.boolean().optional(), maxDepth: z.number().optional(),
+    }).optional().describe('Tree-simplification knobs (same defaults as canvas_import_html)'),
+    tokenMatch: z.object({
+      source: z.enum(['workspace', 'designMd', 'tailwind', 'none']).optional(),
+      tolerance: z.number().optional(),
+      designMd: z.string().optional(),
+    }).optional().describe('Snap concrete values back to $token refs (default source: workspace)'),
+    tailwind: z.object({
+      theme: z.record(z.string()).optional(),
+    }).optional().describe('Tailwind @theme map for class-intent mapping'),
+  },
+  async ({ url, projectId, name, viewport, selector, waitFor, auth, flatten, tokenMatch, tailwind }) => {
+    const invalid = validateImportArgs(projectId, tokenMatch);
+    if (invalid) return invalid;
+    try {
+      const imported = await importUrl(url, { viewport, selector, waitFor, auth, flatten, tailwindTheme: tailwind?.theme });
+      const hostname = new URL(url).hostname;
+      return finishImport(imported, {
+        name: name ?? `Imported — ${selector ?? hostname}`,
+        projectId,
+        width: viewport?.width ?? 1440,
+        importedFrom: url, // the URL is recorded; auth never is
+        tokenMatch,
+        tailwindTheme: tailwind?.theme,
+      });
     } catch (err) {
       return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
     }
