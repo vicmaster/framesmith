@@ -227,6 +227,11 @@ export function matchIcon(svgPaths: string[]): string | null {
 
 // ── style parsing helpers (pure) ─────────────────────────────────────────────
 
+function median(values: number[]): number {
+  const s = [...values].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
 function px(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const m = value.match(/^(-?\d+(?:\.\d+)?)px$/);
@@ -402,6 +407,7 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     const parentContent = node.rect.w - (px(node.styles.paddingLeft) ?? 0) - (px(node.styles.paddingRight) ?? 0);
     let centeredDetail: string | null = null;
 
+    const pairs: { raw: RawDomNode; scene: SceneNode }[] = [];
     for (const child of node.children) {
       const c = convert(child, depth + 1, node);
       if (!c) continue;
@@ -420,10 +426,38 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
         if (c.width === undefined) c.width = child.rect.w;
         centeredDetail = 'auto-margin child';
       }
+      pairs.push({ raw: child, scene: c });
       childNodes.push(c);
     }
 
     const fp = frameProps(node, parent);
+
+    // Geometry-clustering fallback (Phase 18 FR-D1): block-flow containers
+    // whose children's boxes form rows of columns (floats, inline-block,
+    // unmodeled CSS). Flex/grid/table never reach this (handled above); a
+    // synthesized text child (mixed content) skips it — pairs must map 1:1.
+    const isBlockFlow = !['flex', 'inline-flex', 'grid', 'inline-grid'].includes(node.styles.display);
+    if (isBlockFlow && !node.text && pairs.length >= 2 && centeredDetail === null) {
+      const clustered = clusterIntoRows(pairs);
+      if (clustered === 'fallback') {
+        const frame: SceneNode = { id: nextId('frame'), type: 'frame', ...fp, children: childNodes };
+        report.layout.push({ nodeId: frame.id, source: 'stack-fallback', detail: 'multi-column boxes, inconsistent bands' });
+        report.warnings.push('A container looked multi-column but its boxes did not cluster consistently — imported as a vertical stack (see report.layout).');
+        return count(mergeIntent(frame, node));
+      }
+      if (clustered) {
+        const frame: SceneNode = {
+          id: nextId('frame'), type: 'frame', ...fp,
+          layout: 'vertical' as const,
+          ...(clustered.rowGap ? { gap: clustered.rowGap } : {}),
+          children: clustered.rows,
+        };
+        report.counts.maxDepth = Math.max(report.counts.maxDepth, depth + 1);
+        report.layout.push({ nodeId: frame.id, source: 'geometry', detail: clustered.detail });
+        return count(mergeIntent(frame, node));
+      }
+    }
+
     const centerable = centeredDetail !== null && fp.layout !== 'horizontal' && fp.alignItems === undefined;
     const frame: SceneNode = {
       id: nextId('frame'), type: 'frame', ...fp,
@@ -432,6 +466,82 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     };
     if (centerable) report.layout.push({ nodeId: frame.id, source: 'centered', detail: centeredDetail! });
     return count(mergeIntent(frame, node));
+  };
+
+  /** FR-D1's clustering core. Bands form by ≥50% vertical overlap (against the
+   * band's first box); reconstruction requires consistency (spec C3 — a wrong
+   * reconstruction is worse than an honest stack): all full bands agree on
+   * column count ±1 with a possibly-smaller last band, or a single ≥2-item
+   * band of substantial (>64px) boxes. Returns rows-of-columns, 'fallback'
+   * (looked multi-column, failed the guards), or null (genuinely vertical). */
+  const clusterIntoRows = (pairs: { raw: RawDomNode; scene: SceneNode }[]):
+    { rows: SceneNode[]; rowGap: number; detail: string } | 'fallback' | null => {
+    const sorted = [...pairs].sort((a, b) => a.raw.rect.y - b.raw.rect.y);
+    const bands: { raw: RawDomNode; scene: SceneNode }[][] = [];
+    for (const p of sorted) {
+      const band = bands[bands.length - 1];
+      if (band) {
+        const ref = band[0].raw.rect;
+        const overlap = Math.min(ref.y + ref.h, p.raw.rect.y + p.raw.rect.h) - Math.max(ref.y, p.raw.rect.y);
+        if (overlap >= 0.5 * Math.min(ref.h, p.raw.rect.h)) {
+          band.push(p);
+          continue;
+        }
+      }
+      bands.push([p]);
+    }
+
+    const counts = bands.map((b) => b.length);
+    const maxCount = Math.max(...counts);
+    if (maxCount < 2) return null; // genuinely vertical
+
+    // Consistency guards (C3).
+    let consistent: boolean;
+    if (bands.length === 1) {
+      consistent = bands[0].every(({ raw }) => raw.rect.w > 64);
+    } else {
+      const full = counts.slice(0, -1);
+      const last = counts[counts.length - 1];
+      consistent = full.every((c) => c >= 2 && maxCount - c <= 1) && last <= maxCount;
+    }
+    if (!consistent) return 'fallback';
+
+    const rows: SceneNode[] = [];
+    for (const band of bands) {
+      band.sort((a, b) => a.raw.rect.x - b.raw.rect.x);
+      if (band.length === 1) {
+        rows.push(band[0].scene);
+        continue;
+      }
+      const totalW = band.reduce((s, { raw }) => s + raw.rect.w, 0) || 1;
+      const bandGaps: number[] = [];
+      let pctUsed = 0;
+      band.forEach(({ raw, scene }, i) => {
+        const isLast = i === band.length - 1;
+        const pct = isLast ? Math.round((100 - pctUsed) * 10) / 10 : Math.round((raw.rect.w / totalW) * 1000) / 10;
+        pctUsed += pct;
+        scene.width = `${pct}%`;
+        if (i > 0) bandGaps.push(Math.max(raw.rect.x - (band[i - 1].raw.rect.x + band[i - 1].raw.rect.w), 0));
+      });
+      const rowGapX = bandGaps.length ? Math.round(median(bandGaps)) : 0;
+      rows.push(count({
+        id: nextId('clusterrow'), type: 'frame', name: 'Cluster row',
+        layout: 'horizontal', width: '100%',
+        ...(rowGapX > 0 ? { gap: rowGapX } : {}),
+        children: band.map((p) => p.scene),
+      }));
+    }
+
+    const yGaps: number[] = [];
+    for (let i = 1; i < bands.length; i++) {
+      const prev = bands[i - 1][0].raw.rect, cur = bands[i][0].raw.rect;
+      yGaps.push(Math.max(cur.y - (prev.y + prev.h), 0));
+    }
+    return {
+      rows,
+      rowGap: yGaps.length ? Math.round(median(yGaps)) : 0,
+      detail: `${bands.length} rows × ~${maxCount} cols`,
+    };
   };
 
   /** Tailwind intent (spec FR-B1/C1): geometry + typography utilities FILL
