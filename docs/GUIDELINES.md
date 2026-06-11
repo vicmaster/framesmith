@@ -123,6 +123,23 @@ workspace_set_design_system({
 - **`font-display: swap` is automatic.** Paint isn't blocked on slow fonts.
 - **System families never resolve** (`system-ui`, `Roboto`, `Arial`, …) — they're already on every render's fallback stack. Only the first non-system family of a stack is loaded.
 
+## Importing from implementation
+
+A screen that already ships doesn't need redrawing — `canvas_import_html` (snippet + optional CSS) and `canvas_import_url` (live page) turn it into an editable, token-mapped canvas, and `canvas_sync_from_url` pixel-diffs the canvas against the live page later to catch drift.
+
+**The report is the contract.** Imports are lossy by design; what makes them trustworthy is that they say exactly what happened. After every import, read:
+
+- `report.snapped` — values rewritten to `$token` refs (Tailwind class intent like `bg-surface`, plus nearest-color matches against your design system). `literals` lists colors that found no token; near-ties are reported and left literal, never guessed.
+- `report.layout` — how each container's **structure** was reconstructed: `table` (rows of proportional columns), `grid` (rows from the computed track template), `centered` (auto-margin/max-width content kept centered at its real width), `geometry` (multi-column CSS clustered from bounding boxes). A **`stack-fallback`** entry is your to-do list: that one container looked multi-column but couldn't be reconstructed confidently — fix it by hand; everything else arrived structurally correct, so **don't rebuild imported tables or grids node-by-node**.
+- `report.warnings` / `unmatchedFonts` / `unmatchedIcons` — dropped background images, truncations, fonts and SVGs that didn't resolve.
+
+Practical notes:
+
+- **A bare Tailwind snippet has no Tailwind runtime.** The intent mapper covers the common utilities + the bundled v4 palette; pass the compiled stylesheet via `css` for everything else. Live URLs always have real CSS, so this only matters for pasted snippets.
+- **Token snapping defaults to the target project's merged design system** — import into the right project and `tokenMatch` needs no configuration. Pass `tailwind: { theme }` to map custom utility names.
+- **Auth for gated pages** (`auth.headers`/`cookies`) lives in a throwaway browser context and is never persisted.
+- After importing: `screenshot` to review fidelity, fix what the report flagged, then the canvas is the design-of-record — wire `canvas_sync_from_url` into your workflow to keep it honest.
+
 ## After designing
 
 - **`canvas_evaluate`** scores the design on 5 categories (spacing, color, typography, structure, consistency) and surfaces actionable issues with `nodeId` references. Use it in a generator-evaluator loop: `batch_design` → `canvas_evaluate` → fix the returned nodeIds.
