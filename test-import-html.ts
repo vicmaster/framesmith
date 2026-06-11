@@ -81,6 +81,28 @@ const { root, report, contentHeight } = await importHtml(SNIPPET, { width: 800 }
   expect('unmatched selector errors clearly', missed instanceof Error && (missed as Error).message.includes('#nope'));
 }
 
+// ── 3b. real <table> markup reconstructs structurally (Phase 18) ─────────────
+{
+  const { root: t, report: tr } = await importHtml(`
+    <table style="width:600px;border-collapse:collapse;background:#fff">
+      <thead><tr>
+        <th style="width:50%;padding:8px;text-align:left;border-bottom:2px solid #e5e7eb">Name</th>
+        <th style="width:30%;padding:8px;text-align:left;border-bottom:2px solid #e5e7eb">Role</th>
+        <th style="width:20%;padding:8px;text-align:left;border-bottom:2px solid #e5e7eb">Status</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb">Ada</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">Admin</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">Active</td></tr>
+        <tr><td style="padding:8px">Grace</td><td style="padding:8px">Viewer</td><td style="padding:8px">Invited</td></tr>
+      </tbody>
+    </table>`, { width: 700 });
+  const tableFrame = find(t, (n) => n.name === 'Table');
+  expect('Chrome table → reconstructed structure', tableFrame !== null && tr.layout.some((l) => l.source === 'table' && l.detail?.includes('3 rows')), JSON.stringify(tr.layout));
+  const headerRow = find(t, (n) => n.name === 'Header row');
+  const widths = (headerRow?.children ?? []).map((c) => parseFloat(String(c.width)));
+  expect('Chrome computed cell widths → ~50/30/20%', widths.length === 3 && Math.abs(widths[0] - 50) < 2 && Math.abs(widths[1] - 30) < 2 && Math.abs(widths[2] - 20) < 2, JSON.stringify(widths));
+  expect('row dividers present between rows', find(t, (n) => n.name === 'Divider') !== null);
+}
+
 // ── 4. round-trip: the imported tree renders ─────────────────────────────────
 {
   const html = renderToHtml({ id: 'doc', type: 'document', fill: '#FFFFFF', width: 800, height: Math.max(contentHeight, 200), children: [root] }, 800, Math.max(contentHeight, 200));

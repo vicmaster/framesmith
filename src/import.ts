@@ -41,6 +41,8 @@ export interface RawDomNode {
     src?: string;
     alt?: string;
     selectValue?: string;
+    /** td/th only, when > 1 — rowspan reconstruction is a non-goal, warned. */
+    rowSpan?: number;
   };
   /** Inline <svg> only: the d attribute of each path child + the viewBox. */
   svgPaths?: string[];
@@ -115,6 +117,9 @@ export const DOM_WALKER_SOURCE = `(function (rootSelector, whitelist) {
       node.attrs.src = el.currentSrc || el.src || el.getAttribute('src') || undefined;
       node.attrs.alt = el.getAttribute('alt') || undefined;
     }
+    if ((el.tagName === 'TD' || el.tagName === 'TH') && el.rowSpan > 1) {
+      node.attrs.rowSpan = el.rowSpan;
+    }
     var role = el.getAttribute('role');
     if (role) node.attrs.role = role;
     var ac = el.getAttribute('aria-checked');
@@ -155,13 +160,16 @@ export interface ImportReport {
   /** Numeric values that EQUAL a scale token (gap 16 ≙ $md) — informational;
    * number-typed props aren't rewritten to refs. */
   scaleMatches: { nodeId: string; prop: string; value: number; token: string }[];
+  /** Phase 18 — how each container's structure was reconstructed: semantic
+   * (table/grid/centered), geometric clustering, or an honest stack-fallback. */
+  layout: { nodeId: string; source: 'table' | 'grid' | 'centered' | 'geometry' | 'stack-fallback'; detail?: string }[];
   unmatchedFonts: string[];
   unmatchedIcons: string[];
   warnings: string[];
 }
 
 function emptyReport(): ImportReport {
-  return { counts: { nodes: 0, frames: 0, text: 0, maxDepth: 0, dropped: 0 }, snapped: [], literals: [], scaleMatches: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
+  return { counts: { nodes: 0, frames: 0, text: 0, maxDepth: 0, dropped: 0 }, snapped: [], literals: [], scaleMatches: [], layout: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
 }
 
 // ── icon recognition (spec C5: exact path-hash match, no false positives) ────
@@ -349,6 +357,12 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
       return null;
     }
 
+    // ── table reconstruction (Phase 18 slice B) ──
+    if (node.tag === 'table') {
+      const built = convertTable(node, depth);
+      if (built) return built; // a row-less table falls through to the generic path
+    }
+
     // ── text vs frame ──
     const childNodes: SceneNode[] = [];
     const isTextOnly = !!node.text && node.children.length === 0;
@@ -408,6 +422,98 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     if (n.type === 'text') report.counts.text++;
     if (n.type === 'frame') report.counts.frames++;
     return n;
+  };
+
+  /** Table → vertical frame of horizontal row frames with PERCENTAGE cell
+   * widths (spec 18 C1 — fluid, the row is the 100% basis, last cell absorbs
+   * rounding). thead/tbody/tfoot unwrap; <caption> becomes a text node above;
+   * row/cell bottom borders become hairline divider frames (C2 — exact
+   * horizontal rules, no invented side borders). Reconstructed frames carry
+   * names (Table/Row/Cell) — semantic, and the wrapper-collapse guard keys on
+   * them. Returns null for a row-less table (generic frame path takes over). */
+  const convertTable = (table: RawDomNode, depth: number): SceneNode | null => {
+    const rows: { raw: RawDomNode; isHeader: boolean }[] = [];
+    let caption: RawDomNode | null = null;
+    for (const child of table.children) {
+      if (child.tag === 'caption') { caption = child; continue; }
+      if (child.tag === 'tr') rows.push({ raw: child, isHeader: child.children.some((c) => c.tag === 'th') });
+      if (child.tag === 'thead' || child.tag === 'tbody' || child.tag === 'tfoot') {
+        for (const tr of child.children) {
+          if (tr.tag === 'tr') rows.push({ raw: tr, isHeader: child.tag === 'thead' });
+        }
+      }
+    }
+    const visibleRows = rows.filter(({ raw }) => !flatten.dropInvisible || (raw.styles.display !== 'none' && !(raw.rect.w <= 0 && raw.rect.h <= 0)));
+    if (!visibleRows.length) return null;
+
+    let warnedRowspan = false;
+    let maxCols = 0;
+    const children: SceneNode[] = [];
+
+    if (caption?.text) {
+      children.push(count({ id: nextId('text'), type: 'text', content: caption.text, ...textProps(caption) }));
+    }
+
+    for (const { raw: tr, isHeader } of visibleRows) {
+      const cells = tr.children.filter((c) => (c.tag === 'td' || c.tag === 'th')
+        && (!flatten.dropInvisible || c.styles.display !== 'none'));
+      if (!cells.length) continue;
+
+      const totalW = cells.reduce((sum, c) => sum + c.rect.w, 0) || tr.rect.w || 1;
+      const cellFrames: SceneNode[] = [];
+      let pctUsed = 0;
+      cells.forEach((cell, i) => {
+        if (!warnedRowspan && (cell.attrs.rowSpan ?? 1) > 1) {
+          warnedRowspan = true;
+          report.warnings.push('A rowspan cell was mapped to its first row only — rowspan reconstruction is out of scope.');
+        }
+        const isLast = i === cells.length - 1;
+        const pct = isLast ? Math.round((100 - pctUsed) * 10) / 10 : Math.round((cell.rect.w / totalW) * 1000) / 10;
+        pctUsed += pct;
+
+        const cellChildren: SceneNode[] = [];
+        if (cell.text) cellChildren.push(count({ id: nextId('text'), type: 'text', content: cell.text, ...textProps(cell) }));
+        for (const cc of cell.children) {
+          const converted = convert(cc, depth + 3, cell);
+          if (converted) cellChildren.push(converted);
+        }
+        cellFrames.push(count({
+          id: nextId('cell'), type: 'frame', name: 'Cell',
+          ...frameProps(cell, tr),
+          width: `${pct}%`,
+          ...(cellChildren.length ? { children: cellChildren } : {}),
+        }));
+      });
+      maxCols = Math.max(maxCols, cellFrames.length);
+
+      const rowProps = frameProps(tr, table);
+      children.push(count({
+        id: nextId('row'), type: 'frame', name: isHeader ? 'Header row' : 'Row',
+        ...rowProps,
+        layout: 'horizontal', width: '100%', alignItems: 'center',
+        children: cellFrames,
+      }));
+
+      // Divider (FR-B2): row or first-cell bottom border → exact horizontal rule.
+      const src = (px(tr.styles.borderBottomWidth) ?? 0) > 0 ? tr.styles : cells[0].styles;
+      const dw = px(src.borderBottomWidth) ?? 0;
+      const dc = cssColor(src.borderBottomColor);
+      if (dw > 0 && src.borderBottomStyle !== 'none' && dc) {
+        children.push(count({ id: nextId('divider'), type: 'frame', name: 'Divider', width: '100%', height: dw, fill: dc }));
+      }
+    }
+    if (!children.length) return null;
+
+    const tableFrame = count({
+      id: nextId('table'), type: 'frame', name: 'Table',
+      ...frameProps(table, null),
+      layout: 'vertical' as const,
+      width: '100%',
+      children,
+    });
+    report.counts.maxDepth = Math.max(report.counts.maxDepth, depth + 2);
+    report.layout.push({ nodeId: tableFrame.id, source: 'table', detail: `${visibleRows.length} rows × ${maxCols} cols` });
+    return tableFrame;
   };
 
   /** Width strategy (C4): ≈ parent content width → '100%'; small fixed boxes
@@ -517,6 +623,9 @@ const VISUAL_PROPS: (keyof SceneNode)[] = ['fill', 'stroke', 'shadows', 'cornerR
 
 function isPlainWrapper(node: SceneNode): boolean {
   if (node.type !== 'frame' || (node.children?.length ?? 0) !== 1) return false;
+  // Named frames are semantic (Phase 18 reconstruction: Table/Row/Cell/Divider)
+  // — never collapse them, even when visually bare (a one-column row, say).
+  if (node.name !== undefined) return false;
   return VISUAL_PROPS.every((p) => node[p] === undefined);
 }
 

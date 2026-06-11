@@ -384,6 +384,7 @@ Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of
 | Source | → Scene graph |
 |--------|---------------|
 | flex/grid/block container | `frame` + `layout`/`gap`/`padding`/`alignItems`/`justifyContent`/`wrap` (grid degrades to a vertical frame with a warning) |
+| `<table>` / `<tr>` / `<td>`/`<th>` | a vertical frame of horizontal **row frames** with proportional percentage cell widths (from the computed boxes — colspan handled free); `thead`/`tbody` unwrap, `<caption>` becomes a text node, bottom borders become hairline divider frames. Recorded in `report.layout` |
 | text run | `text` (size, weight, color, family, line-height, letter-spacing, transform, align) |
 | `<img>` (absolute/data URL) | `image` |
 | inline `<svg>` | `icon` when the path data matches a bundled Lucide/Material glyph; else `path` |
