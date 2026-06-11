@@ -129,7 +129,7 @@ A screen that already ships doesn't need redrawing — `canvas_import_html` (sni
 
 **The report is the contract.** Imports are lossy by design; what makes them trustworthy is that they say exactly what happened. After every import, read:
 
-- `report.snapped` — values rewritten to `$token` refs (Tailwind class intent like `bg-surface`, plus nearest-color matches against your design system). `literals` lists colors that found no token; near-ties are reported and left literal, never guessed.
+- `report.snapped` — values rewritten to `$token` refs (Tailwind class intent like `bg-surface`, plus nearest-color matches against your design system). `literals` lists colors that found no token; near-ties are reported and left literal, never guessed. `scaleMatches` notes numbers that equal a scale token (gap 16 ≙ `$md`) — informational, since number-typed props can't hold refs.
 - `report.layout` — how each container's **structure** was reconstructed: `table` (rows of proportional columns), `grid` (rows from the computed track template), `centered` (auto-margin/max-width content kept centered at its real width), `geometry` (multi-column CSS clustered from bounding boxes). A **`stack-fallback`** entry is your to-do list: that one container looked multi-column but couldn't be reconstructed confidently — fix it by hand; everything else arrived structurally correct, so **don't rebuild imported tables or grids node-by-node**.
 - `report.warnings` / `unmatchedFonts` / `unmatchedIcons` — dropped background images, truncations, fonts and SVGs that didn't resolve.
 
