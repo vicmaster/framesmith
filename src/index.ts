@@ -1024,7 +1024,7 @@ server.tool(
 
 Token re-mapping: Tailwind utility classes map to INTENT directly (bg-surface → fill: "$surface", gap-4 → 16, custom utilities via tailwind.theme); remaining literal colors snap to the matched design system (nearest within tolerance — near-ties are reported, never guessed). report.snapped / report.literals / report.scaleMatches tell you exactly what happened; report.warnings flags $refs the design system doesn't define yet.
 
-LOSSY BY DESIGN — read the returned report: it lists what was dropped (pseudo-elements, background images, grid intricacies), unmatched fonts/icons, and warnings. The import is an editable starting point that honestly tells you where it degraded, not a pixel-perfect clone.
+LOSSY BY DESIGN — read the returned report: snapped (values → $tokens), literals (colors with no token), scaleMatches (numbers equal to a scale token, informational), layout (per-container reconstruction), unmatchedFonts, unmatchedIcons, warnings (dropped pseudo-elements / background images / truncations). The import is an editable starting point that honestly tells you where it degraded, not a pixel-perfect clone.
 
 Note: a bare Tailwind snippet has no Tailwind runtime — the class intent mapper covers the common utilities; pass the compiled CSS via \`css\` for everything else.`,
   {
@@ -1070,7 +1070,7 @@ server.tool(
   - waitFor — a CSS selector to await or a delay in ms, for client-rendered UI
   - auth — headers/cookies for gated pages; they live ONLY in a throwaway browser context and are never persisted to the canvas, provenance, or report
 
-LOSSY BY DESIGN — read the returned report (snapped/literals/warnings). Fonts seen on the page load through the font-by-name resolver so the canvas renders in the same faces.`,
+LOSSY BY DESIGN — read the returned report (snapped/literals/scaleMatches/layout/unmatchedFonts/unmatchedIcons/warnings). Fonts seen on the page load through the font-by-name resolver so the canvas renders in the same faces.`,
   {
     url: z.string().regex(/^https?:\/\//i).describe('The page to import (http/https)'),
     projectId: z.string().optional().describe('Project to create the canvas in (default: the default project)'),
