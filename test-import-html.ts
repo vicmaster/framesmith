@@ -103,6 +103,32 @@ const { root, report, contentHeight } = await importHtml(SNIPPET, { width: 800 }
   expect('row dividers present between rows', find(t, (n) => n.name === 'Divider') !== null);
 }
 
+// ── 3c. grid + centered card through real Chrome (Phase 18 slice C) ──────────
+{
+  const { root: g, report: gr } = await importHtml(`
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;width:632px">
+      <div style="background:#1e293b;height:80px">A</div>
+      <div style="background:#1e293b;height:80px">B</div>
+      <div style="background:#1e293b;height:80px">C</div>
+      <div style="background:#1e293b;height:80px;grid-column:span 2">D wide</div>
+      <div style="background:#1e293b;height:80px">E</div>
+    </div>`, { width: 700 });
+  const gridFrame = find(g, (n) => n.name === 'Grid');
+  expect('Chrome grid (fr tracks resolve to px) reconstructs', gridFrame !== null && gr.layout.some((l) => l.source === 'grid' && l.detail === '2 rows × 3 cols'), JSON.stringify(gr.layout));
+  const rows = (gridFrame?.children ?? []).filter((n) => n.name === 'Grid row');
+  const spanWidth = parseFloat(String(rows[1]?.children?.[0]?.width));
+  expect('Chrome span-2 child ≈ two tracks wide', spanWidth > 60 && spanWidth < 72, String(spanWidth));
+
+  const { root: s, report: sr } = await importHtml(`
+    <main style="min-height:400px;display:flex;align-items:center;justify-content:center">
+      <div style="max-width:448px;width:100%;background:#0f172a;border-radius:12px;padding:32px;color:#fff">Sign in</div>
+    </main>`, { width: 1440 });
+  const card = find(s, (n) => n.maxWidth === 448);
+  expect('Chrome centered card: fluid + capped at max-width', card !== null && card!.width === '100%' && card!.cornerRadius === 12, JSON.stringify({ w: card?.width, mw: card?.maxWidth }));
+  const centerParent = find(s, (n) => n.alignItems === 'center' && n.justifyContent === 'center');
+  expect('Chrome flex-center parent survives (not collapsed)', centerParent !== null && (centerParent!.children ?? []).some((c) => c.maxWidth === 448), JSON.stringify(sr.layout));
+}
+
 // ── 4. round-trip: the imported tree renders ─────────────────────────────────
 {
   const html = renderToHtml({ id: 'doc', type: 'document', fill: '#FFFFFF', width: 800, height: Math.max(contentHeight, 200), children: [root] }, 800, Math.max(contentHeight, 200));

@@ -363,6 +363,17 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
       if (built) return built; // a row-less table falls through to the generic path
     }
 
+    // ── grid reconstruction (Phase 18 slice C) ──
+    if ((node.styles.display === 'grid' || node.styles.display === 'inline-grid') && node.children.length) {
+      const built = convertGrid(node, depth, parent);
+      if (built) return built;
+      // Unreconstructable template → vertical stack; slice D's clustering will
+      // claim these, until then the degradation is warned, not silent.
+      if (!report.warnings.some((w) => w.includes('grid'))) {
+        report.warnings.push('A CSS grid container with an irregular template was imported as a vertical stack.');
+      }
+    }
+
     // ── text vs frame ──
     const childNodes: SceneNode[] = [];
     const isTextOnly = !!node.text && node.children.length === 0;
@@ -384,12 +395,42 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     if (node.text) {
       childNodes.push(count({ id: nextId('text'), type: 'text', content: node.text, ...textProps(node) }));
     }
+
+    // Centered-child detection (Phase 18 FR-C2): auto margins and max-width
+    // are how the web centers — neither survives as a computed "center" value,
+    // so without this the sign-in card spreads full-bleed (#92 repro 2).
+    const parentContent = node.rect.w - (px(node.styles.paddingLeft) ?? 0) - (px(node.styles.paddingRight) ?? 0);
+    let centeredDetail: string | null = null;
+
     for (const child of node.children) {
       const c = convert(child, depth + 1, node);
-      if (c) childNodes.push(c);
+      if (!c) continue;
+
+      const mw = px(child.styles.maxWidth); // 'none' / percentages → undefined
+      const ml = px(child.styles.marginLeft) ?? 0;
+      const mr = px(child.styles.marginRight) ?? 0;
+      const narrower = child.rect.w > 0 && child.rect.w < parentContent - 8;
+      if (mw !== undefined && (c.type === 'frame' || c.type === 'image')) {
+        // The renderer's fluid idiom: fill the row, cap at the real max.
+        c.width = '100%';
+        c.maxWidth = mw;
+        if (narrower) centeredDetail = 'max-width child';
+      } else if (ml > 0 && Math.abs(ml - mr) <= 1 && narrower) {
+        // margin: auto resolves to equal px in computed styles.
+        if (c.width === undefined) c.width = child.rect.w;
+        centeredDetail = 'auto-margin child';
+      }
+      childNodes.push(c);
     }
 
-    const frame: SceneNode = { id: nextId('frame'), type: 'frame', ...frameProps(node, parent), ...(childNodes.length ? { children: childNodes } : {}) };
+    const fp = frameProps(node, parent);
+    const centerable = centeredDetail !== null && fp.layout !== 'horizontal' && fp.alignItems === undefined;
+    const frame: SceneNode = {
+      id: nextId('frame'), type: 'frame', ...fp,
+      ...(centerable ? { alignItems: 'center' as const, ...(fp.layout ? {} : { layout: 'vertical' as const }) } : {}),
+      ...(childNodes.length ? { children: childNodes } : {}),
+    };
+    if (centerable) report.layout.push({ nodeId: frame.id, source: 'centered', detail: centeredDetail! });
     return count(mergeIntent(frame, node));
   };
 
@@ -516,6 +557,88 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
     return tableFrame;
   };
 
+  /** Grid → rows of proportional columns (spec 18 FR-C1). The computed
+   * grid-template-columns of a laid-out grid is a resolved px list — parse it
+   * into tracks, chunk children row-major (a child spans k tracks via numeric
+   * grid-column or its rect width), and emit horizontal 'Grid row' frames with
+   * percentage cell widths. Single-track templates become a faithful vertical
+   * frame (no warning — a 1-col grid IS a stack). Returns null when the
+   * template doesn't resolve to px tracks (slice D's clustering claims those). */
+  const convertGrid = (grid: RawDomNode, depth: number, parent: RawDomNode | null): SceneNode | null => {
+    const template = grid.styles.gridTemplateColumns ?? '';
+    const tokens = template.trim().split(/\s+/).filter(Boolean);
+    if (!tokens.length || tokens.some((t) => !/^\d+(\.\d+)?px$/.test(t))) return null;
+    const tracks = tokens.map((t) => parseFloat(t));
+    const colGap = px(grid.styles.columnGap) ?? 0;
+    const rowGap = px(grid.styles.rowGap) ?? 0;
+
+    const visible = grid.children.filter((c) => !flatten.dropInvisible
+      || (c.styles.display !== 'none' && c.styles.visibility !== 'hidden' && !c.attrs.ariaHidden && !(c.rect.w <= 0 && c.rect.h <= 0)));
+    if (!visible.length) return null;
+
+    // Visual props only — layout/gap are set explicitly per the reconstruction.
+    const gridFrame: Partial<SceneNode> = frameProps(grid, parent);
+    delete (gridFrame as Record<string, unknown>).layout;
+    delete (gridFrame as Record<string, unknown>).gap;
+
+    // Single column: a faithful vertical stack.
+    if (tracks.length === 1) {
+      const children = visible.map((c) => convert(c, depth + 1, grid)).filter((c): c is SceneNode => c !== null);
+      const frame = count({ id: nextId('grid'), type: 'frame' as const, name: 'Grid', ...gridFrame, layout: 'vertical' as const, ...(rowGap ? { gap: rowGap } : {}), children });
+      report.layout.push({ nodeId: frame.id, source: 'grid', detail: `${children.length} rows × 1 col` });
+      return frame;
+    }
+
+    const totalW = tracks.reduce((s, t) => s + t, 0) + colGap * (tracks.length - 1);
+    const avgTrack = tracks.reduce((s, t) => s + t, 0) / tracks.length;
+
+    /** Tracks a child occupies: numeric grid-column wins; else its rect width. */
+    const spanOf = (c: RawDomNode): number => {
+      const start = parseInt(c.styles.gridColumnStart ?? '', 10);
+      const end = parseInt(c.styles.gridColumnEnd ?? '', 10);
+      if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) return Math.min(end - start, tracks.length);
+      return Math.max(1, Math.min(Math.round((c.rect.w + colGap) / (avgTrack + colGap)), tracks.length));
+    };
+
+    // Row-major auto-placement: a child that doesn't fit the remaining slots wraps.
+    const rowFrames: SceneNode[] = [];
+    let slot = 0;
+    let current: SceneNode[] = [];
+    const flushRow = () => {
+      if (!current.length) return;
+      rowFrames.push(count({
+        id: nextId('gridrow'), type: 'frame', name: 'Grid row',
+        layout: 'horizontal', width: '100%', ...(colGap ? { gap: colGap } : {}),
+        children: current,
+      }));
+      current = [];
+      slot = 0;
+    };
+    for (const child of visible) {
+      const span = spanOf(child);
+      if (slot + span > tracks.length) flushRow();
+      const converted = convert(child, depth + 2, grid);
+      if (!converted) continue;
+      const spanW = tracks.slice(slot, slot + span).reduce((s, t) => s + t, 0) + colGap * (span - 1);
+      converted.width = `${Math.round((spanW / totalW) * 1000) / 10}%`;
+      current.push(converted);
+      slot += span;
+      if (slot >= tracks.length) flushRow();
+    }
+    flushRow();
+    if (!rowFrames.length) return null;
+
+    const frame = count({
+      id: nextId('grid'), type: 'frame' as const, name: 'Grid',
+      ...gridFrame, layout: 'vertical' as const, ...(rowGap ? { gap: rowGap } : {}),
+      ...(widthFor(grid, parent) !== undefined ? { width: widthFor(grid, parent) } : {}),
+      children: rowFrames,
+    });
+    report.counts.maxDepth = Math.max(report.counts.maxDepth, depth + 1);
+    report.layout.push({ nodeId: frame.id, source: 'grid', detail: `${rowFrames.length} rows × ${tracks.length} cols` });
+    return frame;
+  };
+
   /** Width strategy (C4): ≈ parent content width → '100%'; small fixed boxes
    * keep pixels; everything else stays content-driven (no width). */
   const widthFor = (node: RawDomNode, parent: RawDomNode | null): number | string | undefined => {
@@ -562,12 +685,12 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
       const gap = px(s.rowGap) ?? px(s.columnGap);
       if (gap) out.gap = gap;
     } else if (s.display === 'grid' || s.display === 'inline-grid') {
+      // Parseable grids never reach here (convertGrid claims them); this is
+      // the unreconstructable-template fallback. The warning lives at the
+      // fallthrough site in convert().
       out.layout = 'vertical';
       const gap = px(s.rowGap) ?? px(s.columnGap);
       if (gap) out.gap = gap;
-      if (!report.warnings.some((w) => w.includes('grid'))) {
-        report.warnings.push('CSS grid containers were imported as vertical frames (grid has no scene-graph analog).');
-      }
     } else if (node.children.length > 1 || node.text) {
       out.layout = 'vertical'; // block flow ≈ vertical stack
     }
@@ -619,14 +742,22 @@ export function domToSceneGraph(raw: RawDomNode, opts: DomToSceneOptions = {}): 
 
 // ── flatten (pure) ───────────────────────────────────────────────────────────
 
-const VISUAL_PROPS: (keyof SceneNode)[] = ['fill', 'stroke', 'shadows', 'cornerRadius', 'opacity', 'gap', 'padding', 'overflow', 'gradient'];
+// Props that make a single-child wrapper meaningful: visual styling, or layout
+// that positions the child (alignItems/justifyContent center a lone child;
+// maxWidth caps it — Phase 18 FR-C2 depends on these surviving the collapse).
+// A bare `layout` direction alone says nothing about one child and stays
+// collapsible.
+const WRAPPER_SUBSTANCE_PROPS: (keyof SceneNode)[] = [
+  'fill', 'stroke', 'shadows', 'cornerRadius', 'opacity', 'gap', 'padding', 'overflow', 'gradient',
+  'alignItems', 'justifyContent', 'maxWidth',
+];
 
 function isPlainWrapper(node: SceneNode): boolean {
   if (node.type !== 'frame' || (node.children?.length ?? 0) !== 1) return false;
   // Named frames are semantic (Phase 18 reconstruction: Table/Row/Cell/Divider)
   // — never collapse them, even when visually bare (a one-column row, say).
   if (node.name !== undefined) return false;
-  return VISUAL_PROPS.every((p) => node[p] === undefined);
+  return WRAPPER_SUBSTANCE_PROPS.every((p) => node[p] === undefined);
 }
 
 function sameTextStyle(a: SceneNode, b: SceneNode): boolean {
