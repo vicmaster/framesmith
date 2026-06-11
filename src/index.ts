@@ -1019,7 +1019,7 @@ async function finishImport(
 // --- canvas_import_html ---
 server.tool(
   'canvas_import_html',
-  `Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of export. Renders the markup headlessly and walks the DOM's computed styles into a scene graph: flex containers → frames (layout/gap/padding/align), text runs → text nodes (size/weight/color/spacing/transform), <img> → image, inline SVGs → icon nodes when they match a bundled Lucide/Material glyph (else path), checkboxes/radios/switches/selects → the input-primitive node types with their live checked/value state.
+  `Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of export. Renders the markup headlessly and walks the DOM's computed styles into a scene graph: flex containers → frames (layout/gap/padding/align), <table> → rows of proportional-width cell frames (thead/tbody unwrapped, dividers preserved — see report.layout), text runs → text nodes (size/weight/color/spacing/transform), <img> → image, inline SVGs → icon nodes when they match a bundled Lucide/Material glyph (else path), checkboxes/radios/switches/selects → the input-primitive node types with their live checked/value state.
 
 Token re-mapping: Tailwind utility classes map to INTENT directly (bg-surface → fill: "$surface", gap-4 → 16, custom utilities via tailwind.theme); remaining literal colors snap to the matched design system (nearest within tolerance — near-ties are reported, never guessed). report.snapped / report.literals / report.scaleMatches tell you exactly what happened; report.warnings flags $refs the design system doesn't define yet.
 
