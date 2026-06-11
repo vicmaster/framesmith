@@ -383,7 +383,9 @@ Import an HTML snippet (+ optional CSS) as an editable canvas — the reverse of
 
 | Source | → Scene graph |
 |--------|---------------|
-| flex/grid/block container | `frame` + `layout`/`gap`/`padding`/`alignItems`/`justifyContent`/`wrap` (grid degrades to a vertical frame with a warning) |
+| flex/block container | `frame` + `layout`/`gap`/`padding`/`alignItems`/`justifyContent`/`wrap` |
+| `display: grid` | rows of proportional columns from the computed track template (`grid-column` spans honored — numeric spans win, else the box width decides); irregular templates degrade to a stack with a warning. Recorded in `report.layout` |
+| centered content (`margin: auto`, `max-width`, flex-center) | the parent centers (`alignItems`) and the child keeps its real width — `max-width` becomes the fluid `width: "100%"` + `maxWidth` idiom. Recorded in `report.layout` |
 | `<table>` / `<tr>` / `<td>`/`<th>` | a vertical frame of horizontal **row frames** with proportional percentage cell widths (from the computed boxes — colspan handled free); `thead`/`tbody` unwrap, `<caption>` becomes a text node, bottom borders become hairline divider frames. Recorded in `report.layout` |
 | text run | `text` (size, weight, color, family, line-height, letter-spacing, transform, align) |
 | `<img>` (absolute/data URL) | `image` |

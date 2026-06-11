@@ -156,6 +156,108 @@ function tr(cells: RawDomNode[], extra: Partial<RawDomNode> = {}): RawDomNode {
   expect('named row/cell frames survive wrapper collapse', rows.length === 2 && rows.every((r) => r.children?.[0].name === 'Cell'), String(rows.length));
 }
 
+// ── 4. grid reconstruction (slice C) ─────────────────────────────────────────
+{
+  const gridChild = (w: number, label: string, extra: Partial<RawDomNode> = {}) =>
+    el({ tag: 'div', text: label, rect: { x: 0, y: 0, w, h: 120 }, styles: { display: 'block', backgroundColor: 'rgb(30, 30, 30)', visibility: 'visible' }, ...extra });
+
+  // grid-cols-3 with 6 children → 2 rows × 3 columns.
+  const grid3 = el({
+    tag: 'div',
+    rect: { x: 0, y: 0, w: 632, h: 256 },
+    styles: { display: 'grid', gridTemplateColumns: '200px 200px 200px', rowGap: '16px', columnGap: '16px', visibility: 'visible' },
+    children: ['A', 'B', 'C', 'D', 'E', 'F'].map((l) => gridChild(200, l)),
+  });
+  const { root: g3, report: r3 } = domToSceneGraph(grid3);
+  expect('grid → named vertical frame with rowGap', g3.name === 'Grid' && g3.layout === 'vertical' && g3.gap === 16);
+  const rows3 = g3.children!;
+  expect('6 children chunk into 2 rows of 3', rows3.length === 2 && rows3.every((r) => r.name === 'Grid row' && r.layout === 'horizontal' && r.gap === 16 && r.children!.length === 3), JSON.stringify(rows3.map((r) => r.children?.length)));
+  expect('grid cells get proportional widths', rows3[0].children!.every((c) => c.width === '31.6%'), JSON.stringify(rows3[0].children!.map((c) => c.width)));
+  expect('report.layout records the grid', r3.layout.some((l) => l.source === 'grid' && l.detail === '2 rows × 3 cols'));
+  expect('no grid warning when reconstructed', !r3.warnings.some((w) => w.includes('grid')));
+
+  // col-span-2 via rect width.
+  const spanGrid = el({
+    tag: 'div',
+    rect: { x: 0, y: 0, w: 632, h: 120 },
+    styles: { display: 'grid', gridTemplateColumns: '200px 200px 200px', columnGap: '16px', rowGap: '0px', visibility: 'visible' },
+    children: [gridChild(416, 'wide'), gridChild(200, 'narrow'), gridChild(632, 'full-next-row')],
+  });
+  const { root: sg } = domToSceneGraph(spanGrid);
+  expect('rect-based span: 2-track child is ~65.8%', sg.children![0].children![0].width === '65.8%', String(sg.children![0].children![0].width));
+  expect('full-width child wraps to its own row', sg.children!.length === 2 && sg.children![1].children![0].width === '100%', JSON.stringify(sg.children!.map((r) => r.children?.map((c) => c.width))));
+
+  // explicit numeric grid-column wins over rect.
+  const explicitSpan = el({
+    tag: 'div',
+    rect: { x: 0, y: 0, w: 632, h: 120 },
+    styles: { display: 'grid', gridTemplateColumns: '200px 200px 200px', columnGap: '16px', rowGap: '0px', visibility: 'visible' },
+    children: [gridChild(200, 'says-2-tracks', { styles: { display: 'block', gridColumnStart: '1', gridColumnEnd: '3', visibility: 'visible' } }), gridChild(200, 'normal')],
+  });
+  const { root: eg } = domToSceneGraph(explicitSpan);
+  expect('numeric grid-column span wins', eg.children![0].children![0].width === '65.8%', String(eg.children![0].children![0].width));
+
+  // single-track grid: faithful vertical, no rows, no warning.
+  const oneCol = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 400, h: 300 },
+    styles: { display: 'grid', gridTemplateColumns: '400px', rowGap: '12px', columnGap: '0px', visibility: 'visible' },
+    children: [gridChild(400, 'a'), gridChild(400, 'b')],
+  });
+  const { root: oc, report: ocr } = domToSceneGraph(oneCol);
+  expect('single-track grid is a faithful vertical stack', oc.name === 'Grid' && oc.layout === 'vertical' && oc.gap === 12 && !oc.children!.some((c) => c.name === 'Grid row'));
+  expect('…with a layout entry and no warning', ocr.layout.some((l) => l.detail === '2 rows × 1 col') && ocr.warnings.length === 0);
+
+  // irregular template → stack + warning (slice D will claim these).
+  const irregular = el({
+    tag: 'div', styles: { display: 'grid', gridTemplateColumns: 'none', visibility: 'visible' },
+    children: [gridChild(200, 'x'), gridChild(200, 'y')],
+  });
+  const { root: ir, report: irr } = domToSceneGraph(irregular);
+  expect('irregular template degrades with a warning', ir.name === undefined && ir.layout === 'vertical' && irr.warnings.some((w) => w.includes('grid')));
+}
+
+// ── 5. centered containers (slice C) ─────────────────────────────────────────
+{
+  // The #92 sign-in shape: full-width parent, auto-margin card.
+  const signIn = el({
+    tag: 'main',
+    rect: { x: 0, y: 0, w: 1440, h: 900 },
+    styles: { display: 'block', visibility: 'visible' },
+    children: [el({
+      tag: 'div', text: 'Sign in',
+      rect: { x: 496, y: 200, w: 448, h: 320 },
+      styles: { display: 'block', marginLeft: '496px', marginRight: '496px', backgroundColor: 'rgb(30, 30, 30)', borderTopLeftRadius: '12px', visibility: 'visible' },
+    })],
+  });
+  const { root: si, report: sir } = domToSceneGraph(signIn);
+  expect('auto-margin parent centers', si.alignItems === 'center' && si.layout === 'vertical');
+  expect('auto-margin child keeps its real width', si.children![0].width === 448, String(si.children![0].width));
+  expect('centered recorded in report.layout', sir.layout.some((l) => l.source === 'centered' && l.detail === 'auto-margin child'));
+
+  // max-w-md card: fluid width + cap.
+  const maxW = el({
+    tag: 'div',
+    rect: { x: 0, y: 0, w: 1440, h: 600 },
+    styles: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', visibility: 'visible' },
+    children: [el({
+      tag: 'div', text: 'Card',
+      rect: { x: 496, y: 100, w: 448, h: 300 },
+      styles: { display: 'block', maxWidth: '448px', backgroundColor: 'rgb(30, 30, 30)', visibility: 'visible' },
+    })],
+  });
+  const { root: mw } = domToSceneGraph(maxW);
+  expect('max-width child becomes fluid + capped', mw.children![0].width === '100%' && mw.children![0].maxWidth === 448, JSON.stringify({ w: mw.children![0].width, mw: mw.children![0].maxWidth }));
+  expect('flex-center parent mapping untouched', mw.alignItems === 'center' && mw.justifyContent === 'center');
+
+  // control: unequal margins do NOT center.
+  const offCenter = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 1440, h: 400 }, styles: { display: 'block', visibility: 'visible' },
+    children: [el({ tag: 'div', text: 'left-leaning', rect: { x: 100, y: 0, w: 448, h: 200 }, styles: { display: 'block', marginLeft: '100px', marginRight: '892px', backgroundColor: 'rgb(1, 1, 1)', visibility: 'visible' } })],
+  });
+  const { root: ocn, report: ocr2 } = domToSceneGraph(offCenter);
+  expect('unequal margins do not center', ocn.alignItems === undefined && !ocr2.layout.some((l) => l.source === 'centered'));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;
