@@ -400,7 +400,18 @@ A screen that already ships must be hand-redrawn (~80 nodes for a table) to exis
 - [x] `canvas_import_url` — live page import (viewport / selector / waitFor / auth in a throwaway incognito context, auth never persisted); computed fonts feed the Phase 16 resolver
 - [x] `canvas_sync_from_url` — ephemeral re-import + `canvas_diff` → drift percentage + diff image; the CI failure pattern documented (not shipped)
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-17-SPEC.md`](docs/specs/PHASE-17-SPEC.md)._
+_Full spec-driven breakdown in [`docs/specs/PHASE-17-SPEC.md`](docs/specs/PHASE-17-SPEC.md). Phase 17 complete (v1.4.0)._
+
+### Phase 18 — Structural reconstruction (from issue #92)
+
+The import's styling layer is proven (token-mapped colors, real fonts, recognized icons) but structural layout flattens: `<table>` loses its columns, CSS grid degrades to a stack, centered/`max-width` containers spread full-bleed — and app UIs are dominated by exactly those shapes. Reconstruct layout semantically where the mechanism is known, geometrically where it isn't, and report which path each container took. A wrong reconstruction is worse than an honest stack — guards stay conservative.
+
+- [ ] Hygiene + groundwork — kill the bogus-`$ref` warning class (revert to the computed value when ground truth exists; border-utility blocklist); walker captures the layout signals (bottom borders, max-width, auto margins, grid template/spans)
+- [ ] `<table>` semantics — table/tr/td → vertical frame of horizontal row frames with proportional (percentage) cell widths, thead/tbody unwrapped, row dividers as hairline frames
+- [ ] Grid + centered containers — computed `grid-template-columns` → rows of proportional columns (spans honored); `margin: auto` / `max-width` / flex-center → centered frames at their real width instead of full-bleed stretches
+- [ ] Geometry-clustering fallback + `report.layout` — children's computed rects cluster into row/column structure when no semantic pass applies; every reconstruction (or honest `stack-fallback`) recorded in the report
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-18-SPEC.md`](docs/specs/PHASE-18-SPEC.md)._
 
 ---
 
