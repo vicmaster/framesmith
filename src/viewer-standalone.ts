@@ -14,10 +14,9 @@
  * regardless of whether a Claude Code session is active.
  */
 
-import { loadGlobalAndRegisteredRepos } from './aggregate.js';
-import { migrateLegacyHome } from './repo-store.js';
+import { loadGlobalAndRegisteredRepos, watchAggregateSources } from './aggregate.js';
+import { migrateLegacyHome, readRegistry } from './repo-store.js';
 import { startViewer, getViewerUrl } from './viewer.js';
-import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { mkdirSync } from 'node:fs';
@@ -47,23 +46,17 @@ async function main() {
   await startViewer(port);
 
   const url = getViewerUrl();
+  const repoDirs = readRegistry();
   console.log(`\n  Framesmith Viewer is running at: ${url}\n`);
-  console.log(`  Watching ${DATA_DIR} for changes...\n`);
-  console.log(`  Press Ctrl+C to stop.\n`);
+  console.log(`  Watching ${DATA_DIR} for changes...`);
+  for (const dir of repoDirs) console.log(`  Watching bound repo ${dir} for changes...`);
+  console.log(`\n  Press Ctrl+C to stop.\n`);
 
-  // Re-aggregate (global + registered repos) on any change. Debounced.
-  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
-  const reload = () => {
-    if (reloadTimer) clearTimeout(reloadTimer);
-    reloadTimer = setTimeout(() => loadGlobalAndRegisteredRepos(), 500);
-  };
-  // Global canvas writes.
-  watch(CANVAS_DIR, (_eventType, filename) => {
-    if (filename?.endsWith('.json')) reload();
-  });
-  // New / removed repo bindings (registry.json lives at the data-dir root).
-  watch(DATA_DIR, (_eventType, filename) => {
-    if (filename === 'registry.json') reload();
+  // Re-aggregate on any change to ANY source: global canvases, registry.json,
+  // and every bound repo's .framesmith/ (a repo bound while the viewer runs
+  // starts updating live too — its watcher attaches on the registry reload).
+  watchAggregateSources(DATA_DIR, ({ repos, canvases }) => {
+    console.log(`  Reloaded: ${canvases} canvas(es) from ${repos} bound repo(s) + the global store`);
   });
 
   // Keep process alive

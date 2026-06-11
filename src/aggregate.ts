@@ -16,6 +16,8 @@
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, mergeRepoWorkspace } from './workspaces.js';
 import { loadPersistedCanvases, ingestCanvases, getCanvas, deleteCanvas } from './scene-graph.js';
 import { readRegistry, readWorkspaceFile, readRepoCanvasEntries, writeCanvasFileAt, deleteCanvasFileAt } from './repo-store.js';
+import { watch, existsSync, type FSWatcher } from 'node:fs';
+import { join } from 'node:path';
 
 // canvasId → where its file lives, for mirrored repo canvases. Lets the viewer
 // write lifecycle changes back to the right repo file.
@@ -34,16 +36,89 @@ export function loadGlobalAndRegisteredRepos(): { repos: number; canvases: numbe
   let repos = 0;
   let canvases = 0;
   for (const dir of readRegistry()) {
-    const wf = readWorkspaceFile(dir);
-    if (!wf) continue; // moved / deleted / unreadable — skip
-    mergeRepoWorkspace(wf);
-    const entries = readRepoCanvasEntries(dir);
-    ingestCanvases(entries.map((e) => e.canvas));
-    for (const e of entries) repoLocations.set(e.canvas.id, { canvasDir: dir, absFile: e.absFile });
-    repos++;
-    canvases += entries.length;
+    try {
+      const wf = readWorkspaceFile(dir);
+      if (!wf) continue; // moved / deleted / unreadable — skip
+      mergeRepoWorkspace(wf);
+      const entries = readRepoCanvasEntries(dir);
+      ingestCanvases(entries.map((e) => e.canvas));
+      for (const e of entries) repoLocations.set(e.canvas.id, { canvasDir: dir, absFile: e.absFile });
+      repos++;
+      canvases += entries.length;
+    } catch {
+      // Malformed/mid-write repo files must never take the viewer down — the
+      // live watcher (watchAggregateSources) can fire during an agent's write,
+      // and a corrupt repo is the repo's problem, not the gallery's. Skip it;
+      // the next change event re-reads it.
+      continue;
+    }
   }
   return { repos, canvases };
+}
+
+/** Watch EVERY aggregation source for changes and re-aggregate (debounced):
+ * the global canvases dir, registry.json, and — the part the standalone viewer
+ * was missing — every registered repo's `.framesmith/` (recursively, so
+ * per-project subdir canvas writes fire too). Repo watchers re-sync after each
+ * reload, so a repo bound while the viewer runs starts updating live without a
+ * restart. Returns a dispose function (tests / shutdown). */
+export function watchAggregateSources(
+  dataDir: string,
+  onReload?: (info: { repos: number; canvases: number }) => void,
+): () => void {
+  const repoWatchers = new Map<string, FSWatcher>();
+  let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const isContentFile = (filename: string | null) =>
+    !!filename && (filename.endsWith('.json')); // canvases, workspace.json, registry.json; asset binaries don't matter
+
+  const reload = () => {
+    if (reloadTimer) clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => {
+      const info = loadGlobalAndRegisteredRepos();
+      syncRepoWatchers();
+      onReload?.(info);
+    }, 300);
+  };
+
+  const watchRepo = (dir: string) => {
+    if (repoWatchers.has(dir) || !existsSync(dir)) return;
+    try {
+      // recursive: per-project subdirs hold the canvas files.
+      repoWatchers.set(dir, watch(dir, { recursive: true }, (_e, f) => { if (isContentFile(f)) reload(); }));
+    } catch {
+      // Recursive watch unavailable (older Linux Node) — top level still
+      // catches workspace.json; better than nothing.
+      try { repoWatchers.set(dir, watch(dir, (_e, f) => { if (isContentFile(f)) reload(); })); } catch { /* repo gone — skip */ }
+    }
+  };
+
+  const syncRepoWatchers = () => {
+    const registered = new Set(readRegistry());
+    for (const dir of registered) watchRepo(dir);
+    for (const [dir, watcher] of repoWatchers) {
+      if (!registered.has(dir)) {
+        watcher.close();
+        repoWatchers.delete(dir);
+      }
+    }
+  };
+
+  const topWatchers: FSWatcher[] = [];
+  try {
+    topWatchers.push(watch(join(dataDir, 'canvases'), (_e, f) => { if (isContentFile(f)) reload(); }));
+  } catch { /* global store dir missing — created on first write; registry watcher still covers re-binds */ }
+  try {
+    topWatchers.push(watch(dataDir, (_e, f) => { if (f === 'registry.json') reload(); }));
+  } catch { /* data dir missing entirely — nothing to watch yet */ }
+  syncRepoWatchers();
+
+  return () => {
+    if (reloadTimer) clearTimeout(reloadTimer);
+    for (const w of topWatchers) w.close();
+    for (const w of repoWatchers.values()) w.close();
+    repoWatchers.clear();
+  };
 }
 
 /** Archive/unarchive a mirrored repo canvas: flip the flag in the store and
