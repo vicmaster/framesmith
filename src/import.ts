@@ -59,6 +59,11 @@ const STYLE_WHITELIST = [
   'boxShadow', 'opacity', 'overflow', 'visibility', 'position',
   'color', 'fontSize', 'fontWeight', 'fontFamily', 'lineHeight',
   'letterSpacing', 'textTransform', 'textAlign', 'textDecorationLine',
+  // Phase 18 (structural reconstruction) layout signals — consumed by slices
+  // B–D: row dividers, centered/max-width containers, grid templates + spans.
+  'borderBottomWidth', 'borderBottomStyle', 'borderBottomColor',
+  'maxWidth', 'marginLeft', 'marginRight',
+  'gridTemplateColumns', 'gridColumnStart', 'gridColumnEnd',
 ] as const;
 
 /** The page.evaluate walker, as a string function (tsx/esbuild injects a
@@ -644,7 +649,22 @@ export function snapToTokens(root: SceneNode, vars: DesignVariables, report: Imp
       if (typeof value !== 'string') continue;
       if (value.startsWith('$')) {
         const name = value.slice(1);
-        if (vars.colors?.[name] === undefined) unresolvedRefs.add(name);
+        if (vars.colors?.[name] === undefined) {
+          // Unresolvable intent ref (spec 18 FR-A1). If the intent overrode a
+          // real computed value, that value is ground truth — revert to it
+          // (the report.snapped entry is the undo log) and re-snap it like any
+          // literal. Only refs from unstyled snippets survive (with the
+          // warning): there, the class name is the only information we have.
+          const snappedIdx = report.snapped.findIndex((s) => s.nodeId === node.id && s.prop === prop && s.token === value);
+          const from = snappedIdx >= 0 ? report.snapped[snappedIdx].from : undefined;
+          if (from !== undefined && from !== '(unstyled)') {
+            (node as unknown as Record<string, unknown>)[prop] = from;
+            report.snapped.splice(snappedIdx, 1);
+            snapColor(node, prop, from);
+          } else {
+            unresolvedRefs.add(name);
+          }
+        }
         continue;
       }
       snapColor(node, prop, value);
