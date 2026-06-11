@@ -65,6 +65,12 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
 
   const { props: ambiguous } = classesToProps(['text-lg', 'text-secondary']);
   expect('text- disambiguates size vs color', ambiguous.fontSize === 18 && ambiguous.color === '$secondary');
+
+  // Phase 18 FR-A2 — border style/model keywords are not colors (#92's $collapse).
+  const { props: bc, tokenRefs: bcRefs } = classesToProps(['border-collapse', 'border-separate', 'border-dashed', 'border-spacing-2']);
+  expect('border style keywords map nothing', bc.stroke === undefined && bcRefs.length === 0, JSON.stringify(bc));
+  const { props: bcolor } = classesToProps(['border-muted', 'border-red-500']);
+  expect('border colors still map', bcolor.stroke === '$muted' || bcolor.stroke === '#fb2c36'); // last one wins
 }
 
 // ── 3. intent merge in domToSceneGraph ───────────────────────────────────────
@@ -106,6 +112,21 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   expect('computed color beats the palette literal', r4.fill === 'rgb(1, 2, 3)', String(r4.fill));
 }
 
+// ── 3b. end-to-end: intent override → unresolvable → reverts (#92 repro) ────
+{
+  const styled = el({
+    tag: 'div',
+    classes: ['bg-mystery'],
+    styles: { display: 'block', backgroundColor: 'rgb(7, 7, 7)', visibility: 'visible' },
+    children: [el({ tag: 'span', text: 'x', styles: { display: 'inline', visibility: 'visible' } })],
+  });
+  const { root, report } = domToSceneGraph(styled);
+  expect('pipeline: intent ref applied with computed undo log', root.fill === '$mystery' && report.snapped.some((s) => s.from === 'rgb(7, 7, 7)'));
+  snapToTokens(root, { colors: { primary: '#b71421' } }, report);
+  expect('pipeline: unresolvable ref reverts to computed, no warning', root.fill === 'rgb(7, 7, 7)' && report.warnings.length === 0, JSON.stringify({ fill: root.fill, warnings: report.warnings }));
+  expect('pipeline: reverted literal lands in report.literals', report.literals.some((l) => l.value === 'rgb(7, 7, 7)'));
+}
+
 // ── 4. parseCssColor ─────────────────────────────────────────────────────────
 {
   expect('hex6', JSON.stringify(parseCssColor('#b71421')) === '[183,20,33]');
@@ -145,11 +166,28 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   expect('near color snaps to $border', tree2.fill === '$border', String(tree2.fill));
   expect('far color stays literal + reported', tree2.children![0].fill === '#00ff88' && r2.literals.some((l) => l.value === '#00ff88'));
 
-  // unresolved $ref (from Tailwind intent) warns
+  // unresolved $ref with NO computed ground truth (bare snippet) → warns, ref kept
   const tree3: SceneNode = { id: 'e', type: 'frame', fill: '$mystery' };
   const r3 = mkReport();
+  r3.snapped.push({ nodeId: 'e', prop: 'fill', from: '(unstyled)', token: '$mystery' });
   snapToTokens(tree3, vars, r3);
-  expect('unresolved $ref warns', r3.warnings.some((w) => w.includes('$mystery') && w.includes('set_variables')));
+  expect('snippet-origin unresolved $ref warns + keeps the ref', tree3.fill === '$mystery' && r3.warnings.some((w) => w.includes('$mystery') && w.includes('set_variables')));
+
+  // Phase 18 FR-A1 — unresolved $ref that OVERRODE a computed value reverts to it
+  // (and the restored literal re-snaps like any other). #92's $body-sm case.
+  const tree3b: SceneNode = { id: 'e2', type: 'frame', children: [{ id: 'e3', type: 'text', content: 'x', color: '$body-sm' }] };
+  const r3b = mkReport();
+  r3b.snapped.push({ nodeId: 'e3', prop: 'color', from: 'rgb(99, 99, 99)', token: '$body-sm' });
+  snapToTokens(tree3b, vars, r3b);
+  expect('computed-origin unresolved $ref reverts to ground truth', tree3b.children![0].color === 'rgb(99, 99, 99)', String(tree3b.children![0].color));
+  expect('revert removes the snapped entry + emits no warning', !r3b.snapped.some((s) => s.token === '$body-sm') && r3b.warnings.length === 0, JSON.stringify(r3b.warnings));
+
+  // ...and a reverted value that happens to be near a real token re-snaps to it.
+  const tree3c: SceneNode = { id: 'e4', type: 'frame', fill: '$nonexistent' };
+  const r3c = mkReport();
+  r3c.snapped.push({ nodeId: 'e4', prop: 'fill', from: 'rgb(30, 30, 30)', token: '$nonexistent' });
+  snapToTokens(tree3c, vars, r3c);
+  expect('reverted literal re-snaps to the real token', tree3c.fill === '$surface', String(tree3c.fill));
 
   // scale matches reported, values untouched
   const tree4: SceneNode = { id: 'f', type: 'frame', gap: 16, padding: 24, cornerRadius: 8, children: [{ id: 'g', type: 'text', content: 'x', fontSize: 14 }] };

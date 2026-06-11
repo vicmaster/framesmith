@@ -22,6 +22,11 @@ import { TAILWIND_PALETTE } from './tailwind-palette.js';
 
 const SCALE = 4; // 1 unit = 0.25rem = 4px
 
+/** border-* utilities whose suffix is a style/model keyword, not a color —
+ * without this, `border-collapse` becomes a bogus `$collapse` stroke ref
+ * (issue #92's noisy-warning repro). */
+const BORDER_NON_COLOR = new Set(['collapse', 'separate', 'solid', 'dashed', 'dotted', 'double', 'hidden', 'none']);
+
 const TEXT_SIZES: Record<string, number> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60, '7xl': 72, '8xl': 96, '9xl': 128 };
 const FONT_WEIGHTS: Record<string, number> = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
 const RADII: Record<string, number> = { none: 0, xs: 2, sm: 4, md: 6, lg: 8, xl: 12, '2xl': 16, '3xl': 24, '4xl': 32, full: 9999 };
@@ -133,7 +138,10 @@ export function classesToProps(classes: string[], theme?: Record<string, string>
     m = cls.match(/^border-([248])$/);
     if (m) { props.strokeWidth = parseInt(m[1], 10); continue; }
     m = cls.match(/^border-(.+)$/);
-    if (m && !/^[xytrbl](-|$)/.test(m[1])) { setColor('stroke', m[1], cls); continue; }
+    if (m && !/^[xytrbl](-|$)/.test(m[1]) && !BORDER_NON_COLOR.has(m[1]) && !m[1].startsWith('spacing-')) {
+      setColor('stroke', m[1], cls);
+      continue;
+    }
 
     // ── typography ──
     m = cls.match(/^text-(.+)$/);
