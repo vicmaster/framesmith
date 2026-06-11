@@ -258,6 +258,85 @@ function tr(cells: RawDomNode[], extra: Partial<RawDomNode> = {}): RawDomNode {
   expect('unequal margins do not center', ocn.alignItems === undefined && !ocr2.layout.some((l) => l.source === 'centered'));
 }
 
+// ── 6. geometry clustering (slice D) ─────────────────────────────────────────
+{
+  const box = (x: number, y: number, w: number, h: number, label: string) =>
+    el({ tag: 'div', text: label, rect: { x, y, w, h }, styles: { display: 'block', backgroundColor: 'rgb(30, 30, 30)', visibility: 'visible' } });
+
+  // Float-style 3×2: block container, boxes in 2 y-bands of 3.
+  const floats = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 256 },
+    styles: { display: 'block', visibility: 'visible' },
+    children: [
+      box(0, 0, 200, 120, 'A'), box(216, 0, 200, 120, 'B'), box(432, 0, 200, 120, 'C'),
+      box(0, 136, 200, 120, 'D'), box(216, 136, 200, 120, 'E'), box(432, 136, 200, 120, 'F'),
+    ],
+  });
+  const { root: fl, report: flr } = domToSceneGraph(floats);
+  const rows = (fl.children ?? []).filter((n) => n.name === 'Cluster row');
+  expect('float boxes cluster into 2 rows of 3', fl.layout === 'vertical' && rows.length === 2 && rows.every((r) => r.layout === 'horizontal' && r.children!.length === 3), String(rows.length));
+  expect('cluster rows infer x-gap + rowGap', rows[0].gap === 16 && fl.gap === 16, JSON.stringify({ x: rows[0].gap, y: fl.gap }));
+  expect('cluster cells get proportional widths', rows[0].children!.map((c) => c.width).join(',') === '33.3%,33.3%,33.4%', JSON.stringify(rows[0].children!.map((c) => c.width)));
+  expect('geometry recorded in report.layout', flr.layout.some((l) => l.source === 'geometry' && l.detail === '2 rows × ~3 cols'));
+  expect('no fallback warning on clean clustering', flr.warnings.length === 0);
+
+  // Partial last row [3, 3, 1] reconstructs.
+  const partial = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 400 },
+    styles: { display: 'block', visibility: 'visible' },
+    children: [
+      box(0, 0, 200, 120, 'A'), box(216, 0, 200, 120, 'B'), box(432, 0, 200, 120, 'C'),
+      box(0, 136, 200, 120, 'D'), box(216, 136, 200, 120, 'E'), box(432, 136, 200, 120, 'F'),
+      box(0, 272, 200, 120, 'G'),
+    ],
+  });
+  const { root: pt } = domToSceneGraph(partial);
+  const ptRows = (pt.children ?? []);
+  expect('partial last row reconstructs (3+3+1)', ptRows.filter((n) => n.name === 'Cluster row').length === 2 && ptRows.length === 3, JSON.stringify(ptRows.map((r) => r.children?.length ?? 1)));
+
+  // Single multi-item band of substantial boxes → one row.
+  const oneBand = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 120 }, styles: { display: 'block', visibility: 'visible' },
+    children: [box(0, 0, 300, 120, 'left'), box(332, 0, 300, 120, 'right')],
+  });
+  const { root: ob, report: obr } = domToSceneGraph(oneBand);
+  // The bare outer wrapper collapses into its single named row — correct.
+  expect('side-by-side pair becomes one cluster row', ob.name === 'Cluster row' && ob.layout === 'horizontal' && ob.children!.length === 2, JSON.stringify({ name: ob.name, kids: ob.children?.length }));
+  expect('…recorded as geometry', obr.layout.some((l) => l.source === 'geometry'));
+
+  // Inconsistent bands (3 then 1-wide then 2 mid-floats) → honest stack-fallback.
+  const messy = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 400 },
+    styles: { display: 'block', visibility: 'visible' },
+    children: [
+      box(0, 0, 200, 100, 'A'), box(216, 0, 200, 100, 'B'), box(432, 0, 200, 100, 'C'),
+      box(0, 116, 80, 100, 'lonely'),
+      box(0, 232, 300, 100, 'X'), box(316, 232, 300, 100, 'Y'),
+    ],
+  });
+  const { root: ms, report: msr } = domToSceneGraph(messy);
+  expect('inconsistent bands → stack-fallback + warning', ms.children!.every((c) => c.name === undefined)
+    && msr.layout.some((l) => l.source === 'stack-fallback')
+    && msr.warnings.some((w) => w.includes('did not cluster')), JSON.stringify(msr.layout));
+
+  // FALSE-POSITIVE CONTROL: genuinely vertical content must not cluster.
+  const vertical = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 400 }, styles: { display: 'block', visibility: 'visible' },
+    children: [box(0, 0, 632, 120, 'one'), box(0, 136, 632, 120, 'two'), box(0, 272, 632, 120, 'three')],
+  });
+  const { root: vt, report: vtr } = domToSceneGraph(vertical);
+  expect('genuinely vertical content stays untouched', !vt.children!.some((c) => c.name === 'Cluster row') && vtr.layout.length === 0 && vtr.warnings.length === 0);
+
+  // Flex containers never cluster (their layout is already faithful).
+  const flexRow = el({
+    tag: 'div', rect: { x: 0, y: 0, w: 632, h: 120 },
+    styles: { display: 'flex', flexDirection: 'row', rowGap: '16px', columnGap: '16px', visibility: 'visible' },
+    children: [box(0, 0, 300, 120, 'a'), box(316, 0, 300, 120, 'b')],
+  });
+  const { root: fx } = domToSceneGraph(flexRow);
+  expect('flex containers bypass clustering', fx.layout === 'horizontal' && !fx.children!.some((c) => c.name === 'Cluster row'));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;

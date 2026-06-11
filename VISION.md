@@ -409,7 +409,7 @@ The import's styling layer is proven (token-mapped colors, real fonts, recognize
 - [ ] Hygiene + groundwork — kill the bogus-`$ref` warning class (revert to the computed value when ground truth exists; border-utility blocklist); walker captures the layout signals (bottom borders, max-width, auto margins, grid template/spans)
 - [x] `<table>` semantics — table/tr/td → vertical frame of horizontal row frames with proportional (percentage) cell widths, thead/tbody unwrapped, row dividers as hairline frames
 - [x] Grid + centered containers — computed `grid-template-columns` → rows of proportional columns (spans honored); `margin: auto` / `max-width` / flex-center → centered frames at their real width instead of full-bleed stretches
-- [ ] Geometry-clustering fallback + `report.layout` — children's computed rects cluster into row/column structure when no semantic pass applies; every reconstruction (or honest `stack-fallback`) recorded in the report
+- [x] Geometry-clustering fallback + `report.layout` — children's computed rects cluster into row/column structure when no semantic pass applies; every reconstruction (or honest `stack-fallback`) recorded in the report
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-18-SPEC.md`](docs/specs/PHASE-18-SPEC.md)._
 
