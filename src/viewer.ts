@@ -5,6 +5,7 @@ import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces, getCanvasTokens } from './workspaces.js';
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
+import { evaluateCanvas, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
 
 let runningPort: number | null = null;
 let externalViewerUrl: string | null = null;
@@ -43,7 +44,7 @@ function tryListen(httpServer: Server, port: number): Promise<number> {
 }
 
 export async function startViewer(port: number): Promise<number> {
-  const httpServer = createServer((req, res) => {
+  const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://localhost:${runningPort ?? port}`);
     const path = url.pathname;
 
@@ -106,14 +107,14 @@ export async function startViewer(port: number): Promise<number> {
         const canvas = getCanvas(detailMatch[1]);
         if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
         res.setHeader('Content-Type', 'text/html');
-        res.end(renderDetailPage(canvas, runningPort ?? 3001));
+        res.end(await renderDetailPage(canvas, runningPort ?? 3001));
         return;
       }
 
       // Project page
       const projectMatch = path.match(/^\/project\/([^/]+)$/);
       if (projectMatch) {
-        const html = renderProjectPage(projectMatch[1], runningPort ?? 3001);
+        const html = await renderProjectPage(projectMatch[1], runningPort ?? 3001);
         if (!html) { res.writeHead(404); res.end('Project not found'); return; }
         res.setHeader('Content-Type', 'text/html');
         res.end(html);
@@ -231,6 +232,8 @@ const THEME_CSS = `
     --accent-tint: rgba(245,158,11,0.08);
     --danger: #ef4444;
     --danger-bg: rgba(239,68,68,0.10);
+    --success: #22c55e;
+    --info: #3b82f6;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -379,7 +382,7 @@ function renderSidebar(active: string): string {
 
 /** Project-scoped main page. Sidebar on left, breadcrumb + canvas grid on right.
  *  Returns null when the project doesn't exist so the route handler can 404. */
-export function renderProjectPage(projectId: string, port: number): string | null {
+export async function renderProjectPage(projectId: string, port: number): Promise<string | null> {
   const project = getProject(projectId);
   if (!project) return null;
 
@@ -389,12 +392,17 @@ export function renderProjectPage(projectId: string, port: number): string | nul
   const wsName = ws?.name ?? 'Personal';
 
   const canvases = listCanvases().filter((c) => c.projectId === projectId && !c.archived);
-  const cards = canvases.map((c) => {
+  const cards = (await Promise.all(canvases.map(async (c) => {
     const canvas = getCanvas(c.id)!;
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const date = new Date(c.createdAt).toLocaleString();
     const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
+    // Phase 19 Slice A — gallery score badge (fast eval, cached; empty → none).
+    const ev = await evalFor(canvas);
+    const scoreBadge = ev
+      ? `<div class="card-score" style="color:${scoreColor(ev.overallScore)}" title="Heuristic quality score">${ev.overallScore}</div>`
+      : '';
     const thumbBody = isEmpty
       ? `<div class="thumb-empty">
             <div class="thumb-empty-back" aria-hidden="true"></div>
@@ -404,13 +412,13 @@ export function renderProjectPage(projectId: string, port: number): string | nul
       : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
     return `
       <a href="/canvas/${c.id}" class="card">
-        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${thumbBody}</div>
+        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${scoreBadge}${thumbBody}</div>
         <div class="info">
           <div class="name">${esc(c.name)}</div>
           <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
         </div>
       </a>`;
-  }).join('\n');
+  }))).join('\n');
 
   const emptyState = canvases.length === 0
     ? `<div class="empty">
@@ -472,6 +480,8 @@ ${FAVICON_HTML}
   .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: var(--bg-0); position: relative; }
   .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
   .thumb--empty { background: #15110b; }
+  /* Phase 19 Slice A — heuristic quality score badge on each card thumbnail. */
+  .card-score { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(9,7,10,0.78); backdrop-filter: blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; line-height: 1; }
   .thumb-empty { position: absolute; inset: 0; }
   .thumb-empty-back, .thumb-empty-front { position: absolute; width: 38px; height: 28px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06); }
   .thumb-empty-back { top: calc(50% - 6px); left: calc(50% - 27px); }
@@ -520,8 +530,8 @@ ${FAVICON_HTML}
 /** Backwards-compatible alias: renders the default project. The previous
  *  `renderGalleryPage` was a flat all-canvases view; the new model is
  *  project-scoped, and the default project is the natural landing place. */
-export function renderGalleryPage(port: number): string {
-  return renderProjectPage(DEFAULT_PROJECT_ID, port) ?? '<h1>No projects found</h1>';
+export async function renderGalleryPage(port: number): Promise<string> {
+  return (await renderProjectPage(DEFAULT_PROJECT_ID, port)) ?? '<h1>No projects found</h1>';
 }
 
 /** Archive view: shows all archived canvases across every project. Each card
@@ -622,6 +632,8 @@ ${FAVICON_HTML}
   .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: var(--bg-0); position: relative; }
   .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
   .thumb--empty { background: #15110b; }
+  /* Phase 19 Slice A — heuristic quality score badge on each card thumbnail. */
+  .card-score { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(9,7,10,0.78); backdrop-filter: blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; line-height: 1; }
   .thumb-empty { position: absolute; inset: 0; }
   .thumb-empty-back, .thumb-empty-front { position: absolute; width: 38px; height: 28px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06); }
   .thumb-empty-back { top: calc(50% - 6px); left: calc(50% - 27px); }
@@ -685,7 +697,101 @@ ${FAVICON_HTML}
 </html>`;
 }
 
-export function renderDetailPage(canvas: Canvas, port: number): string {
+/* ── Phase 19 Slice A — Quality panel ─────────────────────────────────────
+ * The viewer surfaces the heuristic (fast, Chrome-free) canvas_evaluate so a
+ * human reviewer sees the same score + cliché tells the agent sees over MCP.
+ * Read-only: computed for display, never written back to the scene graph. */
+
+// Cache fast-eval by canvas id + mtime so the gallery doesn't re-score every
+// canvas on every reload. Bounded — drop the oldest when it grows past a cap.
+const scoreCache = new Map<string, EvaluationResult>();
+async function evalFor(canvas: Canvas): Promise<EvaluationResult | null> {
+  if (!canvas.root.children || canvas.root.children.length === 0) return null; // empty → no score
+  const key = `${canvas.id}:${canvas.lastModified}`;
+  const hit = scoreCache.get(key);
+  if (hit) return hit;
+  try {
+    // Match the agent: relax tells for the canvas's own genre (provenance preset).
+    const genre = (canvas.metadata?.provenance as { preset?: string } | undefined)?.preset;
+    const result = await evaluateCanvas(canvas, { mode: 'fast', genre });
+    if (scoreCache.size > 200) scoreCache.delete(scoreCache.keys().next().value as string);
+    scoreCache.set(key, result);
+    return result;
+  } catch {
+    return null; // a scoring failure must never break the page
+  }
+}
+
+function gradeFor(score: number): { label: string; warn: boolean } {
+  if (score >= 90) return { label: 'Excellent', warn: false };
+  if (score >= 75) return { label: 'Good', warn: false };
+  if (score >= 60) return { label: 'Needs improvement', warn: true };
+  return { label: 'Poor', warn: true };
+}
+// ≥80 green, 60–79 amber, <60 red — the bar colors in the panel + gallery badge.
+function scoreColor(score: number): string {
+  return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--accent)' : 'var(--danger)';
+}
+function sevColor(severity: string): string {
+  return severity === 'error' ? 'var(--danger)' : severity === 'warning' ? 'var(--accent)' : 'var(--info)';
+}
+
+function renderIssueCard(issue: EvaluationIssue): string {
+  const label = issue.tell ? `${esc(issue.category)} · ${esc(issue.tell)}` : esc(issue.category);
+  const clickable = typeof issue.nodeId === 'string' && issue.nodeId.length > 0;
+  const fixTag = issue.fix
+    ? `<span class="insp-fix" title="canvas_autofix can resolve this">&#9889; auto-fixable</span>` : '';
+  return `
+    <div class="insp-issue${clickable ? '' : ' insp-issue--static'}"${clickable ? ` data-issue-node="${esc(issue.nodeId!)}"` : ''}>
+      <div class="insp-issue-top">
+        <span class="insp-dot" style="background:${sevColor(issue.severity)}"></span>
+        <span class="insp-badge">${label}</span>
+        ${fixTag}
+      </div>
+      <div class="insp-msg">${esc(issue.message)}</div>
+      ${issue.suggestion ? `<div class="insp-sug">${esc(issue.suggestion)}</div>` : ''}
+    </div>`;
+}
+
+function renderInspector(ev: EvaluationResult): string {
+  const grade = gradeFor(ev.overallScore);
+  const cats = ev.categories.map((c) => `
+      <div class="insp-cat">
+        <span class="insp-cat-name">${esc(c.name)}</span>
+        <span class="insp-cat-track"><span class="insp-cat-fill" style="width:${Math.max(0, Math.min(100, c.score))}%;background:${scoreColor(c.score)}"></span></span>
+        <span class="insp-cat-score" style="${c.score < 60 ? 'color:var(--danger);font-weight:700' : ''}">${c.score}</span>
+      </div>`).join('');
+  const issues = ev.issues.length
+    ? ev.issues.map(renderIssueCard).join('')
+    : `<div class="insp-clean">No issues — this canvas is clean.</div>`;
+  return `
+  <aside class="inspector" id="inspector">
+    <div class="insp-tabs">
+      <span class="insp-tab active">Quality</span>
+      <span class="insp-tab disabled" title="Coming in Phase 19 Slice B">Design system</span>
+      <span class="insp-tab disabled" title="Coming in Phase 19 Slice C">Import</span>
+    </div>
+    <div class="insp-score">
+      <div class="insp-score-row">
+        <div class="insp-score-num">${ev.overallScore}<span>/100</span></div>
+        <span class="insp-grade${grade.warn ? ' warn' : ''}">${grade.label}</span>
+      </div>
+      <div class="insp-track"><div class="insp-fill" style="width:${ev.overallScore}%;background:${scoreColor(ev.overallScore)}"></div></div>
+    </div>
+    <div class="insp-divider"></div>
+    <div class="insp-section">
+      <div class="insp-section-label">Categories</div>
+      ${cats}
+    </div>
+    <div class="insp-divider"></div>
+    <div class="insp-section">
+      <div class="insp-section-head"><span class="insp-section-label">Issues</span><span class="insp-count">${ev.issues.length}</span></div>
+      ${issues}
+    </div>
+  </aside>`;
+}
+
+export async function renderDetailPage(canvas: Canvas, port: number): Promise<string> {
   const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
   const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
 
@@ -711,6 +817,10 @@ export function renderDetailPage(canvas: Canvas, port: number): string {
     const tail = crit.needsRevision ? ' · needs revision' : '';
     verdictChip = `<span class="${cls}" title="Latest rubric critique (Phase 13) — derived overall + needs-revision flag"><b>◇</b>${crit.overall}/100${tail}</span>`;
   }
+
+  // Phase 19 Slice A — heuristic quality inspector (fast, Chrome-free, read-only).
+  const ev = await evalFor(canvas);
+  const inspectorHtml = ev ? renderInspector(ev) : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -747,6 +857,9 @@ ${FAVICON_HTML}
   .toolbar .btn--danger:hover { background: var(--danger-bg); border-color: var(--danger); color: #fecaca; }
   .status { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; flex-shrink: 0; }
   .status.stale { background: var(--text-muted); }
+  /* Phase 19 — detail body splits into the preview (left) and the read-only
+   * quality inspector (right). Toolbar stays full-width above. */
+  .detail-main { flex: 1; display: flex; min-height: 0; }
   .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: auto; background: var(--bg-0); padding: 24px 0; }
   .viewport iframe { border: none; background: #fff; transition: width 0.3s, height 0.3s; transform-origin: top center; }
   .viewport.fit iframe { width: 100% !important; height: 100% !important; }
@@ -761,6 +874,44 @@ ${FAVICON_HTML}
   .json-panel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 480px; background: var(--sidebar); border-left: 1px solid var(--border-subtle); overflow: auto; z-index: 10; }
   .json-panel.open { display: block; }
   .json-panel pre { padding: 20px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; }
+  /* Quality inspector (Phase 19 Slice A) */
+  .inspector { width: 360px; flex-shrink: 0; background: var(--sidebar); border-left: 1px solid var(--border-subtle); overflow-y: auto; }
+  .insp-tabs { display: flex; gap: 20px; padding: 16px 20px 0; border-bottom: 1px solid var(--border); align-items: flex-end; }
+  .insp-tab { font-size: 13px; font-weight: 500; color: var(--text-tertiary); padding-bottom: 10px; border-bottom: 2px solid transparent; }
+  .insp-tab.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
+  .insp-tab.disabled { color: var(--text-muted); cursor: default; }
+  .insp-score { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .insp-score-row { display: flex; justify-content: space-between; align-items: center; }
+  .insp-score-num { font-size: 40px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; }
+  .insp-score-num span { font-size: 14px; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
+  .insp-grade { font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; }
+  .insp-grade.warn { color: var(--accent-soft); }
+  .insp-track { width: 100%; height: 8px; border-radius: 4px; background: var(--surface-elevated); overflow: hidden; }
+  .insp-fill { height: 100%; border-radius: 4px; }
+  .insp-divider { height: 1px; background: var(--border); }
+  .insp-section { padding: 16px 20px; display: flex; flex-direction: column; gap: 11px; }
+  .insp-section-head { display: flex; justify-content: space-between; align-items: center; }
+  .insp-section-label { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
+  .insp-count { font-size: 11px; font-weight: 700; color: var(--text-secondary); background: var(--surface-elevated); border-radius: 6px; padding: 2px 8px; }
+  .insp-cat { display: flex; align-items: center; gap: 10px; }
+  .insp-cat-name { width: 84px; flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+  .insp-cat-track { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-elevated); overflow: hidden; }
+  .insp-cat-fill { display: block; height: 100%; border-radius: 3px; }
+  .insp-cat-score { width: 28px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .insp-issue { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .insp-issue:hover { border-color: var(--border); background: var(--surface-hover); }
+  .insp-issue.sel { border-color: var(--accent); background: var(--accent-tint); }
+  .insp-issue--static { cursor: default; }
+  .insp-issue--static:hover { border-color: var(--border-subtle); background: var(--surface); }
+  .insp-issue-top { display: flex; align-items: center; gap: 8px; }
+  .insp-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .insp-badge { font-size: 10px; font-weight: 600; color: var(--accent-soft); background: var(--surface-elevated); border-radius: 6px; padding: 2px 7px; }
+  .insp-fix { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--success); }
+  .insp-msg { font-size: 12px; font-weight: 500; color: var(--text-primary); line-height: 1.45; }
+  .insp-sug { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; }
+  .insp-clean { font-size: 12px; color: var(--text-tertiary); padding: 4px 0; }
+  @media (max-width: 900px) { .inspector { width: 300px; } }
+  @media (max-width: 720px) { .detail-main { flex-direction: column; } .inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
   @media (max-width: 640px) {
@@ -814,6 +965,7 @@ ${FAVICON_HTML}
     </div>
     <div class="status" id="status" title="Auto-refresh active"></div>
   </div>
+  <div class="detail-main">
   <div class="viewport" id="viewport">
     <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
     <div class="compare-grid" id="compare-grid">
@@ -830,6 +982,8 @@ ${FAVICON_HTML}
         <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
       </div>
     </div>
+  </div>
+  ${inspectorHtml}
   </div>
   <div class="json-panel" id="json-panel">
     <pre id="json-content">Loading...</pre>
@@ -948,6 +1102,41 @@ ${FAVICON_HTML}
         alert('Action failed: ' + err.message);
       }
     }
+
+    // Phase 19 Slice A — click an issue to outline its node in the preview.
+    // The render carries data-node-id on every element; iframes are same-origin
+    // so we toggle an outline directly in their documents.
+    function highlightNode(nodeId, on) {
+      const frames = [];
+      const main = document.getElementById('frame');
+      if (main && getComputedStyle(main).display !== 'none') frames.push(main);
+      document.querySelectorAll('.compare-cell iframe').forEach((f) => frames.push(f));
+      for (const f of frames) {
+        let doc;
+        try { doc = f.contentDocument; } catch { continue; }
+        if (!doc) continue;
+        doc.querySelectorAll('[data-fs-hl]').forEach((n) => {
+          n.style.outline = ''; n.style.outlineOffset = ''; n.removeAttribute('data-fs-hl');
+        });
+        if (on && nodeId) {
+          const t = doc.querySelector('[data-node-id="' + (window.CSS && CSS.escape ? CSS.escape(nodeId) : nodeId) + '"]');
+          if (t) {
+            t.style.outline = '2px solid #f59e0b'; t.style.outlineOffset = '1px';
+            t.setAttribute('data-fs-hl', '1');
+            t.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          }
+        }
+      }
+    }
+    document.querySelectorAll('.insp-issue[data-issue-node]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const wasSel = el.classList.contains('sel');
+        document.querySelectorAll('.insp-issue.sel').forEach((o) => o.classList.remove('sel'));
+        if (wasSel) { highlightNode(null, false); return; }
+        el.classList.add('sel');
+        highlightNode(el.getAttribute('data-issue-node'), true);
+      });
+    });
   </script>
 </body>
 </html>`;
