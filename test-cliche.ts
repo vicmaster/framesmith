@@ -230,6 +230,82 @@ hdr=I(page, {type:"frame", layout:"horizontal", gap:16})`);
   assert(!fixes.some((i) => i.tell === 'hanging-header'), 'autofix excludes the taste-only hanging header');
 }
 
+// --- FR-7: eyebrow rhythm (global count vs section count) ---
+async function testEyebrowRhythm() {
+  console.log('\n── tell: eyebrow rhythm ──');
+  const over = build('eyebrow-over', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:24})
+s1=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s1, {type:"text", content:"FEATURES", fontSize:12, textTransform:"uppercase"})
+I(s1, {type:"text", content:"Heading one", fontSize:36})
+s2=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s2, {type:"text", content:"PRICING", fontSize:12, textTransform:"uppercase"})
+I(s2, {type:"text", content:"Heading two", fontSize:36})
+s3=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s3, {type:"text", content:"ABOUT", fontSize:12, textTransform:"uppercase"})
+I(s3, {type:"text", content:"Heading three", fontSize:36})`);
+  const oi = tells(await cliche(over), 'eyebrow-rhythm');
+  assert(oi.length === 1 && oi[0].severity === 'warning' && !oi[0].fix, '3 eyebrows over 3 sections flags once (warning, no fix)');
+
+  // letterSpacing alone qualifies as an eyebrow (2 eyebrows, 2 sections, cap 1)
+  const ls = build('eyebrow-ls', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:24})
+s1=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s1, {type:"text", content:"Section one", fontSize:11, letterSpacing:2})
+I(s1, {type:"text", content:"Heading one", fontSize:36})
+s2=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s2, {type:"text", content:"Section two", fontSize:11, letterSpacing:2})
+I(s2, {type:"text", content:"Heading two", fontSize:36})`);
+  assert(tells(await cliche(ls), 'eyebrow-rhythm').length === 1, 'letter-spaced labels count as eyebrows');
+
+  // at cap: 1 eyebrow across 3 sections → within ceil(3/3)=1
+  const atCap = build('eyebrow-atcap', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:24})
+s1=I(page, {type:"frame", layout:"vertical", gap:8})
+I(s1, {type:"text", content:"FEATURES", fontSize:12, textTransform:"uppercase"})
+I(s1, {type:"text", content:"Heading one", fontSize:36})
+I(page, {type:"text", content:"Heading two", fontSize:36})
+I(page, {type:"text", content:"Heading three", fontSize:36})`);
+  assert(tells(await cliche(atCap), 'eyebrow-rhythm').length === 0, '1 eyebrow across 3 sections is within cap');
+
+  // too few sections to have a rhythm (1 heading, 2 eyebrows)
+  const tiny = build('eyebrow-tiny', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:24})
+I(page, {type:"text", content:"ALPHA LABEL", fontSize:12, textTransform:"uppercase"})
+I(page, {type:"text", content:"BETA LABEL", fontSize:12, textTransform:"uppercase"})
+I(page, {type:"text", content:"Heading one", fontSize:36})`);
+  assert(tells(await cliche(tiny), 'eyebrow-rhythm').length === 0, '<2 sections never flags eyebrow rhythm');
+}
+
+// --- FR-8: slop copy (stock AI phrasing) ---
+async function testSlopCopy() {
+  console.log('\n── tell: slop copy ──');
+  const c = build('slop', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16})
+I(page, {type:"text", name:"filler", content:"Elevate your workflow", fontSize:32})
+I(page, {type:"text", name:"scroll", content:"Scroll to explore", fontSize:14})
+I(page, {type:"text", name:"name", content:"Jane Doe", fontSize:16})
+I(page, {type:"text", name:"hype", content:"Early access", fontSize:14})
+I(page, {type:"text", name:"num", content:"01 / Capabilities", fontSize:12})`);
+  const sc = tells(await cliche(c), 'slop-copy');
+  assert(sc.length === 5, 'filler verb, scroll cue, placeholder name, hype label, section-number all flag');
+  assert(sc.every((i) => i.severity === 'info' && !i.fix), 'slop-copy is info, suggest-only');
+
+  // version strings must NOT flag (framesmith ships release-notes canvases)
+  const version = build('version', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16})
+I(page, {type:"text", content:"v1.5.2", fontSize:14})
+I(page, {type:"text", content:"Released June 2026", fontSize:14})`);
+  assert(tells(await cliche(version), 'slop-copy').length === 0, 'a version label does not flag as slop');
+
+  // specific, branded copy + placeholder guard stay clean
+  const clean = build('slop-clean', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16})
+I(page, {type:"text", content:"Ship designs your team approves", fontSize:32})
+I(page, {type:"text", content:"Pricing — placeholder", fontSize:16})`);
+  assert(tells(await cliche(clean), 'slop-copy').length === 0, 'branded copy + labeled placeholder do not flag');
+}
+
 async function main() {
   await testColorUtils();
   await testAccentHue();
@@ -238,6 +314,8 @@ async function main() {
   await testFakeChrome();
   await testHangingHeader();
   await testHonestContent();
+  await testEyebrowRhythm();
+  await testSlopCopy();
   await testCleanAndCategory();
   await testAutofixSurfacing();
 

@@ -160,9 +160,11 @@ Practical notes:
 | **Fake browser / OS chrome** | A row of ≥3 small circular dots (mac traffic lights) wrapping content | Frame the content directly. Skip the fake window — it adds nothing and dates the mockup. |
 | **Hanging eyebrow header** | A small eyebrow/tag *beside* a large heading in a horizontal row | Stack the eyebrow **above** the heading (`layout: "vertical"`, left-aligned). |
 | **Fabricated content** | Invented metrics / testimonials / brand logos in placeholder copy (`"99.9% uptime"`, `"— Jane Doe, CEO"`, `"TechCrunch"`) | Use a labeled placeholder until real data exists: `"Uptime — to confirm"` + a neutral block. Don't ship invented numbers. |
+| **Eyebrow rhythm** | More eyebrow labels (small uppercase / letter-spaced text) than ~1 per 3 sections — an eyebrow above nearly every heading | Keep eyebrows rare (≤ `ceil(sections / 3)`). Let most headings stand alone; reserve the eyebrow for sections that genuinely need a kicker. |
+| **Slop copy** | Stock AI phrasing in short copy — filler verbs (`"Elevate"`, `"Seamless"`, `"Unleash"`), scroll cues (`"Scroll to explore"`), placeholder names (`"Jane Doe"`), hype labels (`"BETA"`, `"Early access"`), section-number eyebrows (`"01 / Index"`) | Write specific, branded copy that names the concrete benefit. |
 
 - **`cliche` is advisory** — tells are `warning`/`info`, never a hard error; they dent the score, they don't block.
-- **`canvas_autofix` fixes the mechanical ones** — it swaps a *known-default* purple accent and deletes a fake-chrome strip. Gradient/glow, the hanging header, and fabricated copy carry a suggestion but no op (taste/judgment calls).
+- **`canvas_autofix` fixes the mechanical ones** — it swaps a *known-default* purple accent and deletes a fake-chrome strip. Gradient/glow, the hanging header, fabricated copy, eyebrow rhythm, and slop copy carry a suggestion but no op (taste/judgment calls).
 - **Genre relaxes intentional tells** — pass `genre` (or stamp a preset via provenance) so a style that legitimately uses a tell isn't nagged. Today `genre: "material"` allows purple.
 
 ## Sharp edges

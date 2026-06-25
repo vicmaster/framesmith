@@ -81,6 +81,35 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('every structure named in the README', missing.length === 0, missing.join(', '));
 }
 
+// ── 6. every cliche tell is surfaced where agents look ───────────────────────
+// Tell slugs are kebab ('accent-hue') but the agent surfaces describe them in
+// prose, so each slug maps to a phrase that MUST appear in both the index.ts
+// docstrings/GOTCHAS and GUIDELINES. Adding a tell to the ClicheTell union
+// fails this check until it gets a phrase here AND that phrase is documented.
+{
+  const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
+  const union = evaluateSrc.match(/export type ClicheTell =([\s\S]*?);/)?.[1] ?? '';
+  const tells = [...union.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
+  expect('cliche tells found', tells.length >= 7, String(tells.length));
+
+  const TELL_PHRASE: Record<string, string> = {
+    'accent-hue': 'purple',
+    'gradient-glow': 'glow',
+    'fake-chrome': 'chrome',
+    'hanging-header': 'hanging',
+    'honest-content': 'fabricated',
+    'eyebrow-rhythm': 'rhythm',
+    'slop-copy': 'slop copy',
+  };
+  const unmapped = tells.filter((t) => !(t in TELL_PHRASE));
+  expect('every cliche tell has a documented phrase', unmapped.length === 0, unmapped.join(', '));
+
+  const missingIdx = tells.filter((t) => TELL_PHRASE[t] && !indexSrc.includes(TELL_PHRASE[t]));
+  expect('every cliche tell surfaced in src/index.ts', missingIdx.length === 0, missingIdx.join(', '));
+  const missingGl = tells.filter((t) => TELL_PHRASE[t] && !guidelines.includes(TELL_PHRASE[t]));
+  expect('every cliche tell surfaced in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;

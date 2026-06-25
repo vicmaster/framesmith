@@ -16,7 +16,9 @@ export type ClicheTell =
   | 'gradient-glow'
   | 'fake-chrome'
   | 'hanging-header'
-  | 'honest-content';
+  | 'honest-content'
+  | 'eyebrow-rhythm'
+  | 'slop-copy';
 
 export interface EvaluationIssue {
   category: string;
@@ -907,6 +909,74 @@ function tellHonestContent(ctx: ClicheCtx): EvaluationIssue[] {
   return issues;
 }
 
+// FR-7 — eyebrow rhythm: an eyebrow (small uppercase/letterspaced label) above
+// *every* section is the template-rhythm tell. Distinct from hanging-header,
+// which scores one eyebrow's placement; this scores their global count vs the
+// section count. Cap: at most ceil(sectionCount / 3) — ~1 eyebrow per 3 sections.
+function tellEyebrowRhythm(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('eyebrow-rhythm')) return [];
+
+  const isEyebrowText = (n: SceneNode): boolean => {
+    if (n.type !== 'text' || typeof n.content !== 'string' || n.content.trim().length === 0) return false;
+    if ((n.fontSize ?? 16) > 14) return false;
+    // The signature: small text that is uppercased or letter-spaced (a label,
+    // not body copy). Either property qualifies; both is the canonical eyebrow.
+    return n.textTransform === 'uppercase' || (typeof n.letterSpacing === 'number' && n.letterSpacing > 0);
+  };
+  const isHeading = (n: SceneNode): boolean => n.type === 'text' && (n.fontSize ?? 16) >= 28;
+
+  const eyebrowCount = ctx.entries.filter((e) => isEyebrowText(e.node)).length;
+  const sectionCount = ctx.entries.filter((e) => isHeading(e.node)).length;
+  if (sectionCount < 2) return [];                      // too small to have a rhythm
+
+  const allowed = Math.ceil(sectionCount / 3);
+  if (eyebrowCount <= allowed) return [];
+
+  return [{
+    category: 'cliche',
+    tell: 'eyebrow-rhythm',
+    severity: 'warning',
+    nodeId: ctx.entries[0]?.node.id,
+    message: `${eyebrowCount} eyebrow labels across ${sectionCount} sections — an eyebrow above (nearly) every heading reads as template rhythm.`,
+    suggestion: `Keep eyebrows to ~1 per 3 sections (≤${allowed} here). Drop most; let the headings carry the structure.`,
+  }];
+}
+
+// FR-8 — slop copy: stock AI phrasings in text content. Pure string audit,
+// mirrors honest-content. Suggestion only — wording is a judgment call.
+const SLOP_COPY_PATTERNS: { name: string; re: RegExp }[] = [
+  { name: 'a filler verb', re: /\b(elevate|seamless(ly)?|unleash|next[-\s]?gen|revolutioni[sz]e|supercharge|empower)\b/i },
+  { name: 'a scroll cue', re: /(^|\s)(↓\s*)?scroll(\s+(down|to explore))?\s*$/i },
+  { name: 'a placeholder name', re: /\b(jane|john)\s+doe\b/i },
+  { name: 'a hype status label', re: /\b(beta|alpha|early access|invite[-\s]?only|coming soon)\b/i },
+  { name: 'a section-number eyebrow', re: /^\s*0*\d{1,3}\s*[/·.\-—]\s*\p{L}/u },
+];
+function tellSlopCopy(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('slop-copy')) return [];
+  const issues: EvaluationIssue[] = [];
+
+  for (const { node } of ctx.entries) {
+    if (node.type !== 'text' || typeof node.content !== 'string') continue;
+    const text = node.content.trim();
+    if (text.length === 0 || text.length > 80) continue;        // short copy only
+    if (HONEST_PLACEHOLDER_GUARD.test(text)) continue;          // labeled placeholder
+
+    const hit = SLOP_COPY_PATTERNS.find((p) => p.re.test(text));
+    if (!hit) continue;
+
+    issues.push({
+      category: 'cliche',
+      tell: 'slop-copy',
+      severity: 'info',
+      nodeId: node.id,
+      nodeName: node.name,
+      message: `"${text.slice(0, 40)}" reads as stock AI copy (${hit.name}).`,
+      suggestion: `Write specific, branded copy — name the concrete benefit instead of reaching for stock phrasing.`,
+    });
+  }
+  return issues;
+}
+
 function checkCliche(
   entries: NodeEntry[],
   rawEntries: NodeEntry[],
@@ -922,6 +992,8 @@ function checkCliche(
     ...tellFakeChrome(ctx),
     ...tellHangingHeader(ctx),
     ...tellHonestContent(ctx),
+    ...tellEyebrowRhythm(ctx),
+    ...tellSlopCopy(ctx),
   ];
 
   const penalty = { error: 25, warning: 12, info: 6 } as const;

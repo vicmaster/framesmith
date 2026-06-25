@@ -504,7 +504,7 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 | `typography` | 20 | Type-scale ratios (1.15–1.75), font-family count, weight variation |
 | `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse |
 | `consistency` | 20 | Frames missing `layout`, inconsistent sibling padding, sibling overlap (detailed mode) |
-| `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos. Each issue carries a `tell` discriminator; all advisory (warning/info). Relaxable per `genre`. |
+| `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos, eyebrow rhythm (an eyebrow above nearly every section), slop copy (stock AI phrasing — filler verbs, scroll cues, placeholder names, hype labels). Each issue carries a `tell` discriminator; all advisory (warning/info). Relaxable per `genre`. |
 
 **Return shape**
 
@@ -581,7 +581,7 @@ Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a
 - **Spacing** — off-scale `gap` or scalar `padding` snaps to the nearest scale value. Array `padding` is skipped (ambiguous which index).
 - **Consistency** — frames with multiple children but no `layout` get `layout: "vertical"`.
 - **Color** — recoverable WCAG contrast failures get `color: "#000000"` or `"#FFFFFF"`, whichever wins against the resolved background. Failures so bad that neither black nor white meets the threshold are not auto-fixed (the background also needs to change).
-- **Cliché** — a *known-default* purple/indigo accent (`#6366f1` and friends) written literally on a node swaps to a neutral accent; a dedicated fake-chrome strip (a row that is just traffic-light dots) gets a `D(...)` delete. Taste-dependent tells (gradient/glow overuse, the hanging header, fabricated copy) are reported by `canvas_evaluate` with a suggestion but carry **no** auto-fix op.
+- **Cliché** — a *known-default* purple/indigo accent (`#6366f1` and friends) written literally on a node swaps to a neutral accent; a dedicated fake-chrome strip (a row that is just traffic-light dots) gets a `D(...)` delete. Taste-dependent tells (gradient/glow overuse, the hanging header, fabricated copy, eyebrow rhythm, slop copy) are reported by `canvas_evaluate` with a suggestion but carry **no** auto-fix op.
 
 **Return shape**
 
