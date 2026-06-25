@@ -413,6 +413,16 @@ The import's styling layer is proven (token-mapped colors, real fonts, recognize
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-18-SPEC.md`](docs/specs/PHASE-18-SPEC.md)._
 
+### Phase 19 — Viewer refresh (surface the full feature set)
+
+The viewer predates Phases 12–18 + the v1.6.0 cliché expansion: it renders the *output* of all that work but exposes almost none of the *intelligence*. Bring the human review surface up to the current engine — quality, design system, import/drift, variety — all read-only.
+
+- [ ] Quality panel — fast (Chrome-free) `canvas_evaluate` on the detail page: score, category bars, issue list with `tell` badges + suggestions, click-to-highlight nodes (reuses `data-node-id`); gallery score badge
+- [ ] Design-system panel — resolved tokens as swatches / type scale / spacing / radius, with inheritance attribution (which layer each token came from)
+- [ ] Import / provenance / variety panel — `report.layout` summary, snapped/warnings, import source + drift status, project build-log/variety view (groundwork: persist the import report onto `metadata.import`)
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-19-SPEC.md`](docs/specs/PHASE-19-SPEC.md)._
+
 ---
 
 ## Installation (target)
