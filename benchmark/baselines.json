@@ -1,6 +1,6 @@
 {
   "hero": {
-    "overallScore": 71,
+    "overallScore": 70,
     "categories": [
       {
         "name": "spacing",
@@ -29,15 +29,16 @@
       },
       {
         "name": "cliche",
-        "score": 34,
-        "issueCount": 9
+        "score": 28,
+        "issueCount": 10
       }
     ],
-    "issueCount": 27,
+    "issueCount": 28,
     "issueKeys": [
       "cliche::big::\"$48,290\" looks like fabricated data (a money figure).",
       "cliche::btxt::\"+12%\" looks like fabricated data (a percentage).",
       "cliche::doc::4 eyebrow labels across 4 sections — an eyebrow above (nearly) every heading reads as template rhythm.",
+      "cliche::doc::5 distinct corner radii in use (2, 6, 16, 20, 999px) — mixed radius systems read as inconsistent.",
       "cliche::doc::7 nodes use gradients — gradient overuse is a machine-made tell.",
       "cliche::s1-d::\"↑ 5.2% vs last week\" looks like fabricated data (a percentage).",
       "cliche::s1-v::\"1,284\" looks like fabricated data (a large count).",
