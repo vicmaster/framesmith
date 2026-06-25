@@ -18,7 +18,10 @@ export type ClicheTell =
   | 'hanging-header'
   | 'honest-content'
   | 'eyebrow-rhythm'
-  | 'slop-copy';
+  | 'slop-copy'
+  | 'radius-consistency'
+  | 'pure-black-white'
+  | 'accent-consistency';
 
 export interface EvaluationIssue {
   category: string;
@@ -977,6 +980,138 @@ function tellSlopCopy(ctx: ClicheCtx): EvaluationIssue[] {
   return issues;
 }
 
+// FR-9 — radius consistency: one corner-radius system per page. A pile of
+// distinct radii (sharp here, 6 there, 14 elsewhere) reads as unsystematic.
+// A considered scale is small — flag only a genuine sprawl. Suggest-only.
+function tellRadiusConsistency(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('radius-consistency')) return [];
+
+  const radii = new Set<number>();
+  for (const { node } of ctx.entries) {
+    const r = node.cornerRadius;
+    if (typeof r === 'number') { if (r > 0) radii.add(r); }
+    else if (Array.isArray(r)) for (const v of r) if (typeof v === 'number' && v > 0) radii.add(v);
+  }
+  if (radii.size < 4) return [];                         // a 1–3 step scale is fine
+
+  const list = [...radii].sort((a, b) => a - b).join(', ');
+  return [{
+    category: 'cliche',
+    tell: 'radius-consistency',
+    severity: 'info',
+    nodeId: ctx.entries[0]?.node.id,
+    message: `${radii.size} distinct corner radii in use (${list}px) — mixed radius systems read as inconsistent.`,
+    suggestion: `Consolidate to one small radius scale (e.g. 8 / 12 / 999 for pills). Define it as $tokens and reuse.`,
+  }];
+}
+
+// FR-10 — pure black / white: #000000 ink and a #ffffff page reads as harsh
+// and undesigned; off-black / off-white is the craft move. Black ink (text /
+// icon / stroke) carries a mechanical off-black swap; a black surface fill or a
+// white page background is suggest-only (could be a deliberate choice).
+function tellPureBlackWhite(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('pure-black-white')) return [];
+  const issues: EvaluationIssue[] = [];
+  const OFF_BLACK = '#0A0A0A';
+  const rootId = ctx.entries[0]?.node.id;
+
+  const exactHex = (v: unknown): string | null => {
+    if (typeof v !== 'string') return null;
+    const rgb = parseColor(v);
+    return rgb ? rgbToHex(rgb) : null;
+  };
+  // A full-bleed background surface (page / section), not a small card. The
+  // document root is excluded — it defaults to white, so flagging it would nag
+  // every canvas that never overrode the default.
+  const isBackgroundSurface = (n: SceneNode): boolean => {
+    if (n.type !== 'frame' || n.id === rootId) return false;
+    if (typeof n.width === 'number') return n.width >= 600;
+    return typeof n.width === 'string';                   // "100%" / "50%" → section
+  };
+
+  for (const { node } of ctx.entries) {
+    // Pure-black INK (text / icon / stroke) — mechanical off-black swap.
+    for (const prop of ['color', 'iconColor', 'stroke'] as const) {
+      if (exactHex(node[prop]) !== '#000000') continue;
+      issues.push({
+        category: 'cliche',
+        tell: 'pure-black-white',
+        severity: 'info',
+        nodeId: node.id,
+        nodeName: node.name,
+        message: `${prop} is pure black (#000000) — reads harsher than a designed off-black.`,
+        suggestion: `Use an off-black like ${OFF_BLACK} for ink.`,
+        fix: {
+          op: formatUpdateOp(node.id, { [prop]: OFF_BLACK }),
+          rationale: `Soften pure black ${prop} to off-black ${OFF_BLACK}`,
+        },
+      });
+    }
+    // Pure-black / pure-white BACKGROUND surface — suggest-only (deliberate?).
+    if (isBackgroundSurface(node)) {
+      const fillHex = exactHex(node.fill);
+      if (fillHex === '#000000') {
+        issues.push({
+          category: 'cliche', tell: 'pure-black-white', severity: 'info',
+          nodeId: node.id, nodeName: node.name,
+          message: `the background fill is pure black (#000000) — an off-black surface reads softer.`,
+          suggestion: `Prefer a near-black like #0B0B0C over pure #000000 for the surface.`,
+        });
+      } else if (fillHex === '#ffffff') {
+        issues.push({
+          category: 'cliche', tell: 'pure-black-white', severity: 'info',
+          nodeId: node.id, nodeName: node.name,
+          message: `the background fill is pure white (#ffffff) — reads starker than a designed off-white.`,
+          suggestion: `Use an off-white like #FAFAFA / #F8FAFC for the page surface.`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+// FR-11 — accent consistency: one accent hue per page (+ neutrals, at most one
+// status color). Three or more competing saturated hues read as unfocused.
+// Suggest-only — which hue is canonical is a judgment call. Neutrals, near-
+// black/white, and the page background are excluded; gradients (non-parseable
+// CSS strings) fall through to null and are skipped.
+function tellAccentConsistency(ctx: ClicheCtx): EvaluationIssue[] {
+  if (ctx.relaxed.has('accent-consistency')) return [];
+  const rootId = ctx.entries[0]?.node.id;
+  const hues = new Map<number, string>();               // coarse hue bucket → example hex
+
+  const consider = (v: unknown): void => {
+    if (typeof v !== 'string') return;
+    const rgb = parseColor(v);
+    if (!rgb) return;
+    const { h, s, l } = rgbToHsl(rgb);
+    if (s < 0.4 || l < 0.2 || l > 0.85) return;          // neutral / too dark / too light
+    const bucket = (Math.round(h / 30) * 30) % 360;
+    if (!hues.has(bucket)) hues.set(bucket, rgbToHex(rgb));
+  };
+  const isSmallEl = (n: SceneNode): boolean =>
+    n.type === 'ellipse' || n.type === 'rectangle' || !!n.icon ||
+    (typeof n.width === 'number' && n.width < 600);
+
+  for (const { node } of ctx.entries) {
+    if (node.id === rootId) continue;                    // page background isn't an accent
+    consider(node.color);
+    consider(node.stroke);
+    consider(node.iconColor);
+    if (isSmallEl(node)) consider(node.fill);
+  }
+  if (hues.size < 3) return [];
+
+  return [{
+    category: 'cliche',
+    tell: 'accent-consistency',
+    severity: 'info',
+    nodeId: rootId,
+    message: `${hues.size} competing accent hues in use (${[...hues.values()].join(', ')}) — multiple accents read as unfocused.`,
+    suggestion: `Pick one accent hue (plus neutrals, and at most one status color). Set it as $accent and reuse.`,
+  }];
+}
+
 function checkCliche(
   entries: NodeEntry[],
   rawEntries: NodeEntry[],
@@ -994,6 +1129,9 @@ function checkCliche(
     ...tellHonestContent(ctx),
     ...tellEyebrowRhythm(ctx),
     ...tellSlopCopy(ctx),
+    ...tellRadiusConsistency(ctx),
+    ...tellPureBlackWhite(ctx),
+    ...tellAccentConsistency(ctx),
   ];
 
   const penalty = { error: 25, warning: 12, info: 6 } as const;

@@ -90,7 +90,7 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
   const union = evaluateSrc.match(/export type ClicheTell =([\s\S]*?);/)?.[1] ?? '';
   const tells = [...union.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]);
-  expect('cliche tells found', tells.length >= 7, String(tells.length));
+  expect('cliche tells found', tells.length >= 10, String(tells.length));
 
   const TELL_PHRASE: Record<string, string> = {
     'accent-hue': 'purple',
@@ -100,6 +100,9 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
     'honest-content': 'fabricated',
     'eyebrow-rhythm': 'rhythm',
     'slop-copy': 'slop copy',
+    'radius-consistency': 'radius',
+    'pure-black-white': 'pure black',
+    'accent-consistency': 'competing accent',
   };
   const unmapped = tells.filter((t) => !(t in TELL_PHRASE));
   expect('every cliche tell has a documented phrase', unmapped.length === 0, unmapped.join(', '));

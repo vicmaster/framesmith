@@ -306,6 +306,64 @@ I(page, {type:"text", content:"Pricing — placeholder", fontSize:16})`);
   assert(tells(await cliche(clean), 'slop-copy').length === 0, 'branded copy + labeled placeholder do not flag');
 }
 
+// --- FR-9: radius consistency ---
+async function testRadiusConsistency() {
+  console.log('\n── tell: radius consistency ──');
+  const sprawl = build('radius-sprawl', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16})
+I(page, {type:"frame", width:200, height:80, cornerRadius:4, fill:"#1E293B"})
+I(page, {type:"frame", width:200, height:80, cornerRadius:8, fill:"#1E293B"})
+I(page, {type:"frame", width:200, height:80, cornerRadius:14, fill:"#1E293B"})
+I(page, {type:"frame", width:200, height:80, cornerRadius:24, fill:"#1E293B"})`);
+  const ri = tells(await cliche(sprawl), 'radius-consistency');
+  assert(ri.length === 1 && ri[0].severity === 'info' && !ri[0].fix, '4 distinct radii flag once (info, no fix)');
+
+  const scale = build('radius-scale', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16})
+I(page, {type:"frame", width:200, height:80, cornerRadius:8, fill:"#1E293B"})
+I(page, {type:"frame", width:200, height:80, cornerRadius:8, fill:"#1E293B"})
+I(page, {type:"frame", width:200, height:80, cornerRadius:12, fill:"#1E293B"})`);
+  assert(tells(await cliche(scale), 'radius-consistency').length === 0, 'a 2-step radius scale does not flag');
+}
+
+// --- FR-10: pure black / white ---
+async function testPureBlackWhite() {
+  console.log('\n── tell: pure black / white ──');
+  const c = build('pure', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16, fill:"#ffffff"})
+I(page, {type:"text", name:"ink", content:"Heading", fontSize:32, color:"#000000"})`);
+  const bw = tells(await cliche(c), 'pure-black-white');
+  assert(bw.length === 2, 'pure-black ink + pure-white page both flag');
+  const ink = bw.find((i) => i.message.includes('color'))!;
+  assert(!!ink.fix && ink.fix.op.includes('#0A0A0A'), 'pure-black ink carries an off-black autofix');
+  const page = bw.find((i) => i.message.includes('background'))!;
+  assert(!page.fix, 'pure-white page background is suggest-only');
+
+  const off = build('off', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16, fill:"#0F172A"})
+I(page, {type:"text", content:"Heading", fontSize:32, color:"#F8FAFC"})`);
+  assert(tells(await cliche(off), 'pure-black-white').length === 0, 'off-black/off-white do not flag');
+}
+
+// --- FR-11: accent consistency ---
+async function testAccentConsistency() {
+  console.log('\n── tell: accent consistency ──');
+  const rainbow = build('rainbow', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16, fill:"#0F172A"})
+I(page, {type:"frame", name:"a", width:120, height:48, cornerRadius:8, fill:"#2563EB"})
+I(page, {type:"frame", name:"b", width:120, height:48, cornerRadius:8, fill:"#16A34A"})
+I(page, {type:"frame", name:"c", width:120, height:48, cornerRadius:8, fill:"#DC2626"})`);
+  const ac = tells(await cliche(rainbow), 'accent-consistency');
+  assert(ac.length === 1 && ac[0].severity === 'info' && !ac[0].fix, '3 competing accent hues flag once (info, no fix)');
+
+  const focused = build('focused', `
+page=I("document", {type:"frame", width:1200, layout:"vertical", gap:16, fill:"#0F172A"})
+I(page, {type:"frame", width:120, height:48, cornerRadius:8, fill:"#2563EB"})
+I(page, {type:"text", content:"Learn more", fontSize:14, color:"#2563EB"})
+I(page, {type:"text", content:"Body copy here", fontSize:16, color:"#CBD5E1"})`);
+  assert(tells(await cliche(focused), 'accent-consistency').length === 0, 'one accent + neutrals does not flag');
+}
+
 async function main() {
   await testColorUtils();
   await testAccentHue();
@@ -316,6 +374,9 @@ async function main() {
   await testHonestContent();
   await testEyebrowRhythm();
   await testSlopCopy();
+  await testRadiusConsistency();
+  await testPureBlackWhite();
+  await testAccentConsistency();
   await testCleanAndCategory();
   await testAutofixSurfacing();
 
