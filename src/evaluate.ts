@@ -610,7 +610,9 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
 /** Genre (active preset / design system) → tells it relaxes because they're
  * intentional in that style. Material Design is legitimately purple. */
 const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
-  material: ['accent-hue'],
+  // Material Design legitimately uses a purple accent AND white elevated
+  // surfaces (cards on an off-white background), so both are intentional here.
+  material: ['accent-hue', 'pure-black-white'],
 };
 
 /** Canonical unconfigured AI accents — Tailwind indigo/violet/purple defaults,

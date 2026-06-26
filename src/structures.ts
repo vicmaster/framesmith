@@ -42,7 +42,7 @@ function card(
     height,
     layout: 'vertical',
     justifyContent: 'space-between',
-    gap: 12,
+    gap: 16,
     padding: 24,
     cornerRadius: 16,
     fill,
@@ -64,7 +64,7 @@ function button(id: string, label: string, fill: string, color: string, stroke?:
     layout: 'horizontal',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: [14, 28],
+    padding: [12, 24],
     cornerRadius: 8,
     fill,
     ...(stroke ? { stroke, strokeWidth: 1 } : {}),
@@ -103,7 +103,7 @@ function navItem(id: string, label: string): SceneNode {
     width: '100%',
     layout: 'horizontal',
     alignItems: 'center',
-    padding: [10, 12],
+    padding: [8, 12],
     cornerRadius: 8,
     fill: COLOR.bgElevated,
     children: [{ id: `${id}-label`, type: 'text', content: label, fontSize: 14, color: COLOR.textSecondary }],
@@ -216,7 +216,7 @@ const bentoGrid: Structure = {
       width: '100%',
       layout: 'vertical',
       gap: 32,
-      padding: [64, 48],
+      padding: [48, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
@@ -237,7 +237,7 @@ const bentoGrid: Structure = {
           layout: 'horizontal',
           wrap: true,
           responsive: 'wrap',
-          gap: 20,
+          gap: 24,
           children: [
             card('bn-card-1', 'Feature card — primary', 560, 280, COLOR.bgSurface),
             card('bn-card-2', 'Card — supporting', 300, 280, COLOR.bgSurface),
@@ -437,7 +437,7 @@ const catalogue: Structure = {
       width: '100%',
       layout: 'vertical',
       gap: 32,
-      padding: [64, 48],
+      padding: [48, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
