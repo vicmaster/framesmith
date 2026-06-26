@@ -1,7 +1,7 @@
 import './test-env.js';
 /**
  * Phase 20 Slice A — pattern library quality gate (FR-D1). Every page structure,
- * stamped onto an empty canvas, must score >= 90 with ZERO cliché tells across
+ * stamped onto an empty canvas, must score > 95 with ZERO cliché tells across
  * multiple themes. A pattern that ships a tell would *teach* slop, so this is the
  * backstop that keeps the library honest. Pure + fast (no Chrome).
  * Run with: npx tsx test-patterns.ts
@@ -11,7 +11,7 @@ import { listStructures, applyStructure } from './src/structures.js';
 import { getPreset } from './src/presets.js';
 import { evaluateCanvas } from './src/evaluate.js';
 
-const BAR = 90;
+const BAR = 95; // every pattern must score STRICTLY above this (> 95)
 // Neutral default (applyStructure's seeded defaults) + every bundled preset.
 // All presets now use designed off-white/off-black (no pure #ffffff/#000000),
 // so a pattern must hold up under each without tripping a tell.
@@ -26,7 +26,7 @@ function assert(condition: boolean, label: string) {
 
 async function main() {
   const pages = listStructures().filter((s) => s.kind === 'page');
-  console.log(`\nPattern quality gate — ${pages.length} page structures × ${THEMES.length} themes (bar: >=${BAR}, zero tells)\n`);
+  console.log(`\nPattern quality gate — ${pages.length} page structures × ${THEMES.length} themes (bar: > ${BAR}, zero tells)\n`);
 
   for (const s of pages) {
     for (const theme of THEMES) {
@@ -38,7 +38,7 @@ async function main() {
       }
       const ev = await evaluateCanvas(canvas, { mode: 'fast', genre: theme === 'default' ? undefined : theme });
       const tells = ev.issues.filter((i) => i.category === 'cliche');
-      const ok = ev.overallScore >= BAR && tells.length === 0;
+      const ok = ev.overallScore > BAR && tells.length === 0;
       const detail = ok ? `${ev.overallScore}` : `${ev.overallScore}${tells.length ? ' · tells: ' + tells.map((t) => t.tell).join(', ') : ''}`;
       assert(ok, `${s.name} @ ${theme} — ${detail}`);
     }

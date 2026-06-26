@@ -64,7 +64,7 @@ function button(id: string, label: string, fill: string, color: string, stroke?:
     layout: 'horizontal',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: [12, 24],
+    padding: [8, 24],
     cornerRadius: 8,
     fill,
     ...(stroke ? { stroke, strokeWidth: 1 } : {}),
@@ -105,8 +105,8 @@ function navItem(id: string, label: string, icon = 'circle'): SceneNode {
     width: '100%',
     layout: 'horizontal',
     alignItems: 'center',
-    gap: 12,
-    padding: [8, 12],
+    gap: 8,
+    padding: [8, 16],
     cornerRadius: 8,
     fill: COLOR.bgElevated,
     children: [
@@ -136,7 +136,7 @@ function catItem(id: string): SceneNode {
         type: 'frame',
         width: '100%',
         layout: 'vertical',
-        gap: 6,
+        gap: 8,
         padding: 16,
         children: [
           { id: `${id}-title`, type: 'text', content: 'Item title', fontSize: 16, fontWeight: 600, color: COLOR.textPrimary },
@@ -188,7 +188,7 @@ function tier(id: string, name: string): SceneNode {
       },
       {
         id: `${id}-cta`, type: 'frame', name: 'Choose plan', width: '100%', layout: 'horizontal',
-        alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+        alignItems: 'center', justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
         children: [{ id: `${id}-cta-label`, type: 'text', content: 'Choose plan', fontSize: 14, fontWeight: 600, color: COLOR.bgPrimary }],
       },
     ],
@@ -231,11 +231,11 @@ const marqueeHero: Structure = {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 24,
-      padding: [120, 48],
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         { id: 'mh-eyebrow', type: 'text', name: 'Eyebrow', content: 'Eyebrow — short label', fontSize: 14, fontWeight: 600, color: COLOR.accent, textAlign: 'center', letterSpacing: 1 },
-        { id: 'mh-headline', type: 'text', name: 'Headline', content: 'Headline', fontSize: 64, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.1, maxWidth: 880 },
+        { id: 'mh-headline', type: 'text', name: 'Headline', content: 'Headline', fontSize: 56, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.1, maxWidth: 880 },
         { id: 'mh-subhead', type: 'text', name: 'Subheadline', content: 'Body copy — one or two supporting sentences.', fontSize: 20, fontWeight: 400, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 640 },
         {
           id: 'mh-cta',
@@ -261,7 +261,7 @@ const marqueeHero: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      gap: 12,
+      gap: 8,
       padding: [72, 48],
       fill: COLOR.bgSurface,
       children: [
@@ -338,8 +338,8 @@ const statLed: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      gap: 40,
-      padding: [96, 48],
+      gap: 32,
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
@@ -386,7 +386,7 @@ const editorialLongform: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      padding: [80, 48],
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
@@ -398,7 +398,7 @@ const editorialLongform: Structure = {
           layout: 'vertical',
           gap: 24,
           children: [
-            { id: 'ed-kicker', type: 'text', content: 'Eyebrow — category', fontSize: 13, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
+            { id: 'ed-kicker', type: 'text', content: 'Eyebrow — category', fontSize: 14, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
             { id: 'ed-title', type: 'text', content: 'Headline', fontSize: 44, fontWeight: 700, color: COLOR.textPrimary, lineHeight: 1.2 },
             { id: 'ed-meta', type: 'text', content: 'Byline — author · date', fontSize: 14, color: COLOR.textSecondary },
             { id: 'ed-lead', type: 'text', content: 'Lead paragraph — set up the piece in two or three sentences.', fontSize: 20, color: COLOR.textSecondary, lineHeight: 1.6 },
@@ -485,7 +485,7 @@ const splitWorkbench: Structure = {
               layout: 'vertical',
               alignItems: 'center',
               justifyContent: 'center',
-              children: [{ id: 'sw-canvas-label', type: 'text', content: 'Body copy — main work area', fontSize: 15, color: COLOR.textSecondary }],
+              children: [{ id: 'sw-canvas-label', type: 'text', content: 'Body copy — main work area', fontSize: 16, color: COLOR.textSecondary }],
             },
           ],
         },
@@ -522,7 +522,7 @@ const catalogue: Structure = {
           alignItems: 'center',
           responsive: 'stack',
           children: [
-            { id: 'cat-title', type: 'text', content: 'Headline', fontSize: 36, fontWeight: 700, color: COLOR.textPrimary },
+            { id: 'cat-title', type: 'text', content: 'Headline', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
             { id: 'cat-filter', type: 'text', content: 'Filter — options', fontSize: 14, color: COLOR.textSecondary },
           ],
         },
@@ -648,7 +648,7 @@ const auth: Structure = {
             },
             {
               id: 'au-submit', type: 'frame', name: 'Submit', width: '100%', layout: 'horizontal',
-              alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+              alignItems: 'center', justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
               children: [{ id: 'au-submit-label', type: 'text', content: 'Continue', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
             },
             { id: 'au-alt', type: 'text', content: 'Secondary link', fontSize: 14, fontWeight: 500, color: COLOR.accent, textAlign: 'center' },
@@ -743,7 +743,7 @@ const onboarding: Structure = {
         { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 15, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
         {
           id: 'ob-cta', type: 'frame', name: 'Primary action', layout: 'horizontal', alignItems: 'center',
-          justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+          justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
           children: [{ id: 'ob-cta-label', type: 'text', content: 'Primary action', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
         },
       ],
@@ -761,12 +761,12 @@ const formField: Structure = {
   kind: 'component',
   description: 'A labeled form field: label, input box, and help text. Stamp once per field; set the label/help via the returned id map.',
   nodes: [{
-    id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 6,
+    id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 8,
     children: [
       { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 13, fontWeight: 600, color: COLOR.textPrimary },
       {
         id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 40, layout: 'horizontal', alignItems: 'center',
-        padding: [10, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        padding: [8, 16], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
         children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 14, color: COLOR.textSecondary }],
       },
       { id: 'ff-help', type: 'text', content: 'Help text — to confirm', fontSize: 12, color: COLOR.textSecondary },
@@ -780,7 +780,7 @@ const toggleRow: Structure = {
   description: 'A settings row: label + description on the left, a toggle on the right. The workhorse of preference screens.',
   nodes: [{
     id: 'tr', type: 'frame', name: 'Toggle row', width: '100%', layout: 'horizontal', alignItems: 'center',
-    justifyContent: 'space-between', gap: 16, padding: [12, 16], cornerRadius: 10,
+    justifyContent: 'space-between', gap: 16, padding: [8, 16], cornerRadius: 10,
     fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
@@ -812,7 +812,7 @@ const toolbar: Structure = {
     children: [
       {
         id: 'tb-search', type: 'frame', name: 'Search', width: 280, height: 36, layout: 'horizontal', alignItems: 'center',
-        gap: 8, padding: [8, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        gap: 8, padding: [8, 16], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
         children: [
           { id: 'tb-search-icon', type: 'icon', icon: 'search', iconSize: 16, iconColor: COLOR.textSecondary },
           { id: 'tb-search-text', type: 'text', content: 'Search — to confirm', fontSize: 13, color: COLOR.textSecondary },
@@ -833,10 +833,10 @@ const toolbar: Structure = {
 function tableRow(id: string): SceneNode {
   return {
     id, type: 'frame', name: 'Row', width: '100%', layout: 'horizontal', alignItems: 'center',
-    padding: [12, 16], gap: 16, stroke: COLOR.border, strokeWidth: 1,
+    padding: [8, 16], gap: 16, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: `${id}-identity`, type: 'frame', width: '40%', layout: 'horizontal', alignItems: 'center', gap: 12,
+        id: `${id}-identity`, type: 'frame', width: '40%', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           { id: `${id}-avatar`, type: 'ellipse', width: 32, height: 32, fill: COLOR.bgElevated },
           {
@@ -851,7 +851,7 @@ function tableRow(id: string): SceneNode {
       {
         id: `${id}-role`, type: 'frame', width: '20%', layout: 'horizontal',
         children: [{
-          id: `${id}-role-chip`, type: 'frame', layout: 'horizontal', alignItems: 'center', padding: [4, 10],
+          id: `${id}-role-chip`, type: 'frame', layout: 'horizontal', alignItems: 'center', padding: [4, 8],
           cornerRadius: 999, fill: COLOR.bgElevated,
           children: [{ id: `${id}-role-text`, type: 'text', content: 'Role', fontSize: 12, color: COLOR.textSecondary }],
         }],
@@ -888,7 +888,7 @@ const dataTable: Structure = {
     children: [
       {
         id: 'dt-header', type: 'frame', name: 'Header', width: '100%', layout: 'horizontal', alignItems: 'center',
-        padding: [10, 16], gap: 16, fill: COLOR.bgElevated,
+        padding: [8, 16], gap: 16, fill: COLOR.bgElevated,
         children: [
           tableHeaderCell('dt-h-identity', 'Name', '40%'),
           tableHeaderCell('dt-h-role', 'Role', '20%'),

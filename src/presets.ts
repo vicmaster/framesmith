@@ -26,7 +26,7 @@ const dark: Preset = {
       'success': '#22c55e',
       'warning': '#f59e0b',
     },
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48, '3xl': 64 },
     radius: { sm: 4, md: 8, lg: 16, full: 9999 },
     typography: {
       'heading-xl': { fontSize: 36, fontWeight: 700, fontFamily: 'Inter, system-ui, sans-serif', lineHeight: 1.2 },
@@ -58,7 +58,7 @@ const light: Preset = {
       'success': '#16a34a',
       'warning': '#d97706',
     },
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48, '3xl': 64 },
     radius: { sm: 4, md: 8, lg: 16, full: 9999 },
     typography: {
       'heading-xl': { fontSize: 36, fontWeight: 700, fontFamily: 'Inter, system-ui, sans-serif', lineHeight: 1.2 },
@@ -90,7 +90,7 @@ const material: Preset = {
       'success': '#386a20',
       'warning': '#7d5700',
     },
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48, '3xl': 64 },
     radius: { sm: 8, md: 12, lg: 16, full: 9999 },
     typography: {
       'heading-xl': { fontSize: 36, fontWeight: 400, fontFamily: 'Roboto, system-ui, sans-serif', lineHeight: 1.2 },
@@ -122,7 +122,7 @@ const minimal: Preset = {
       'success': '#2e7d32',
       'warning': '#ed6c02',
     },
-    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48 },
+    spacing: { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, '2xl': 48, '3xl': 64 },
     radius: { sm: 2, md: 4, lg: 8, full: 9999 },
     typography: {
       'heading-xl': { fontSize: 40, fontWeight: 300, fontFamily: 'Georgia, serif', lineHeight: 1.2 },
