@@ -72,8 +72,9 @@ function button(id: string, label: string, fill: string, color: string, stroke?:
   };
 }
 
-/** A stat block — big value slot over a label (no fabricated numbers, C8). */
-function stat(id: string): SceneNode {
+/** A stat block — icon over a big value slot over a label (no fabricated
+ * numbers, C8). The icon defaults sensibly; pass one to vary across a row. */
+function stat(id: string, icon = 'activity'): SceneNode {
   return {
     id,
     type: 'frame',
@@ -88,14 +89,15 @@ function stat(id: string): SceneNode {
     stroke: COLOR.border,
     strokeWidth: 1,
     children: [
+      { id: `${id}-icon`, type: 'icon', icon, iconSize: 24, iconColor: COLOR.accent },
       { id: `${id}-value`, type: 'text', content: 'Metric — to confirm', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
       { id: `${id}-label`, type: 'text', content: 'Stat label', fontSize: 14, color: COLOR.textSecondary, textAlign: 'center' },
     ],
   };
 }
 
-/** A sidebar nav row. */
-function navItem(id: string, label: string): SceneNode {
+/** A sidebar nav row: a leading icon + label. */
+function navItem(id: string, label: string, icon = 'circle'): SceneNode {
   return {
     id,
     type: 'frame',
@@ -103,10 +105,14 @@ function navItem(id: string, label: string): SceneNode {
     width: '100%',
     layout: 'horizontal',
     alignItems: 'center',
+    gap: 12,
     padding: [8, 12],
     cornerRadius: 8,
     fill: COLOR.bgElevated,
-    children: [{ id: `${id}-label`, type: 'text', content: label, fontSize: 14, color: COLOR.textSecondary }],
+    children: [
+      { id: `${id}-icon`, type: 'icon', icon, iconSize: 16, iconColor: COLOR.textSecondary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 14, color: COLOR.textSecondary },
+    ],
   };
 }
 
@@ -152,6 +158,17 @@ function field(id: string, label: string): SceneNode {
   };
 }
 
+/** A feature row: a check icon + a placeholder feature label. */
+function featureRow(id: string): SceneNode {
+  return {
+    id, type: 'frame', width: '100%', layout: 'horizontal', gap: 8, alignItems: 'center',
+    children: [
+      { id: `${id}-icon`, type: 'icon', icon: 'check', iconSize: 16, iconColor: COLOR.accent },
+      { id: `${id}-text`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
+    ],
+  };
+}
+
 /** A pricing tier card: name, price slot, feature list, CTA. No fake prices. */
 function tier(id: string, name: string): SceneNode {
   return {
@@ -167,11 +184,7 @@ function tier(id: string, name: string): SceneNode {
       },
       {
         id: `${id}-features`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
-        children: [
-          { id: `${id}-f1`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-          { id: `${id}-f2`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-          { id: `${id}-f3`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-        ],
+        children: [featureRow(`${id}-f1`), featureRow(`${id}-f2`), featureRow(`${id}-f3`)],
       },
       {
         id: `${id}-cta`, type: 'frame', name: 'Choose plan', width: '100%', layout: 'horizontal',
@@ -351,7 +364,7 @@ const statLed: Structure = {
           gap: 24,
           responsive: 'stack',
           justifyContent: 'center',
-          children: [stat('sl-stat-1'), stat('sl-stat-2'), stat('sl-stat-3')],
+          children: [stat('sl-stat-1', 'trending-up'), stat('sl-stat-2', 'users'), stat('sl-stat-3', 'activity')],
         },
       ],
     },
@@ -430,10 +443,10 @@ const splitWorkbench: Structure = {
           strokeWidth: 1,
           children: [
             { id: 'sw-brand', type: 'text', content: 'Brand', fontSize: 16, fontWeight: 700, color: COLOR.textPrimary },
-            navItem('sw-nav-1', 'Nav item'),
-            navItem('sw-nav-2', 'Nav item'),
-            navItem('sw-nav-3', 'Nav item'),
-            navItem('sw-nav-4', 'Nav item'),
+            navItem('sw-nav-1', 'Nav item', 'layout-dashboard'),
+            navItem('sw-nav-2', 'Nav item', 'folder'),
+            navItem('sw-nav-3', 'Nav item', 'users'),
+            navItem('sw-nav-4', 'Nav item', 'settings'),
           ],
         },
         {
@@ -548,10 +561,10 @@ const dashboard: Structure = {
           gap: 8, padding: 24, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
           children: [
             { id: 'db-brand', type: 'text', content: 'Brand', fontSize: 16, fontWeight: 700, color: COLOR.textPrimary },
-            navItem('db-nav-1', 'Overview'),
-            navItem('db-nav-2', 'Nav item'),
-            navItem('db-nav-3', 'Nav item'),
-            navItem('db-nav-4', 'Nav item'),
+            navItem('db-nav-1', 'Overview', 'layout-dashboard'),
+            navItem('db-nav-2', 'Nav item', 'users'),
+            navItem('db-nav-3', 'Nav item', 'folder'),
+            navItem('db-nav-4', 'Nav item', 'settings'),
           ],
         },
         {
@@ -569,7 +582,7 @@ const dashboard: Structure = {
             {
               id: 'db-stats', type: 'frame', name: 'Stat row', width: '100%', layout: 'horizontal',
               gap: 24, responsive: 'wrap', wrap: true,
-              children: [stat('db-stat-1'), stat('db-stat-2'), stat('db-stat-3')],
+              children: [stat('db-stat-1', 'trending-up'), stat('db-stat-2', 'users'), stat('db-stat-3', 'activity')],
             },
             {
               id: 'db-content', type: 'frame', name: 'Content', width: '100%', layout: 'horizontal',
@@ -720,7 +733,12 @@ const onboarding: Structure = {
       id: 'ob-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
       alignItems: 'center', justifyContent: 'center', gap: 16, padding: 48, fill: COLOR.bgPrimary,
       children: [
-        { id: 'ob-glyph', type: 'frame', name: 'Glyph', width: 64, height: 64, cornerRadius: 16, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
+        {
+          id: 'ob-glyph', type: 'frame', name: 'Glyph', width: 64, height: 64, cornerRadius: 16,
+          fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+          layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+          children: [{ id: 'ob-glyph-icon', type: 'icon', icon: 'sparkles', iconSize: 28, iconColor: COLOR.accent }],
+        },
         { id: 'ob-title', type: 'text', content: 'Get started', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
         { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 15, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
         {
