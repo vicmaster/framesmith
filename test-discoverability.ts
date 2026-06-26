@@ -76,9 +76,11 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
 // (Agents enumerate structures via the list_structures tool — live data — so
 // the docstring needn't name them all; the README must.)
 {
+  // Require a backticked `name` token, not a bare substring — otherwise a new
+  // structure can false-pass on an incidental word in prose (e.g. "dashboards").
   const structures = listStructures().map((s) => s.name);
-  const missing = structures.filter((s) => !readme.includes(s));
-  expect('every structure named in the README', missing.length === 0, missing.join(', '));
+  const missing = structures.filter((s) => !readme.includes(`\`${s}\``));
+  expect('every structure named (backticked) in the README', missing.length === 0, missing.join(', '));
 }
 
 // ── 6. every cliche tell is surfaced where agents look ───────────────────────

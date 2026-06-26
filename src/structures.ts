@@ -141,6 +141,65 @@ function catItem(id: string): SceneNode {
   };
 }
 
+/** A labeled form field for page scaffolds: label over an input box. */
+function field(id: string, label: string): SceneNode {
+  return {
+    id, type: 'frame', name: label, width: '100%', layout: 'vertical', gap: 8,
+    children: [
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 13, fontWeight: 600, color: COLOR.textSecondary },
+      { id: `${id}-input`, type: 'frame', name: 'Input', width: '100%', height: 44, cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
+    ],
+  };
+}
+
+/** A pricing tier card: name, price slot, feature list, CTA. No fake prices. */
+function tier(id: string, name: string): SceneNode {
+  return {
+    id, type: 'frame', name, width: 320, layout: 'vertical', gap: 24, padding: 32,
+    cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+    children: [
+      {
+        id: `${id}-head`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+        children: [
+          { id: `${id}-name`, type: 'text', content: name, fontSize: 16, fontWeight: 600, color: COLOR.textSecondary },
+          { id: `${id}-price`, type: 'text', content: 'Price — to confirm', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
+        ],
+      },
+      {
+        id: `${id}-features`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+        children: [
+          { id: `${id}-f1`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
+          { id: `${id}-f2`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
+          { id: `${id}-f3`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
+        ],
+      },
+      {
+        id: `${id}-cta`, type: 'frame', name: 'Choose plan', width: '100%', layout: 'horizontal',
+        alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+        children: [{ id: `${id}-cta-label`, type: 'text', content: 'Choose plan', fontSize: 14, fontWeight: 600, color: COLOR.bgPrimary }],
+      },
+    ],
+  };
+}
+
+/** A settings row: label + description on the left, a real toggle on the right. */
+function settingsRow(id: string, on: boolean): SceneNode {
+  return {
+    id, type: 'frame', name: 'Setting', width: '100%', layout: 'horizontal',
+    justifyContent: 'space-between', alignItems: 'center', gap: 24, padding: 24,
+    children: [
+      {
+        id: `${id}-text`, type: 'frame', layout: 'vertical', gap: 8,
+        children: [
+          { id: `${id}-label`, type: 'text', content: 'Setting label', fontSize: 15, fontWeight: 600, color: COLOR.textPrimary },
+          { id: `${id}-desc`, type: 'text', content: 'Description — to confirm', fontSize: 13, color: COLOR.textSecondary },
+        ],
+      },
+      { id: `${id}-toggle`, type: 'toggle', checked: on },
+    ],
+  };
+}
+
 // ── marquee-hero ───────────────────────────────────────────────────────────
 // Full-bleed centered marquee: oversized headline, one supporting line, dual
 // CTA, then a single supporting band. Airy, symmetric, one focal point.
@@ -470,6 +529,210 @@ const catalogue: Structure = {
   ],
 };
 
+// ── dashboard (Phase 20) ─────────────────────────────────────────────────────
+// Application home: fixed sidebar, a topbar with the primary action, a row of
+// stat blocks, then a chart area beside a recent-activity panel. Dense, split,
+// uniform stat rhythm. The workhorse first screen of most tools.
+const dashboard: Structure = {
+  name: 'dashboard',
+  description:
+    'Application dashboard — sidebar nav beside a main column: topbar with primary action, a row of stat blocks, then a chart area next to a recent-activity panel. Dense and split; stacks on mobile. The default first screen for tools and admin apps.',
+  axes: { heroTreatment: 'none', density: 'dense', rhythm: 'uniform', alignment: 'split' },
+  nodes: [
+    {
+      id: 'db-shell', type: 'frame', name: 'Shell', width: '100%', layout: 'horizontal',
+      responsive: 'stack', fill: COLOR.bgPrimary,
+      children: [
+        {
+          id: 'db-sidebar', type: 'frame', name: 'Sidebar', width: 240, layout: 'vertical',
+          gap: 8, padding: 24, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+          children: [
+            { id: 'db-brand', type: 'text', content: 'Brand', fontSize: 16, fontWeight: 700, color: COLOR.textPrimary },
+            navItem('db-nav-1', 'Overview'),
+            navItem('db-nav-2', 'Nav item'),
+            navItem('db-nav-3', 'Nav item'),
+            navItem('db-nav-4', 'Nav item'),
+          ],
+        },
+        {
+          id: 'db-main', type: 'frame', name: 'Main', width: 1160, layout: 'vertical',
+          gap: 24, padding: 32, fill: COLOR.bgPrimary,
+          children: [
+            {
+              id: 'db-topbar', type: 'frame', name: 'Topbar', width: '100%', layout: 'horizontal',
+              justifyContent: 'space-between', alignItems: 'center',
+              children: [
+                { id: 'db-title', type: 'text', content: 'Dashboard', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary },
+                button('db-action', 'Primary action', COLOR.accent, COLOR.bgPrimary),
+              ],
+            },
+            {
+              id: 'db-stats', type: 'frame', name: 'Stat row', width: '100%', layout: 'horizontal',
+              gap: 24, responsive: 'wrap', wrap: true,
+              children: [stat('db-stat-1'), stat('db-stat-2'), stat('db-stat-3')],
+            },
+            {
+              id: 'db-content', type: 'frame', name: 'Content', width: '100%', layout: 'horizontal',
+              gap: 24, responsive: 'stack',
+              children: [
+                {
+                  id: 'db-chart', type: 'frame', name: 'Chart panel', width: 720, layout: 'vertical',
+                  gap: 16, padding: 24, cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+                  children: [
+                    { id: 'db-chart-title', type: 'text', content: 'Overview', fontSize: 16, fontWeight: 600, color: COLOR.textPrimary },
+                    {
+                      id: 'db-chart-area', type: 'frame', name: 'Chart area', width: '100%', height: 224,
+                      cornerRadius: 8, fill: COLOR.bgElevated, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+                      children: [{ id: 'db-chart-label', type: 'text', content: 'Chart — placeholder', fontSize: 14, color: COLOR.textSecondary }],
+                    },
+                  ],
+                },
+                {
+                  id: 'db-side', type: 'frame', name: 'Activity panel', width: 352, layout: 'vertical',
+                  gap: 16, padding: 24, cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+                  children: [
+                    { id: 'db-side-title', type: 'text', content: 'Recent activity', fontSize: 16, fontWeight: 600, color: COLOR.textPrimary },
+                    { id: 'db-act-1', type: 'text', content: 'Activity item — to confirm', fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
+                    { id: 'db-act-2', type: 'text', content: 'Activity item — to confirm', fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
+                    { id: 'db-act-3', type: 'text', content: 'Activity item — to confirm', fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ── auth (Phase 20) ───────────────────────────────────────────────────────
+// Centered sign-in card: title, two fields, full-width submit, secondary link.
+const auth: Structure = {
+  name: 'auth',
+  description:
+    'Centered authentication card — title + supporting line, two form fields, a full-width submit, and a secondary link. The sign-in / sign-up shape. Centered on the page.',
+  axes: { heroTreatment: 'none', density: 'balanced', rhythm: 'uniform', alignment: 'centered' },
+  nodes: [
+    {
+      id: 'au-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
+      alignItems: 'center', justifyContent: 'center', padding: 48, fill: COLOR.bgPrimary,
+      children: [
+        {
+          id: 'au-card', type: 'frame', name: 'Card', width: 400, layout: 'vertical', gap: 24,
+          padding: 32, cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+          children: [
+            {
+              id: 'au-head', type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+              children: [
+                { id: 'au-title', type: 'text', content: 'Sign in', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary },
+                { id: 'au-sub', type: 'text', content: 'Body copy — one supporting line.', fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
+              ],
+            },
+            {
+              id: 'au-fields', type: 'frame', width: '100%', layout: 'vertical', gap: 16,
+              children: [field('au-email', 'Email'), field('au-password', 'Password')],
+            },
+            {
+              id: 'au-submit', type: 'frame', name: 'Submit', width: '100%', layout: 'horizontal',
+              alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+              children: [{ id: 'au-submit-label', type: 'text', content: 'Continue', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
+            },
+            { id: 'au-alt', type: 'text', content: 'Secondary link', fontSize: 14, fontWeight: 500, color: COLOR.accent, textAlign: 'center' },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ── pricing (Phase 20) ────────────────────────────────────────────────────
+// Centered heading over a row of equal pricing tiers. No fabricated prices.
+const pricing: Structure = {
+  name: 'pricing',
+  description:
+    'Centered heading over a row of equal pricing tiers — each with a name, price slot, feature list, and CTA. Balanced, uniform rhythm. Prices are placeholders (no fabricated numbers).',
+  axes: { heroTreatment: 'none', density: 'balanced', rhythm: 'uniform', alignment: 'centered' },
+  nodes: [
+    {
+      id: 'pr-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
+      alignItems: 'center', gap: 48, padding: 48, fill: COLOR.bgPrimary,
+      children: [
+        {
+          id: 'pr-head', type: 'frame', width: '100%', layout: 'vertical', gap: 16, alignItems: 'center',
+          children: [
+            { id: 'pr-title', type: 'text', content: 'Pricing', fontSize: 40, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.2 },
+            { id: 'pr-sub', type: 'text', content: 'Body copy — one supporting line about the plans.', fontSize: 16, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 560 },
+          ],
+        },
+        {
+          id: 'pr-tiers', type: 'frame', name: 'Tiers', layout: 'horizontal', gap: 24, wrap: true, responsive: 'wrap',
+          children: [tier('pr-tier-1', 'Starter'), tier('pr-tier-2', 'Pro'), tier('pr-tier-3', 'Scale')],
+        },
+      ],
+    },
+  ],
+};
+
+// ── settings (Phase 20) ───────────────────────────────────────────────────
+// A centered settings column: heading over a card of toggle rows with dividers.
+const settings: Structure = {
+  name: 'settings',
+  description:
+    'A settings screen — heading over a single card of preference rows (label + description + a real toggle), split by hairline dividers. The workhorse of preference / account screens.',
+  axes: { heroTreatment: 'none', density: 'balanced', rhythm: 'uniform', alignment: 'left' },
+  nodes: [
+    {
+      id: 'st-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
+      alignItems: 'center', gap: 24, padding: 48, fill: COLOR.bgPrimary,
+      children: [
+        {
+          id: 'st-col', type: 'frame', name: 'Column', width: 720, layout: 'vertical', gap: 24,
+          children: [
+            { id: 'st-title', type: 'text', content: 'Settings', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary },
+            {
+              id: 'st-card', type: 'frame', name: 'Card', width: '100%', layout: 'vertical', gap: 0,
+              cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+              children: [
+                settingsRow('st-row-1', true),
+                { id: 'st-div-1', type: 'frame', width: '100%', height: 1, fill: COLOR.border },
+                settingsRow('st-row-2', false),
+                { id: 'st-div-2', type: 'frame', width: '100%', height: 1, fill: COLOR.border },
+                settingsRow('st-row-3', true),
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+// ── onboarding (Phase 20) ─────────────────────────────────────────────────
+// A centered empty / first-run state: icon, heading, body, one primary action.
+const onboarding: Structure = {
+  name: 'onboarding',
+  description:
+    'A centered empty / first-run state — a glyph tile, heading, a line of body copy, and one primary action. For empty lists, first-run, or zero-data screens.',
+  axes: { heroTreatment: 'none', density: 'airy', rhythm: 'uniform', alignment: 'centered' },
+  nodes: [
+    {
+      id: 'ob-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
+      alignItems: 'center', justifyContent: 'center', gap: 16, padding: 48, fill: COLOR.bgPrimary,
+      children: [
+        { id: 'ob-glyph', type: 'frame', name: 'Glyph', width: 64, height: 64, cornerRadius: 16, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
+        { id: 'ob-title', type: 'text', content: 'Get started', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
+        { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 15, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
+        {
+          id: 'ob-cta', type: 'frame', name: 'Primary action', layout: 'horizontal', alignItems: 'center',
+          justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+          children: [{ id: 'ob-cta-label', type: 'text', content: 'Primary action', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
+        },
+      ],
+    },
+  ],
+};
+
 // ── component structures (Phase 16 slice D) ────────────────────────────────
 // Reusable fragments stamped under any target node via apply_structure
 // targetId, repeatably — template ids get re-keyed per stamp. Same theming
@@ -629,6 +892,11 @@ const structureMap = new Map<string, Structure>([
   ['editorial-longform', editorialLongform],
   ['split-workbench', splitWorkbench],
   ['catalogue', catalogue],
+  ['dashboard', dashboard],
+  ['auth', auth],
+  ['pricing', pricing],
+  ['settings', settings],
+  ['onboarding', onboarding],
   // Phase 16 — component-level scaffolds
   ['data-table', dataTable],
   ['form-field', formField],

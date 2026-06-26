@@ -1022,11 +1022,15 @@ function tellPureBlackWhite(ctx: ClicheCtx): EvaluationIssue[] {
     const rgb = parseColor(v);
     return rgb ? rgbToHex(rgb) : null;
   };
-  // A full-bleed background surface (page / section), not a small card. The
-  // document root is excluded — it defaults to white, so flagging it would nag
-  // every canvas that never overrode the default.
+  // A translucent color isn't "stark" — a 10%-alpha white hairline reads as a
+  // faint rule, not a pure-white surface. Only opaque pure black/white counts.
+  const isOpaque = (v: unknown): boolean => typeof v === 'string' && parseAlpha(v) >= 0.9;
+  // A full-bleed background surface (page / section), not a small card or a
+  // hairline rule. The document root is excluded — it defaults to white, so
+  // flagging it would nag every canvas that never overrode the default.
   const isBackgroundSurface = (n: SceneNode): boolean => {
     if (n.type !== 'frame' || n.id === rootId) return false;
+    if (typeof n.height === 'number' && n.height < 24) return false; // divider / hairline, not a surface
     if (typeof n.width === 'number') return n.width >= 600;
     return typeof n.width === 'string';                   // "100%" / "50%" → section
   };
@@ -1034,7 +1038,7 @@ function tellPureBlackWhite(ctx: ClicheCtx): EvaluationIssue[] {
   for (const { node } of ctx.entries) {
     // Pure-black INK (text / icon / stroke) — mechanical off-black swap.
     for (const prop of ['color', 'iconColor', 'stroke'] as const) {
-      if (exactHex(node[prop]) !== '#000000') continue;
+      if (exactHex(node[prop]) !== '#000000' || !isOpaque(node[prop])) continue;
       issues.push({
         category: 'cliche',
         tell: 'pure-black-white',
@@ -1051,7 +1055,7 @@ function tellPureBlackWhite(ctx: ClicheCtx): EvaluationIssue[] {
     }
     // Pure-black / pure-white BACKGROUND surface — suggest-only (deliberate?).
     if (isBackgroundSurface(node)) {
-      const fillHex = exactHex(node.fill);
+      const fillHex = isOpaque(node.fill) ? exactHex(node.fill) : null;
       if (fillHex === '#000000') {
         issues.push({
           category: 'cliche', tell: 'pure-black-white', severity: 'info',
