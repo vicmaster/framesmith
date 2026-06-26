@@ -763,11 +763,11 @@ const formField: Structure = {
   nodes: [{
     id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 8,
     children: [
-      { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 13, fontWeight: 600, color: COLOR.textPrimary },
+      { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
       {
-        id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 40, layout: 'horizontal', alignItems: 'center',
+        id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 44, layout: 'horizontal', alignItems: 'center',
         padding: [8, 16], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
-        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 14, color: COLOR.textSecondary }],
+        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 16, color: COLOR.textSecondary }],
       },
       { id: 'ff-help', type: 'text', content: 'Help text — to confirm', fontSize: 12, color: COLOR.textSecondary },
     ],
@@ -784,7 +784,7 @@ const toggleRow: Structure = {
     fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: 'tr-copy', type: 'frame', layout: 'vertical', gap: 2,
+        id: 'tr-copy', type: 'frame', name: 'Copy', layout: 'vertical', gap: 4,
         children: [
           { id: 'tr-label', type: 'text', content: 'Setting label', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
           { id: 'tr-desc', type: 'text', content: 'Setting description — to confirm', fontSize: 12, color: COLOR.textSecondary },
@@ -822,7 +822,7 @@ const toolbar: Structure = {
         id: 'tb-actions', type: 'frame', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           button('tb-filter', 'Filter', COLOR.bgElevated, COLOR.textPrimary, COLOR.border),
-          button('tb-primary', 'Primary action', COLOR.accent, COLOR.textPrimary),
+          button('tb-primary', 'Primary action', COLOR.accent, COLOR.bgPrimary),
         ],
       },
     ],
@@ -840,7 +840,7 @@ function tableRow(id: string): SceneNode {
         children: [
           { id: `${id}-avatar`, type: 'ellipse', width: 32, height: 32, fill: COLOR.bgElevated },
           {
-            id: `${id}-id-copy`, type: 'frame', layout: 'vertical', gap: 2,
+            id: `${id}-id-copy`, type: 'frame', name: 'Identity', layout: 'vertical', gap: 4,
             children: [
               { id: `${id}-name`, type: 'text', content: 'Name — to confirm', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
               { id: `${id}-email`, type: 'text', content: 'email — to confirm', fontSize: 12, color: COLOR.textSecondary },
@@ -860,7 +860,7 @@ function tableRow(id: string): SceneNode {
         id: `${id}-status`, type: 'frame', width: '25%', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           { id: `${id}-status-toggle`, type: 'toggle', checked: true, width: 36, height: 20 },
-          { id: `${id}-status-text`, type: 'text', content: 'Status', fontSize: 13, color: COLOR.textSecondary },
+          { id: `${id}-status-text`, type: 'text', content: 'Status', fontSize: 12, color: COLOR.textSecondary },
         ],
       },
       {
@@ -874,7 +874,7 @@ function tableRow(id: string): SceneNode {
 function tableHeaderCell(id: string, label: string, width: string, alignEnd = false): SceneNode {
   return {
     id, type: 'frame', width, layout: 'horizontal', ...(alignEnd ? { justifyContent: 'end' as const } : {}),
-    children: [{ id: `${id}-text`, type: 'text', content: label, fontSize: 11, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase', color: COLOR.textSecondary }],
+    children: [{ id: `${id}-text`, type: 'text', content: label, fontSize: 12, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase', color: COLOR.textSecondary }],
   };
 }
 
