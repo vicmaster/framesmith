@@ -417,11 +417,22 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-18-SPEC.md`](docs/specs/PHASE-
 
 The viewer predates Phases 12–18 + the v1.6.0 cliché expansion: it renders the *output* of all that work but exposes almost none of the *intelligence*. Bring the human review surface up to the current engine — quality, design system, import/drift, variety — all read-only.
 
-- [ ] Quality panel — fast (Chrome-free) `canvas_evaluate` on the detail page: score, category bars, issue list with `tell` badges + suggestions, click-to-highlight nodes (reuses `data-node-id`); gallery score badge
-- [ ] Design-system panel — resolved tokens as swatches / type scale / spacing / radius, with inheritance attribution (which layer each token came from)
-- [ ] Import / provenance / variety panel — `report.layout` summary, snapped/warnings, import source + drift status, project build-log/variety view (groundwork: persist the import report onto `metadata.import`)
+- [x] Quality panel — fast (Chrome-free) `canvas_evaluate` on the detail page: score, category bars, issue list with `tell` badges + suggestions, click-to-highlight nodes (reuses `data-node-id`); gallery score badge
+- [x] Design-system panel — resolved tokens as swatches / type scale / spacing / radius, with inheritance attribution (which layer each token came from)
+- [ ] _Deferred_ — Import / provenance / drift panel. The high-value piece (drift) serves a CI-style "did the build match the design?" workflow that isn't current usage; real import use is corrective snippet paste via `canvas_import_html`, where the agent already reads the report. Spec retained as a ready pickup if drift-checking becomes a workflow.
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-19-SPEC.md`](docs/specs/PHASE-19-SPEC.md)._
+_Full spec-driven breakdown in [`docs/specs/PHASE-19-SPEC.md`](docs/specs/PHASE-19-SPEC.md). Slices A + B shipped; Slice C deferred._
+
+### Phase 20 — Generative taste (pattern library + craft guidance + relentless loop)
+
+framesmith catches slop but doesn't yet proactively produce taste: from a blank canvas the agent invents layout from nothing and often lands on generic results. It has the judge half (evaluate / autofix / revise) without a strong generate half. This phase elevates the existing structures system into a vetted pattern library, adds the positive craft "do's" to complement the cliché "don'ts", and makes generate → evaluate → revise the default — so a from-scratch request produces a non-slop design without needing an external reference.
+
+- [ ] Pattern library — expand + elevate `src/structures.ts` into curated, taste-vetted page archetypes (auth, dashboard, settings, pricing, landing, data screen, onboarding), each passing the cliché/quality bar out of the box
+- [ ] Craft guidance — a "Designing with taste" section (hierarchy, type scale, spacing rhythm, focal point, restraint) on the agent surfaces, paired with the anti-slop tells
+- [ ] Relentless loop — make generate → evaluate → revise the documented default (target ≥ 90 before presenting)
+- [ ] Library quality gate — every shipped pattern regression-tested to score ≥ 90 with zero cliché tells, across ≥ 2 presets
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-20-SPEC.md`](docs/specs/PHASE-20-SPEC.md)._
 
 ---
 
