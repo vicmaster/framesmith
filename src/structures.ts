@@ -49,7 +49,7 @@ function card(
     stroke: COLOR.border,
     strokeWidth: 1,
     children: [
-      { id: `${id}-label`, type: 'text', content: label, fontSize: 18, fontWeight: 600, color: COLOR.textPrimary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 20, fontWeight: 600, color: COLOR.textPrimary },
       { id: `${id}-body`, type: 'text', content: body, fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
     ],
   };
@@ -64,7 +64,7 @@ function button(id: string, label: string, fill: string, color: string, stroke?:
     layout: 'horizontal',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: [12, 24],
+    padding: [8, 24],
     cornerRadius: 8,
     fill,
     ...(stroke ? { stroke, strokeWidth: 1 } : {}),
@@ -72,8 +72,9 @@ function button(id: string, label: string, fill: string, color: string, stroke?:
   };
 }
 
-/** A stat block — big value slot over a label (no fabricated numbers, C8). */
-function stat(id: string): SceneNode {
+/** A stat block — icon over a big value slot over a label (no fabricated
+ * numbers, C8). The icon defaults sensibly; pass one to vary across a row. */
+function stat(id: string, icon = 'activity'): SceneNode {
   return {
     id,
     type: 'frame',
@@ -88,14 +89,15 @@ function stat(id: string): SceneNode {
     stroke: COLOR.border,
     strokeWidth: 1,
     children: [
+      { id: `${id}-icon`, type: 'icon', icon, iconSize: 24, iconColor: COLOR.accent },
       { id: `${id}-value`, type: 'text', content: 'Metric — to confirm', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
       { id: `${id}-label`, type: 'text', content: 'Stat label', fontSize: 14, color: COLOR.textSecondary, textAlign: 'center' },
     ],
   };
 }
 
-/** A sidebar nav row. */
-function navItem(id: string, label: string): SceneNode {
+/** A sidebar nav row: a leading icon + label. */
+function navItem(id: string, label: string, icon = 'circle'): SceneNode {
   return {
     id,
     type: 'frame',
@@ -103,10 +105,14 @@ function navItem(id: string, label: string): SceneNode {
     width: '100%',
     layout: 'horizontal',
     alignItems: 'center',
-    padding: [8, 12],
+    gap: 8,
+    padding: [8, 16],
     cornerRadius: 8,
     fill: COLOR.bgElevated,
-    children: [{ id: `${id}-label`, type: 'text', content: label, fontSize: 14, color: COLOR.textSecondary }],
+    children: [
+      { id: `${id}-icon`, type: 'icon', icon, iconSize: 16, iconColor: COLOR.textSecondary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 14, color: COLOR.textSecondary },
+    ],
   };
 }
 
@@ -130,7 +136,7 @@ function catItem(id: string): SceneNode {
         type: 'frame',
         width: '100%',
         layout: 'vertical',
-        gap: 6,
+        gap: 8,
         padding: 16,
         children: [
           { id: `${id}-title`, type: 'text', content: 'Item title', fontSize: 16, fontWeight: 600, color: COLOR.textPrimary },
@@ -146,8 +152,19 @@ function field(id: string, label: string): SceneNode {
   return {
     id, type: 'frame', name: label, width: '100%', layout: 'vertical', gap: 8,
     children: [
-      { id: `${id}-label`, type: 'text', content: label, fontSize: 13, fontWeight: 600, color: COLOR.textSecondary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 14, fontWeight: 600, color: COLOR.textSecondary },
       { id: `${id}-input`, type: 'frame', name: 'Input', width: '100%', height: 44, cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
+    ],
+  };
+}
+
+/** A feature row: a check icon + a placeholder feature label. */
+function featureRow(id: string): SceneNode {
+  return {
+    id, type: 'frame', name: 'Feature', width: '100%', layout: 'horizontal', gap: 8, alignItems: 'center',
+    children: [
+      { id: `${id}-icon`, type: 'icon', icon: 'check', iconSize: 16, iconColor: COLOR.accent },
+      { id: `${id}-text`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
     ],
   };
 }
@@ -159,23 +176,19 @@ function tier(id: string, name: string): SceneNode {
     cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: `${id}-head`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+        id: `${id}-head`, type: 'frame', name: 'Tier head', width: '100%', layout: 'vertical', gap: 8,
         children: [
           { id: `${id}-name`, type: 'text', content: name, fontSize: 16, fontWeight: 600, color: COLOR.textSecondary },
           { id: `${id}-price`, type: 'text', content: 'Price — to confirm', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
         ],
       },
       {
-        id: `${id}-features`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
-        children: [
-          { id: `${id}-f1`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-          { id: `${id}-f2`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-          { id: `${id}-f3`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
-        ],
+        id: `${id}-features`, type: 'frame', name: 'Features', width: '100%', layout: 'vertical', gap: 8,
+        children: [featureRow(`${id}-f1`), featureRow(`${id}-f2`), featureRow(`${id}-f3`)],
       },
       {
         id: `${id}-cta`, type: 'frame', name: 'Choose plan', width: '100%', layout: 'horizontal',
-        alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+        alignItems: 'center', justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
         children: [{ id: `${id}-cta-label`, type: 'text', content: 'Choose plan', fontSize: 14, fontWeight: 600, color: COLOR.bgPrimary }],
       },
     ],
@@ -218,11 +231,11 @@ const marqueeHero: Structure = {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 24,
-      padding: [120, 48],
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         { id: 'mh-eyebrow', type: 'text', name: 'Eyebrow', content: 'Eyebrow — short label', fontSize: 14, fontWeight: 600, color: COLOR.accent, textAlign: 'center', letterSpacing: 1 },
-        { id: 'mh-headline', type: 'text', name: 'Headline', content: 'Headline', fontSize: 64, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.1, maxWidth: 880 },
+        { id: 'mh-headline', type: 'text', name: 'Headline', content: 'Headline', fontSize: 56, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.1, maxWidth: 880 },
         { id: 'mh-subhead', type: 'text', name: 'Subheadline', content: 'Body copy — one or two supporting sentences.', fontSize: 20, fontWeight: 400, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 640 },
         {
           id: 'mh-cta',
@@ -248,8 +261,8 @@ const marqueeHero: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      gap: 12,
-      padding: [72, 48],
+      gap: 8,
+      padding: [64, 48],
       fill: COLOR.bgSurface,
       children: [
         { id: 'mh-support-title', type: 'text', content: 'Supporting section', fontSize: 28, fontWeight: 600, color: COLOR.textPrimary, textAlign: 'center' },
@@ -285,7 +298,7 @@ const bentoGrid: Structure = {
           layout: 'vertical',
           gap: 8,
           children: [
-            { id: 'bn-eyebrow', type: 'text', content: 'Eyebrow — section label', fontSize: 13, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
+            { id: 'bn-eyebrow', type: 'text', content: 'Eyebrow — section label', fontSize: 14, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
             { id: 'bn-title', type: 'text', content: 'Headline', fontSize: 40, fontWeight: 700, color: COLOR.textPrimary, lineHeight: 1.2 },
           ],
         },
@@ -325,8 +338,8 @@ const statLed: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      gap: 40,
-      padding: [96, 48],
+      gap: 32,
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
@@ -351,7 +364,7 @@ const statLed: Structure = {
           gap: 24,
           responsive: 'stack',
           justifyContent: 'center',
-          children: [stat('sl-stat-1'), stat('sl-stat-2'), stat('sl-stat-3')],
+          children: [stat('sl-stat-1', 'trending-up'), stat('sl-stat-2', 'users'), stat('sl-stat-3', 'activity')],
         },
       ],
     },
@@ -373,7 +386,7 @@ const editorialLongform: Structure = {
       width: '100%',
       layout: 'vertical',
       alignItems: 'center',
-      padding: [80, 48],
+      padding: [64, 48],
       fill: COLOR.bgPrimary,
       children: [
         {
@@ -385,7 +398,7 @@ const editorialLongform: Structure = {
           layout: 'vertical',
           gap: 24,
           children: [
-            { id: 'ed-kicker', type: 'text', content: 'Eyebrow — category', fontSize: 13, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
+            { id: 'ed-kicker', type: 'text', content: 'Eyebrow — category', fontSize: 14, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
             { id: 'ed-title', type: 'text', content: 'Headline', fontSize: 44, fontWeight: 700, color: COLOR.textPrimary, lineHeight: 1.2 },
             { id: 'ed-meta', type: 'text', content: 'Byline — author · date', fontSize: 14, color: COLOR.textSecondary },
             { id: 'ed-lead', type: 'text', content: 'Lead paragraph — set up the piece in two or three sentences.', fontSize: 20, color: COLOR.textSecondary, lineHeight: 1.6 },
@@ -430,10 +443,10 @@ const splitWorkbench: Structure = {
           strokeWidth: 1,
           children: [
             { id: 'sw-brand', type: 'text', content: 'Brand', fontSize: 16, fontWeight: 700, color: COLOR.textPrimary },
-            navItem('sw-nav-1', 'Nav item'),
-            navItem('sw-nav-2', 'Nav item'),
-            navItem('sw-nav-3', 'Nav item'),
-            navItem('sw-nav-4', 'Nav item'),
+            navItem('sw-nav-1', 'Nav item', 'layout-dashboard'),
+            navItem('sw-nav-2', 'Nav item', 'folder'),
+            navItem('sw-nav-3', 'Nav item', 'users'),
+            navItem('sw-nav-4', 'Nav item', 'settings'),
           ],
         },
         {
@@ -443,7 +456,7 @@ const splitWorkbench: Structure = {
           width: 1000,
           layout: 'vertical',
           gap: 24,
-          padding: 32,
+          padding: 24,
           fill: COLOR.bgPrimary,
           children: [
             {
@@ -472,7 +485,7 @@ const splitWorkbench: Structure = {
               layout: 'vertical',
               alignItems: 'center',
               justifyContent: 'center',
-              children: [{ id: 'sw-canvas-label', type: 'text', content: 'Body copy — main work area', fontSize: 15, color: COLOR.textSecondary }],
+              children: [{ id: 'sw-canvas-label', type: 'text', content: 'Body copy — main work area', fontSize: 16, color: COLOR.textSecondary }],
             },
           ],
         },
@@ -509,8 +522,8 @@ const catalogue: Structure = {
           alignItems: 'center',
           responsive: 'stack',
           children: [
-            { id: 'cat-title', type: 'text', content: 'Headline', fontSize: 36, fontWeight: 700, color: COLOR.textPrimary },
-            { id: 'cat-filter', type: 'text', content: 'Filter — options', fontSize: 14, color: COLOR.textSecondary },
+            { id: 'cat-title', type: 'text', content: 'Headline', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
+            { id: 'cat-filter', type: 'text', content: 'Filter — options', fontSize: 16, color: COLOR.textSecondary },
           ],
         },
         {
@@ -548,15 +561,15 @@ const dashboard: Structure = {
           gap: 8, padding: 24, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
           children: [
             { id: 'db-brand', type: 'text', content: 'Brand', fontSize: 16, fontWeight: 700, color: COLOR.textPrimary },
-            navItem('db-nav-1', 'Overview'),
-            navItem('db-nav-2', 'Nav item'),
-            navItem('db-nav-3', 'Nav item'),
-            navItem('db-nav-4', 'Nav item'),
+            navItem('db-nav-1', 'Overview', 'layout-dashboard'),
+            navItem('db-nav-2', 'Nav item', 'users'),
+            navItem('db-nav-3', 'Nav item', 'folder'),
+            navItem('db-nav-4', 'Nav item', 'settings'),
           ],
         },
         {
           id: 'db-main', type: 'frame', name: 'Main', width: 1160, layout: 'vertical',
-          gap: 24, padding: 32, fill: COLOR.bgPrimary,
+          gap: 24, padding: 24, fill: COLOR.bgPrimary,
           children: [
             {
               id: 'db-topbar', type: 'frame', name: 'Topbar', width: '100%', layout: 'horizontal',
@@ -569,7 +582,7 @@ const dashboard: Structure = {
             {
               id: 'db-stats', type: 'frame', name: 'Stat row', width: '100%', layout: 'horizontal',
               gap: 24, responsive: 'wrap', wrap: true,
-              children: [stat('db-stat-1'), stat('db-stat-2'), stat('db-stat-3')],
+              children: [stat('db-stat-1', 'trending-up'), stat('db-stat-2', 'users'), stat('db-stat-3', 'activity')],
             },
             {
               id: 'db-content', type: 'frame', name: 'Content', width: '100%', layout: 'horizontal',
@@ -635,7 +648,7 @@ const auth: Structure = {
             },
             {
               id: 'au-submit', type: 'frame', name: 'Submit', width: '100%', layout: 'horizontal',
-              alignItems: 'center', justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+              alignItems: 'center', justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
               children: [{ id: 'au-submit-label', type: 'text', content: 'Continue', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
             },
             { id: 'au-alt', type: 'text', content: 'Secondary link', fontSize: 14, fontWeight: 500, color: COLOR.accent, textAlign: 'center' },
@@ -659,7 +672,7 @@ const pricing: Structure = {
       alignItems: 'center', gap: 48, padding: 48, fill: COLOR.bgPrimary,
       children: [
         {
-          id: 'pr-head', type: 'frame', width: '100%', layout: 'vertical', gap: 16, alignItems: 'center',
+          id: 'pr-head', type: 'frame', name: 'Header', width: '100%', layout: 'vertical', gap: 16, alignItems: 'center',
           children: [
             { id: 'pr-title', type: 'text', content: 'Pricing', fontSize: 40, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.2 },
             { id: 'pr-sub', type: 'text', content: 'Body copy — one supporting line about the plans.', fontSize: 16, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 560 },
@@ -691,7 +704,7 @@ const settings: Structure = {
           children: [
             { id: 'st-title', type: 'text', content: 'Settings', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary },
             {
-              id: 'st-card', type: 'frame', name: 'Card', width: '100%', layout: 'vertical', gap: 0,
+              id: 'st-card', type: 'frame', name: 'Card', width: '100%', layout: 'vertical',
               cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
               children: [
                 settingsRow('st-row-1', true),
@@ -720,12 +733,17 @@ const onboarding: Structure = {
       id: 'ob-page', type: 'frame', name: 'Page', width: '100%', layout: 'vertical',
       alignItems: 'center', justifyContent: 'center', gap: 16, padding: 48, fill: COLOR.bgPrimary,
       children: [
-        { id: 'ob-glyph', type: 'frame', name: 'Glyph', width: 64, height: 64, cornerRadius: 16, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
+        {
+          id: 'ob-glyph', type: 'frame', name: 'Glyph', width: 64, height: 64, cornerRadius: 16,
+          fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+          layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+          children: [{ id: 'ob-glyph-icon', type: 'icon', icon: 'sparkles', iconSize: 28, iconColor: COLOR.accent }],
+        },
         { id: 'ob-title', type: 'text', content: 'Get started', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
-        { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 15, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
+        { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 16, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
         {
           id: 'ob-cta', type: 'frame', name: 'Primary action', layout: 'horizontal', alignItems: 'center',
-          justifyContent: 'center', padding: [12, 24], cornerRadius: 8, fill: COLOR.accent,
+          justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
           children: [{ id: 'ob-cta-label', type: 'text', content: 'Primary action', fontSize: 16, fontWeight: 600, color: COLOR.bgPrimary }],
         },
       ],
@@ -743,13 +761,13 @@ const formField: Structure = {
   kind: 'component',
   description: 'A labeled form field: label, input box, and help text. Stamp once per field; set the label/help via the returned id map.',
   nodes: [{
-    id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 6,
+    id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: 8,
     children: [
-      { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 13, fontWeight: 600, color: COLOR.textPrimary },
+      { id: 'ff-label', type: 'text', content: 'Field label', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
       {
-        id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 40, layout: 'horizontal', alignItems: 'center',
-        padding: [10, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
-        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 14, color: COLOR.textSecondary }],
+        id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 44, layout: 'horizontal', alignItems: 'center',
+        padding: [8, 16], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: 16, color: COLOR.textSecondary }],
       },
       { id: 'ff-help', type: 'text', content: 'Help text — to confirm', fontSize: 12, color: COLOR.textSecondary },
     ],
@@ -762,11 +780,11 @@ const toggleRow: Structure = {
   description: 'A settings row: label + description on the left, a toggle on the right. The workhorse of preference screens.',
   nodes: [{
     id: 'tr', type: 'frame', name: 'Toggle row', width: '100%', layout: 'horizontal', alignItems: 'center',
-    justifyContent: 'space-between', gap: 16, padding: [12, 16], cornerRadius: 10,
+    justifyContent: 'space-between', gap: 16, padding: [8, 16], cornerRadius: 10,
     fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: 'tr-copy', type: 'frame', layout: 'vertical', gap: 2,
+        id: 'tr-copy', type: 'frame', name: 'Copy', layout: 'vertical', gap: 4,
         children: [
           { id: 'tr-label', type: 'text', content: 'Setting label', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
           { id: 'tr-desc', type: 'text', content: 'Setting description — to confirm', fontSize: 12, color: COLOR.textSecondary },
@@ -794,7 +812,7 @@ const toolbar: Structure = {
     children: [
       {
         id: 'tb-search', type: 'frame', name: 'Search', width: 280, height: 36, layout: 'horizontal', alignItems: 'center',
-        gap: 8, padding: [8, 12], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
+        gap: 8, padding: [8, 16], cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
         children: [
           { id: 'tb-search-icon', type: 'icon', icon: 'search', iconSize: 16, iconColor: COLOR.textSecondary },
           { id: 'tb-search-text', type: 'text', content: 'Search — to confirm', fontSize: 13, color: COLOR.textSecondary },
@@ -804,7 +822,7 @@ const toolbar: Structure = {
         id: 'tb-actions', type: 'frame', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           button('tb-filter', 'Filter', COLOR.bgElevated, COLOR.textPrimary, COLOR.border),
-          button('tb-primary', 'Primary action', COLOR.accent, COLOR.textPrimary),
+          button('tb-primary', 'Primary action', COLOR.accent, COLOR.bgPrimary),
         ],
       },
     ],
@@ -815,14 +833,14 @@ const toolbar: Structure = {
 function tableRow(id: string): SceneNode {
   return {
     id, type: 'frame', name: 'Row', width: '100%', layout: 'horizontal', alignItems: 'center',
-    padding: [12, 16], gap: 16, stroke: COLOR.border, strokeWidth: 1,
+    padding: [8, 16], gap: 16, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: `${id}-identity`, type: 'frame', width: '40%', layout: 'horizontal', alignItems: 'center', gap: 12,
+        id: `${id}-identity`, type: 'frame', width: '40%', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           { id: `${id}-avatar`, type: 'ellipse', width: 32, height: 32, fill: COLOR.bgElevated },
           {
-            id: `${id}-id-copy`, type: 'frame', layout: 'vertical', gap: 2,
+            id: `${id}-id-copy`, type: 'frame', name: 'Identity', layout: 'vertical', gap: 4,
             children: [
               { id: `${id}-name`, type: 'text', content: 'Name — to confirm', fontSize: 14, fontWeight: 600, color: COLOR.textPrimary },
               { id: `${id}-email`, type: 'text', content: 'email — to confirm', fontSize: 12, color: COLOR.textSecondary },
@@ -833,7 +851,7 @@ function tableRow(id: string): SceneNode {
       {
         id: `${id}-role`, type: 'frame', width: '20%', layout: 'horizontal',
         children: [{
-          id: `${id}-role-chip`, type: 'frame', layout: 'horizontal', alignItems: 'center', padding: [4, 10],
+          id: `${id}-role-chip`, type: 'frame', layout: 'horizontal', alignItems: 'center', padding: [4, 8],
           cornerRadius: 999, fill: COLOR.bgElevated,
           children: [{ id: `${id}-role-text`, type: 'text', content: 'Role', fontSize: 12, color: COLOR.textSecondary }],
         }],
@@ -842,7 +860,7 @@ function tableRow(id: string): SceneNode {
         id: `${id}-status`, type: 'frame', width: '25%', layout: 'horizontal', alignItems: 'center', gap: 8,
         children: [
           { id: `${id}-status-toggle`, type: 'toggle', checked: true, width: 36, height: 20 },
-          { id: `${id}-status-text`, type: 'text', content: 'Status', fontSize: 13, color: COLOR.textSecondary },
+          { id: `${id}-status-text`, type: 'text', content: 'Status', fontSize: 12, color: COLOR.textSecondary },
         ],
       },
       {
@@ -856,7 +874,7 @@ function tableRow(id: string): SceneNode {
 function tableHeaderCell(id: string, label: string, width: string, alignEnd = false): SceneNode {
   return {
     id, type: 'frame', width, layout: 'horizontal', ...(alignEnd ? { justifyContent: 'end' as const } : {}),
-    children: [{ id: `${id}-text`, type: 'text', content: label, fontSize: 11, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase', color: COLOR.textSecondary }],
+    children: [{ id: `${id}-text`, type: 'text', content: label, fontSize: 12, fontWeight: 600, letterSpacing: 0.6, textTransform: 'uppercase', color: COLOR.textSecondary }],
   };
 }
 
@@ -870,7 +888,7 @@ const dataTable: Structure = {
     children: [
       {
         id: 'dt-header', type: 'frame', name: 'Header', width: '100%', layout: 'horizontal', alignItems: 'center',
-        padding: [10, 16], gap: 16, fill: COLOR.bgElevated,
+        padding: [8, 16], gap: 16, fill: COLOR.bgElevated,
         children: [
           tableHeaderCell('dt-h-identity', 'Name', '40%'),
           tableHeaderCell('dt-h-role', 'Role', '20%'),
