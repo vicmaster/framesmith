@@ -168,7 +168,7 @@ Practical notes:
 
 - **`cliche` is advisory** — tells are `warning`/`info`, never a hard error; they dent the score, they don't block.
 - **`canvas_autofix` fixes the mechanical ones** — it swaps a *known-default* purple accent, deletes a fake-chrome strip, and softens pure black (`#000000`) ink to off-black. Gradient/glow, the hanging header, fabricated copy, eyebrow rhythm, slop copy, mixed radius systems, and competing accents carry a suggestion but no op (taste/judgment calls).
-- **Genre relaxes intentional tells** — pass `genre` (or stamp a preset via provenance) so a style that legitimately uses a tell isn't nagged. Today `genre: "material"` allows purple.
+- **Genre relaxes intentional tells** — pass `genre` (or stamp a preset via provenance) so a style that legitimately uses a tell isn't nagged. Today `genre: "material"` allows the purple accent **and** white elevated surfaces (both are intentional in Material Design).
 
 ## Sharp edges
 
