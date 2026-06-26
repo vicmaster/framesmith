@@ -49,7 +49,7 @@ function card(
     stroke: COLOR.border,
     strokeWidth: 1,
     children: [
-      { id: `${id}-label`, type: 'text', content: label, fontSize: 18, fontWeight: 600, color: COLOR.textPrimary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 20, fontWeight: 600, color: COLOR.textPrimary },
       { id: `${id}-body`, type: 'text', content: body, fontSize: 14, color: COLOR.textSecondary, lineHeight: 1.5 },
     ],
   };
@@ -152,7 +152,7 @@ function field(id: string, label: string): SceneNode {
   return {
     id, type: 'frame', name: label, width: '100%', layout: 'vertical', gap: 8,
     children: [
-      { id: `${id}-label`, type: 'text', content: label, fontSize: 13, fontWeight: 600, color: COLOR.textSecondary },
+      { id: `${id}-label`, type: 'text', content: label, fontSize: 14, fontWeight: 600, color: COLOR.textSecondary },
       { id: `${id}-input`, type: 'frame', name: 'Input', width: '100%', height: 44, cornerRadius: 8, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1 },
     ],
   };
@@ -161,7 +161,7 @@ function field(id: string, label: string): SceneNode {
 /** A feature row: a check icon + a placeholder feature label. */
 function featureRow(id: string): SceneNode {
   return {
-    id, type: 'frame', width: '100%', layout: 'horizontal', gap: 8, alignItems: 'center',
+    id, type: 'frame', name: 'Feature', width: '100%', layout: 'horizontal', gap: 8, alignItems: 'center',
     children: [
       { id: `${id}-icon`, type: 'icon', icon: 'check', iconSize: 16, iconColor: COLOR.accent },
       { id: `${id}-text`, type: 'text', content: 'Feature — to confirm', fontSize: 14, color: COLOR.textSecondary },
@@ -176,14 +176,14 @@ function tier(id: string, name: string): SceneNode {
     cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
     children: [
       {
-        id: `${id}-head`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+        id: `${id}-head`, type: 'frame', name: 'Tier head', width: '100%', layout: 'vertical', gap: 8,
         children: [
           { id: `${id}-name`, type: 'text', content: name, fontSize: 16, fontWeight: 600, color: COLOR.textSecondary },
           { id: `${id}-price`, type: 'text', content: 'Price — to confirm', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
         ],
       },
       {
-        id: `${id}-features`, type: 'frame', width: '100%', layout: 'vertical', gap: 8,
+        id: `${id}-features`, type: 'frame', name: 'Features', width: '100%', layout: 'vertical', gap: 8,
         children: [featureRow(`${id}-f1`), featureRow(`${id}-f2`), featureRow(`${id}-f3`)],
       },
       {
@@ -262,7 +262,7 @@ const marqueeHero: Structure = {
       layout: 'vertical',
       alignItems: 'center',
       gap: 8,
-      padding: [72, 48],
+      padding: [64, 48],
       fill: COLOR.bgSurface,
       children: [
         { id: 'mh-support-title', type: 'text', content: 'Supporting section', fontSize: 28, fontWeight: 600, color: COLOR.textPrimary, textAlign: 'center' },
@@ -298,7 +298,7 @@ const bentoGrid: Structure = {
           layout: 'vertical',
           gap: 8,
           children: [
-            { id: 'bn-eyebrow', type: 'text', content: 'Eyebrow — section label', fontSize: 13, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
+            { id: 'bn-eyebrow', type: 'text', content: 'Eyebrow — section label', fontSize: 14, fontWeight: 600, color: COLOR.accent, letterSpacing: 1 },
             { id: 'bn-title', type: 'text', content: 'Headline', fontSize: 40, fontWeight: 700, color: COLOR.textPrimary, lineHeight: 1.2 },
           ],
         },
@@ -456,7 +456,7 @@ const splitWorkbench: Structure = {
           width: 1000,
           layout: 'vertical',
           gap: 24,
-          padding: 32,
+          padding: 24,
           fill: COLOR.bgPrimary,
           children: [
             {
@@ -523,7 +523,7 @@ const catalogue: Structure = {
           responsive: 'stack',
           children: [
             { id: 'cat-title', type: 'text', content: 'Headline', fontSize: 32, fontWeight: 700, color: COLOR.textPrimary },
-            { id: 'cat-filter', type: 'text', content: 'Filter — options', fontSize: 14, color: COLOR.textSecondary },
+            { id: 'cat-filter', type: 'text', content: 'Filter — options', fontSize: 16, color: COLOR.textSecondary },
           ],
         },
         {
@@ -569,7 +569,7 @@ const dashboard: Structure = {
         },
         {
           id: 'db-main', type: 'frame', name: 'Main', width: 1160, layout: 'vertical',
-          gap: 24, padding: 32, fill: COLOR.bgPrimary,
+          gap: 24, padding: 24, fill: COLOR.bgPrimary,
           children: [
             {
               id: 'db-topbar', type: 'frame', name: 'Topbar', width: '100%', layout: 'horizontal',
@@ -672,7 +672,7 @@ const pricing: Structure = {
       alignItems: 'center', gap: 48, padding: 48, fill: COLOR.bgPrimary,
       children: [
         {
-          id: 'pr-head', type: 'frame', width: '100%', layout: 'vertical', gap: 16, alignItems: 'center',
+          id: 'pr-head', type: 'frame', name: 'Header', width: '100%', layout: 'vertical', gap: 16, alignItems: 'center',
           children: [
             { id: 'pr-title', type: 'text', content: 'Pricing', fontSize: 40, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', lineHeight: 1.2 },
             { id: 'pr-sub', type: 'text', content: 'Body copy — one supporting line about the plans.', fontSize: 16, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 560 },
@@ -704,7 +704,7 @@ const settings: Structure = {
           children: [
             { id: 'st-title', type: 'text', content: 'Settings', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary },
             {
-              id: 'st-card', type: 'frame', name: 'Card', width: '100%', layout: 'vertical', gap: 0,
+              id: 'st-card', type: 'frame', name: 'Card', width: '100%', layout: 'vertical',
               cornerRadius: 16, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
               children: [
                 settingsRow('st-row-1', true),
@@ -740,7 +740,7 @@ const onboarding: Structure = {
           children: [{ id: 'ob-glyph-icon', type: 'icon', icon: 'sparkles', iconSize: 28, iconColor: COLOR.accent }],
         },
         { id: 'ob-title', type: 'text', content: 'Get started', fontSize: 28, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
-        { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 15, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
+        { id: 'ob-body', type: 'text', content: 'Body copy — explain the empty state and the next step in a sentence.', fontSize: 16, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 420 },
         {
           id: 'ob-cta', type: 'frame', name: 'Primary action', layout: 'horizontal', alignItems: 'center',
           justifyContent: 'center', padding: [8, 24], cornerRadius: 8, fill: COLOR.accent,
