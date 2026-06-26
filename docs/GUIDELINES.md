@@ -149,6 +149,20 @@ Practical notes:
 - **`screenshot_responsive`** renders the same scene at mobile / tablet / desktop. Inspect all three; if `responsive` hints are set correctly the mobile layout will look right with no extra work.
 - **`snapshot_layout`** returns computed bounding boxes — useful for asserting alignment or detecting overflow programmatically.
 
+## Designing with taste
+
+The bar is "designers say *wow*," not "competent." The cliché tells below are the *don'ts*; these are the *do's*. Apply them up front — the evaluator is the safety net, not the plan.
+
+- **Start from a pattern, don't start blank.** `list_structures` → `apply_structure` stamps a taste-vetted page scaffold (every one is regression-tested to ≥ 90 with zero cliché tells across themes). Adapt it — swap copy, set `$tokens`, vary the structure — rather than inventing layout from nothing. A blank canvas is where slop comes from.
+- **One focal point per screen.** Decide what the eye hits first (usually the headline or the primary action) and make everything else quieter. Two competing focal points = no focal point.
+- **Build real hierarchy.** Size, weight, and color should encode importance in steps you can see — a display heading, a clearly smaller subhead, body, then muted captions. Avoid near-equal sizes (a 16→15→14 ramp reads as one blurry tier); aim for ~1.2–1.6× jumps.
+- **Keep one type scale and one spacing scale.** Pick a small set of sizes and a spacing rhythm (e.g. 8 / 16 / 24 / 32 / 48) and reuse them. Off-scale one-offs are the most common craft tell.
+- **Let it breathe.** Generous, consistent padding and whitespace read as designed; cramped, uneven spacing reads as machine-filled. Restraint beats density.
+- **One accent, flat color, no effects.** A single accent hue plus neutrals. Flat `$surface` fills over gradients; a subtle near-black shadow over any glow. Off-black/off-white over pure `#000`/`#fff`.
+- **Honest content.** Labeled placeholders (`"Metric — to confirm"`) over invented numbers, names, or logos.
+
+**The loop is part of designing, not an afterthought:** generate → `canvas_evaluate` → fix (or `canvas_autofix` / `canvas_revise`) → repeat **until the score clears ≥ 90 with no cliché tells, before you present the design.** Don't ship the first attempt; ship the one that passes the bar.
+
 ## Cliché & craft
 
 `canvas_evaluate` scores craft (contrast, scale, structure) **and** a `cliche` category — the visual tells that read as machine-made. The bar is "designers say *wow*," not "competent": flat color and restraint beat effects. Steer away from these *before* you draw; the evaluator is the safety net, not the plan.

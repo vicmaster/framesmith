@@ -427,12 +427,12 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-19-SPEC.md`](docs/specs/PHASE-
 
 framesmith catches slop but doesn't yet proactively produce taste: from a blank canvas the agent invents layout from nothing and often lands on generic results. It has the judge half (evaluate / autofix / revise) without a strong generate half. This phase elevates the existing structures system into a vetted pattern library, adds the positive craft "do's" to complement the cliché "don'ts", and makes generate → evaluate → revise the default — so a from-scratch request produces a non-slop design without needing an external reference.
 
-- [ ] Pattern library — expand + elevate `src/structures.ts` into curated, taste-vetted page archetypes (auth, dashboard, settings, pricing, landing, data screen, onboarding), each passing the cliché/quality bar out of the box
-- [ ] Craft guidance — a "Designing with taste" section (hierarchy, type scale, spacing rhythm, focal point, restraint) on the agent surfaces, paired with the anti-slop tells
-- [ ] Relentless loop — make generate → evaluate → revise the documented default (target ≥ 90 before presenting)
-- [ ] Library quality gate — every shipped pattern regression-tested to score ≥ 90 with zero cliché tells, across ≥ 2 presets
+- [x] Pattern library — expanded `src/structures.ts` to 11 vetted page archetypes (added dashboard, auth, pricing, settings, onboarding; landing≈marquee-hero, data-screen≈split-workbench/catalogue) + elevated the existing ones to the bar
+- [x] Craft guidance — a "Designing with taste" section (focal point, hierarchy, type + spacing scale, restraint, pattern-first) on the agent surfaces (GUIDELINES + INSTRUCTIONS + cheatsheet), paired with the anti-slop tells
+- [x] Relentless loop — the core loop on every agent surface now reads generate → evaluate → fix/revise → repeat until ≥ 90 with no cliché tells before presenting
+- [x] Library quality gate — `test-patterns.ts`: every page structure regression-tested to ≥ 90 with zero cliché tells across all 5 presets (default/dark/light/material/minimal)
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-20-SPEC.md`](docs/specs/PHASE-20-SPEC.md)._
+_Full spec-driven breakdown in [`docs/specs/PHASE-20-SPEC.md`](docs/specs/PHASE-20-SPEC.md). Built across PRs; Slices A (library + gate) and B/D (guidance + loop) shipped._
 
 ---
 

@@ -41,13 +41,13 @@ Organizing model — Workspace > Project > Canvas:
 
 Design tokens are a layered system (workspace > project > canvas). Reference them in node properties with $name (e.g. fill: "$surface"); set them with workspace_/project_/set_variables. Lower layers override higher ones — author tokens once at the workspace and inherit down.
 
-Core loop: design at one target width (referencing $tokens) → screenshot → review → iterate → canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing/contrast fixes.
+Core loop: start from a taste-vetted pattern (list_structures → apply_structure) rather than a blank canvas → adapt at one target width (referencing $tokens) → screenshot → review → canvas_evaluate → fix (canvas_autofix for mechanical spacing/contrast, canvas_revise for the rest) → repeat until the score clears ≥ 90 with no cliché tells BEFORE presenting. Don't ship the first attempt; ship the one that passes the bar. The "Designing with taste" section of the guidelines covers the do's (one focal point, real hierarchy, one type + spacing scale, restraint); the cliche category catches the don'ts.
 
 Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content. Input controls (toggle / checkbox / radio / select) are real node types ({ type: "toggle", checked: true }) styled from design tokens — never fake a control from frames + ellipses.
 
 Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
 
-Structures come in two kinds (list_structures): page scaffolds stamp once at the root; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
+Structures come in two kinds (list_structures): page scaffolds (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue, dashboard, auth, pricing, settings, onboarding) stamp once at the root — each is taste-vetted (≥ 90, zero cliché tells) so it's a non-slop starting point to ADAPT, not boilerplate; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
@@ -66,10 +66,11 @@ const server = new McpServer({
  * with the prose in INSTRUCTIONS so an agent gets the same orientation whether
  * it reads the connect-time instructions or calls init. */
 const WORKFLOW_CHEATSHEET = [
-  'Read the framesmith://guidelines resource before drawing.',
+  'Start from a taste-vetted pattern: list_structures → apply_structure, then ADAPT it — don\'t start from a blank canvas.',
+  'Read the framesmith://guidelines resource before drawing (esp. "Designing with taste": one focal point, real hierarchy, one type + spacing scale, restraint).',
   'Author at one target width; reference tokens with $name (e.g. fill: "$surface").',
   'screenshot → review the render → iterate.',
-  'canvas_evaluate (aim ≥ 90) → canvas_autofix for mechanical spacing / contrast fixes.',
+  'canvas_evaluate → canvas_autofix (mechanical) / canvas_revise → repeat until ≥ 90 with no cliché tells, before presenting.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
 ];
 
