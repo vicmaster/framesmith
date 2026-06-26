@@ -29,6 +29,13 @@ async function main() {
 page=I("document", { type:"frame", width:1200, layout:"vertical", gap:24, padding:48, fill:"#0F172A" })
 I(page, { type:"text", content:"Elevate your workflow", fontSize:32, color:"#000000" })
 I(page, { type:"text", content:"A short honest description.", fontSize:16, color:"#CBD5E1" })`);
+  // Canvas-level design tokens so the Design-system pane has content to render.
+  c.variables = {
+    colors: { primary: '#2563EB', surface: '#0F172A' },
+    spacing: { md: 16 },
+    radius: { md: 8 },
+    typography: { h1: { fontSize: 32, fontWeight: 700 } },
+  };
   const html = await renderDetailPage(c, 3001);
 
   assert(html.includes('class="inspector"'), 'detail page includes the inspector panel');
@@ -40,6 +47,14 @@ I(page, { type:"text", content:"A short honest description.", fontSize:16, color
   assert(html.includes('data-issue-node='), 'issues wire data-issue-node for click-to-highlight');
   assert(html.includes('function highlightNode'), 'the highlight script is present');
   assert(html.includes('data-node-id'), 'the highlight script targets data-node-id in the render');
+
+  console.log('\n── detail page: design-system pane ──');
+  assert(html.includes('data-tab="design"'), 'the Design system tab is present and switchable');
+  assert(html.includes('data-pane="design"'), 'the design-system pane is rendered');
+  assert(html.includes('ds-chip'), 'colors render as swatches');
+  assert(html.includes('>primary<'), 'a color token name is shown');
+  assert(html.includes('from canvas'), 'attribution labels the dominant token layer');
+  assert(html.includes('ds-sp-bar') && html.includes('ds-rad-tile'), 'spacing bars and radius tiles render');
 
   console.log('\n── empty canvas: no panel ──');
   const empty = createCanvas('empty-fixture');

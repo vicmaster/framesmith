@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas } from './scene-graph.js';
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
-import { getProject, listProjects, listWorkspaces, getCanvasTokens } from './workspaces.js';
+import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDesignSystem, getWorkspaceDesignSystem } from './workspaces.js';
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
 import { evaluateCanvas, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
@@ -753,7 +753,134 @@ function renderIssueCard(issue: EvaluationIssue): string {
     </div>`;
 }
 
-function renderInspector(ev: EvaluationResult): string {
+/* ── Phase 19 Slice B — Design-system panel ───────────────────────────────
+ * Resolves the canvas's effective tokens (the merged workspace▸project▸canvas
+ * chain) and shows them as swatches / type scale / spacing / radius. Each token
+ * is attributed to the layer it resolved from; only OVERRIDES of the dominant
+ * layer are tagged (the section header states the default), keeping it clean. */
+type TokenLayer = 'canvas' | 'project' | 'workspace' | 'default';
+
+function mostCommon(layers: TokenLayer[]): TokenLayer {
+  const tally = new Map<TokenLayer, number>();
+  for (const l of layers) tally.set(l, (tally.get(l) ?? 0) + 1);
+  let best: TokenLayer = 'default'; let n = -1;
+  for (const [l, c] of tally) if (c > n) { best = l; n = c; }
+  return best;
+}
+
+function renderDesignSystem(canvas: Canvas): string {
+  const tokens = getCanvasTokens(canvas);
+  const project = getProject(canvas.projectId);
+  const projectDS = project ? getProjectDesignSystem(project.id) : undefined;
+  const workspaceDS = project ? getWorkspaceDesignSystem(project.workspaceId) : undefined;
+
+  const has = (ds: unknown, cat: string, name: string): boolean => {
+    const m = ds && (ds as Record<string, unknown>)[cat];
+    return !!m && Object.prototype.hasOwnProperty.call(m, name);
+  };
+  const sourceOf = (cat: string, name: string): TokenLayer => {
+    if (has(canvas.variables, cat, name)) return 'canvas';
+    if (has(projectDS, cat, name)) return 'project';
+    if (has(workspaceDS, cat, name)) return 'workspace';
+    return 'default';
+  };
+
+  const cats = ['colors', 'spacing', 'radius', 'typography'] as const;
+  const allSources: TokenLayer[] = [];
+  for (const cat of cats) {
+    const m = (tokens as Record<string, unknown>)[cat] as Record<string, unknown> | undefined;
+    if (m) for (const n of Object.keys(m)) allSources.push(sourceOf(cat, n));
+  }
+  if (allSources.length === 0) {
+    return `
+  <div class="insp-tabpane" data-pane="design" hidden>
+    <div class="insp-section"><div class="insp-clean">This canvas inherits no design tokens. Set them with set_variables or bind a design system.</div></div>
+  </div>`;
+  }
+  const dominant = mostCommon(allSources);
+  const defaultLabel = dominant === 'default' ? 'defaults' : `from ${dominant}`;
+  const tag = (cat: string, name: string): string => {
+    const s = sourceOf(cat, name);
+    return s === dominant ? '' : ` <span class="ds-src ds-src--${s}">${s}</span>`;
+  };
+  const sectionLabel = (title: string): string =>
+    `<div class="insp-section-head"><span class="insp-section-label">${title}</span><span class="ds-default">${defaultLabel}</span></div>`;
+
+  const colors = (tokens.colors ?? {}) as Record<string, string>;
+  const colorEntries = Object.entries(colors);
+  const colorSec = colorEntries.length ? `
+    <div class="insp-section">
+      ${sectionLabel('Colors')}
+      <div class="ds-swatches">
+        ${colorEntries.map(([name, hex]) => `
+          <div class="ds-swatch">
+            <div class="ds-chip" style="background:${esc(String(hex))}"></div>
+            <div class="ds-swatch-meta">
+              <span class="ds-name">${esc(name)}${tag('colors', name)}</span>
+              <span class="ds-hex">${esc(String(hex))}</span>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const typo = (tokens.typography ?? {}) as Record<string, { fontSize?: number; fontWeight?: number | string }>;
+  const typoEntries = Object.entries(typo);
+  const typeSec = typoEntries.length ? `
+    <div class="insp-divider"></div>
+    <div class="insp-section">
+      ${sectionLabel('Type scale')}
+      ${typoEntries.map(([name, t]) => {
+        const size = Number(t.fontSize ?? 14);
+        const weight = t.fontWeight ?? 400;
+        const disp = Math.min(Number.isFinite(size) ? size : 14, 30);
+        return `<div class="ds-type">
+          <span class="ds-type-sample" style="font-size:${disp}px;font-weight:${esc(String(weight))}">${esc(name)}</span>
+          <span class="ds-type-meta">${esc(String(t.fontSize ?? '—'))}/${esc(String(weight))}${tag('typography', name)}</span>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  const spacing = (tokens.spacing ?? {}) as Record<string, number>;
+  const spacingEntries = Object.entries(spacing);
+  const maxSp = Math.max(1, ...spacingEntries.map(([, v]) => Number(v)).filter((n) => Number.isFinite(n)));
+  const spaceSec = spacingEntries.length ? `
+    <div class="insp-divider"></div>
+    <div class="insp-section">
+      ${sectionLabel('Spacing')}
+      ${spacingEntries.map(([name, val]) => {
+        const w = Math.max(6, Math.round((Number(val) / maxSp) * 120));
+        return `<div class="ds-sp">
+          <span class="ds-sp-name">${esc(name)}${tag('spacing', name)}</span>
+          <span class="ds-sp-bar" style="width:${w}px"></span>
+          <span class="ds-sp-val">${esc(String(val))}</span>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
+  const radius = (tokens.radius ?? {}) as Record<string, number>;
+  const radiusEntries = Object.entries(radius);
+  const radiusSec = radiusEntries.length ? `
+    <div class="insp-divider"></div>
+    <div class="insp-section">
+      ${sectionLabel('Radius')}
+      <div class="ds-radii">
+        ${radiusEntries.map(([name, val]) => {
+          const r = Math.min(Math.max(0, Number(val) || 0), 22);
+          return `<div class="ds-rad">
+            <div class="ds-rad-tile" style="border-radius:${r}px"></div>
+            <span class="ds-rad-label">${esc(name)} · ${esc(String(val))}${tag('radius', name)}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  return `
+  <div class="insp-tabpane" data-pane="design" hidden>
+    ${colorSec}${typeSec}${spaceSec}${radiusSec}
+  </div>`;
+}
+
+function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
   const grade = gradeFor(ev.overallScore);
   const cats = ev.categories.map((c) => `
       <div class="insp-cat">
@@ -767,27 +894,30 @@ function renderInspector(ev: EvaluationResult): string {
   return `
   <aside class="inspector" id="inspector">
     <div class="insp-tabs">
-      <span class="insp-tab active">Quality</span>
-      <span class="insp-tab disabled" title="Coming in Phase 19 Slice B">Design system</span>
+      <span class="insp-tab active" data-tab="quality">Quality</span>
+      <span class="insp-tab" data-tab="design">Design system</span>
       <span class="insp-tab disabled" title="Coming in Phase 19 Slice C">Import</span>
     </div>
-    <div class="insp-score">
-      <div class="insp-score-row">
-        <div class="insp-score-num">${ev.overallScore}<span>/100</span></div>
-        <span class="insp-grade${grade.warn ? ' warn' : ''}">${grade.label}</span>
+    <div class="insp-tabpane" data-pane="quality">
+      <div class="insp-score">
+        <div class="insp-score-row">
+          <div class="insp-score-num">${ev.overallScore}<span>/100</span></div>
+          <span class="insp-grade${grade.warn ? ' warn' : ''}">${grade.label}</span>
+        </div>
+        <div class="insp-track"><div class="insp-fill" style="width:${ev.overallScore}%;background:${scoreColor(ev.overallScore)}"></div></div>
       </div>
-      <div class="insp-track"><div class="insp-fill" style="width:${ev.overallScore}%;background:${scoreColor(ev.overallScore)}"></div></div>
+      <div class="insp-divider"></div>
+      <div class="insp-section">
+        <div class="insp-section-label">Categories</div>
+        ${cats}
+      </div>
+      <div class="insp-divider"></div>
+      <div class="insp-section">
+        <div class="insp-section-head"><span class="insp-section-label">Issues</span><span class="insp-count">${ev.issues.length}</span></div>
+        ${issues}
+      </div>
     </div>
-    <div class="insp-divider"></div>
-    <div class="insp-section">
-      <div class="insp-section-label">Categories</div>
-      ${cats}
-    </div>
-    <div class="insp-divider"></div>
-    <div class="insp-section">
-      <div class="insp-section-head"><span class="insp-section-label">Issues</span><span class="insp-count">${ev.issues.length}</span></div>
-      ${issues}
-    </div>
+    ${renderDesignSystem(canvas)}
   </aside>`;
 }
 
@@ -820,7 +950,7 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
 
   // Phase 19 Slice A — heuristic quality inspector (fast, Chrome-free, read-only).
   const ev = await evalFor(canvas);
-  const inspectorHtml = ev ? renderInspector(ev) : '';
+  const inspectorHtml = ev ? renderInspector(ev, canvas) : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -910,6 +1040,32 @@ ${FAVICON_HTML}
   .insp-msg { font-size: 12px; font-weight: 500; color: var(--text-primary); line-height: 1.45; }
   .insp-sug { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; }
   .insp-clean { font-size: 12px; color: var(--text-tertiary); padding: 4px 0; }
+  /* Design-system pane (Phase 19 Slice B) */
+  .insp-tab[data-tab] { cursor: pointer; }
+  .insp-tabpane[hidden] { display: none; }
+  .ds-default { font-size: 10px; font-weight: 500; color: var(--text-muted); }
+  .ds-src { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 1px 5px; border-radius: 4px; }
+  .ds-src--canvas { color: var(--accent-soft); background: var(--accent-tint); }
+  .ds-src--project { color: #9dc0ef; background: rgba(59,130,246,0.14); }
+  .ds-src--workspace { color: var(--text-tertiary); background: var(--surface-elevated); }
+  .ds-src--default { color: var(--text-muted); background: var(--surface-elevated); }
+  .ds-swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ds-swatch { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .ds-chip { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border-subtle); }
+  .ds-swatch-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; }
+  .ds-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-hex { font-size: 11px; font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .ds-type { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .ds-type-sample { color: var(--text-primary); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-type-meta { font-size: 10px; font-weight: 500; color: var(--text-muted); flex-shrink: 0; }
+  .ds-sp { display: flex; align-items: center; gap: 10px; }
+  .ds-sp-name { width: 36px; flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+  .ds-sp-bar { height: 8px; border-radius: 2px; background: var(--accent); flex-shrink: 0; }
+  .ds-sp-val { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+  .ds-radii { display: flex; gap: 16px; }
+  .ds-rad { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .ds-rad-tile { width: 56px; height: 40px; background: var(--surface-elevated); border: 1px solid var(--border); }
+  .ds-rad-label { font-size: 10px; font-weight: 500; color: var(--text-muted); }
   @media (max-width: 900px) { .inspector { width: 300px; } }
   @media (max-width: 720px) { .detail-main { flex-direction: column; } .inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
@@ -1135,6 +1291,15 @@ ${FAVICON_HTML}
         if (wasSel) { highlightNode(null, false); return; }
         el.classList.add('sel');
         highlightNode(el.getAttribute('data-issue-node'), true);
+      });
+    });
+
+    // Phase 19 Slice B — inspector tab switching (Quality / Design system).
+    document.querySelectorAll('.insp-tab[data-tab]').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const name = tab.getAttribute('data-tab');
+        document.querySelectorAll('.insp-tab[data-tab]').forEach((t) => t.classList.toggle('active', t === tab));
+        document.querySelectorAll('.insp-tabpane').forEach((p) => { p.hidden = p.getAttribute('data-pane') !== name; });
       });
     });
   </script>

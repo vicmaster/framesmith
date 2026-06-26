@@ -30,6 +30,8 @@ Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer
 
 **Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, genre-relaxed by the canvas's preset) — it's computed for display only and never written back.
 
+**Design-system panel.** A second inspector tab shows the canvas's effective design tokens — color swatches, type scale, spacing, and radius — resolved through the full workspace ▸ project ▸ canvas inheritance chain. Each section notes its dominant source layer, and any token that *overrides* it is tagged (`canvas` / `project`) so you can see at a glance what a given canvas customized versus inherited.
+
 The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
 
 ## Installation
