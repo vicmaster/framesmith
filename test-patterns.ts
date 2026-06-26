@@ -12,10 +12,10 @@ import { getPreset } from './src/presets.js';
 import { evaluateCanvas } from './src/evaluate.js';
 
 const BAR = 90;
-// Neutral default (applyStructure's seeded defaults) + two clean presets. light/
-// minimal are excluded on purpose: they set bg-primary to pure #ffffff, which is
-// the pure-black-white tell's job to flag — a preset issue, not a pattern one.
-const THEMES = ['default', 'dark', 'material'] as const;
+// Neutral default (applyStructure's seeded defaults) + every bundled preset.
+// All presets now use designed off-white/off-black (no pure #ffffff/#000000),
+// so a pattern must hold up under each without tripping a tell.
+const THEMES = ['default', 'dark', 'light', 'material', 'minimal'] as const;
 
 let passed = 0;
 let failed = 0;
