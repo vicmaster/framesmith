@@ -41,7 +41,11 @@ Organizing model — Workspace > Project > Canvas:
 
 Design tokens are a layered system (workspace > project > canvas). Reference them in node properties with $name (e.g. fill: "$surface"); set them with workspace_/project_/set_variables. Lower layers override higher ones — author tokens once at the workspace and inherit down.
 
-Core loop: start from a taste-vetted pattern (list_structures → apply_structure) rather than a blank canvas → adapt at one target width (referencing $tokens) → screenshot → review → canvas_evaluate → fix (canvas_autofix for mechanical spacing/contrast, canvas_revise for the rest) → repeat until the score clears ≥ 90 with no cliché tells BEFORE presenting. Don't ship the first attempt; ship the one that passes the bar. The "Designing with taste" section of the guidelines covers the do's (one focal point, real hierarchy, one type + spacing scale, restraint); the cliche category catches the don'ts.
+Your job is to craft beautiful UI with real UX — designs a designer would sign off on — not wireframes. The bar is non-negotiable, and polishing to it is YOUR work, never the user's.
+
+Core loop: start from a taste-vetted pattern (list_structures → apply_structure) — never a blank canvas → adapt at one target width (referencing $tokens), using framesmith's real capabilities below → screenshot → canvas_evaluate → resolve EVERY comment it returns (canvas_autofix for the mechanical subset, batch_design for the rest) → re-evaluate → repeat until the inspector is CLEAN (zero comments) and the score is > 95. ONLY THEN present to the user. Never show a design with open comments or a sub-bar score — the evaluate result tells you when it's safe to present. The "Designing with taste" guidelines cover the do's (one focal point, real hierarchy, one type + spacing scale, restraint); the cliche category catches the don'ts.
+
+Use the whole toolkit by default — a real UI uses these, so a good design must too (not only when asked): icons, fonts, controls, components, $tokens. Don't FAKE them (no Unicode-glyph icons, no ellipse "toggles") and don't OMIT them where a real UI has them — nav rows get a leading icon, metrics get an icon, feature lists get check icons, empty states get a glyph, forms use real controls. Starting from a pattern gives you all of this for free.
 
 Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content. Input controls (toggle / checkbox / radio / select) are real node types ({ type: "toggle", checked: true }) styled from design tokens — never fake a control from frames + ellipses.
 
@@ -66,15 +70,18 @@ const server = new McpServer({
  * with the prose in INSTRUCTIONS so an agent gets the same orientation whether
  * it reads the connect-time instructions or calls init. */
 const WORKFLOW_CHEATSHEET = [
+  'The bar: craft beautiful UI/UX a designer would sign off on. Polishing to it is YOUR job — never show the user an unpolished design.',
   'Start from a taste-vetted pattern: list_structures → apply_structure, then ADAPT it — don\'t start from a blank canvas.',
+  'Use the whole toolkit by default — icons, fonts, real controls (toggle/checkbox/radio/select), components, $tokens. Never fake them; never omit them where a real UI has them.',
   'Read the framesmith://guidelines resource before drawing (esp. "Designing with taste": one focal point, real hierarchy, one type + spacing scale, restraint).',
   'Author at one target width; reference tokens with $name (e.g. fill: "$surface").',
   'screenshot → review the render → iterate.',
-  'canvas_evaluate → canvas_autofix (mechanical) / canvas_revise → repeat until ≥ 90 with no cliché tells, before presenting.',
+  'canvas_evaluate → resolve EVERY comment (canvas_autofix mechanical / batch_design rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
 ];
 
 const GOTCHAS = [
+  'The bar: craft beautiful UI/UX a designer would sign off on, and polish to it YOURSELF — start from a pattern, use the whole toolkit (icons/fonts/controls/components), and run canvas_evaluate → resolve EVERY comment → re-evaluate until clean and > 95 BEFORE presenting. The evaluate result\'s "directive" field says when it\'s safe to present. Never show the user an unpolished design.',
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
@@ -1241,7 +1248,7 @@ server.tool(
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
   - "llm": fast-mode heuristics plus a vision-model critique against a FIXED rubric (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field: { rubric: { hierarchy, execution, specificity, restraint, variety } each {score 1-5, rationale}, score (0-100 derived), summary, suggestions, needsRevision, failingAxes }. The verdict is stamped on the canvas (metadata.critique) + the per-project build log for auditability. Cost: one paid API call per invocation. To CLOSE the loop and auto-fix failing axes, use canvas_revise.
-Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset).`,
+Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset). The result includes a "directive" field — a present/keep-working verdict: resolve EVERY comment and clear > 95 before showing the design to the user; the directive tells you when it's safe to present.`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
     mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model rubric critique'),
@@ -1278,8 +1285,22 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
       }
     }
 
+    // Action-oriented directive so the agent treats the result as a present/keep-
+    // working gate, not a readout. Blocking = a sub-bar score, any warning/error,
+    // OR any cliché tell (slop the user cares about, even at info severity). Pure
+    // advisories (e.g. "consider extracting components") are optional refinements.
+    const blocking = result.issues.filter(
+      (i) => i.category === 'cliche' || i.severity === 'error' || i.severity === 'warning',
+    ).length;
+    const optional = result.issues.length - blocking;
+    const ready = blocking === 0 && result.overallScore > 95;
+    const optTail = optional ? ` ${optional} optional refinement(s) noted (info) — address if easy, not required.` : '';
+    const directive = ready
+      ? `READY TO PRESENT — ${result.overallScore}/100, no blocking issues.${optTail}`
+      : `NOT READY — ${result.overallScore}/100 with ${blocking} issue(s) to resolve${optional ? ` (+${optional} optional)` : ''}. Fix them now: canvas_autofix for the mechanical subset, batch_design for the rest (cliché tells included), then re-run canvas_evaluate. Repeat until there are zero warnings/cliché tells and the score is > 95. Do NOT show this design to the user yet.`;
+
     return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ ...result, directive }, null, 2) }],
     };
   }
 );

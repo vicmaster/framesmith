@@ -153,7 +153,8 @@ Practical notes:
 
 The bar is "designers say *wow*," not "competent." The cliché tells below are the *don'ts*; these are the *do's*. Apply them up front — the evaluator is the safety net, not the plan.
 
-- **Start from a pattern, don't start blank.** `list_structures` → `apply_structure` stamps a taste-vetted page scaffold (every one is regression-tested to ≥ 90 with zero cliché tells across themes). Adapt it — swap copy, set `$tokens`, vary the structure — rather than inventing layout from nothing. A blank canvas is where slop comes from.
+- **Start from a pattern, don't start blank.** `list_structures` → `apply_structure` stamps a taste-vetted page scaffold (every one is regression-tested to > 95 with zero cliché tells across themes). Adapt it — swap copy, set `$tokens`, vary the structure — rather than inventing layout from nothing. A blank canvas is where slop comes from.
+- **Use the whole toolkit — a real UI uses these, so your design must too.** Icons (`{ type: "icon", icon: "search" }` — Lucide or `material:`), fonts by name, real controls (`toggle`/`checkbox`/`radio`/`select`), components, and `$tokens`. Never fake them (no Unicode-glyph icons, no ellipse "toggles") and never omit them where a real UI has them: nav rows get a leading icon, metrics get an icon, feature lists get check icons, empty states get a glyph, forms use real controls. Starting from a pattern gives you all of this — don't strip it out.
 - **One focal point per screen.** Decide what the eye hits first (usually the headline or the primary action) and make everything else quieter. Two competing focal points = no focal point.
 - **Build real hierarchy.** Size, weight, and color should encode importance in steps you can see — a display heading, a clearly smaller subhead, body, then muted captions. Avoid near-equal sizes (a 16→15→14 ramp reads as one blurry tier); aim for ~1.2–1.6× jumps.
 - **Keep one type scale and one spacing scale.** Pick a small set of sizes and a spacing rhythm (e.g. 8 / 16 / 24 / 32 / 48) and reuse them. Off-scale one-offs are the most common craft tell.
@@ -161,7 +162,16 @@ The bar is "designers say *wow*," not "competent." The cliché tells below are t
 - **One accent, flat color, no effects.** A single accent hue plus neutrals. Flat `$surface` fills over gradients; a subtle near-black shadow over any glow. Off-black/off-white over pure `#000`/`#fff`.
 - **Honest content.** Labeled placeholders (`"Metric — to confirm"`) over invented numbers, names, or logos.
 
-**The loop is part of designing, not an afterthought:** generate → `canvas_evaluate` → fix (or `canvas_autofix` / `canvas_revise`) → repeat **until the score clears ≥ 90 with no cliché tells, before you present the design.** Don't ship the first attempt; ship the one that passes the bar.
+### Before you present (the hard rule)
+
+Polishing the design to the bar is **your** job, not the user's — they should never have to point out a missing icon, an off-scale gap, or a low score. So the loop is part of designing, not an afterthought:
+
+1. `canvas_evaluate` the canvas.
+2. **Resolve every warning and every cliché tell** — `canvas_autofix` for the mechanical subset (spacing/contrast/known-default accent), `batch_design` for the rest. (Cliché tells are info/warning but they're the slop signal — always fix them.) Pure advisories like "consider extracting components" are optional refinements that don't block.
+3. Re-run `canvas_evaluate`.
+4. Repeat until there are **zero warnings, zero cliché tells**, and the score is **> 95**.
+
+`canvas_evaluate`'s result includes a `directive` field — it says `READY TO PRESENT` or `NOT READY` with what's left. **Only present a design once it says READY.** Don't ship the first attempt; ship the one that passes the bar.
 
 ## Cliché & craft
 
