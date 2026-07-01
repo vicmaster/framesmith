@@ -6,7 +6,7 @@ An open-source MCP server that turns your AI coding agent into a capable UI desi
 
 **Contents:** [What it does](#what-framesmith-does) · [Capabilities](#capabilities-at-a-glance) · [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
-![framesmith viewer — workspace sidebar on the left, and the Pattern library project on the right showing 11 vetted page patterns (auth, bento-grid, catalogue, dashboard, editorial-longform, marquee-hero, onboarding, pricing, settings, split-workbench, stat-led) as live thumbnails, each with a green 100 quality-score badge.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
+![framesmith viewer — workspace sidebar on the left, and the Pattern library project on the right showing 11 vetted page patterns (auth, bento-grid, catalogue, dashboard, editorial-longform, marquee-hero, onboarding, pricing, settings, split-workbench, stat-led) as live thumbnails, each with a green 100 quality-score badge.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png?v=1.7)
 
 > Above: the framesmith viewer, showing the built-in **pattern library** — 11 vetted page archetypes an agent starts from, each carrying its live quality score (all 100 here). Workspaces and projects sit in the sidebar; you browse canvases like design files.
 
@@ -46,7 +46,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 
 Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
-![framesmith canvas detail view — the dashboard pattern rendered (icon nav sidebar, three stat cards with icons, a chart panel beside a recent-activity panel) with the read-only Quality inspector open on the right: a 100/100 "Excellent" score, per-category bars all at 100 (spacing, color, typography, structure, consistency, cliche), and one advisory issue.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
+![framesmith canvas detail view — the dashboard pattern rendered (icon nav sidebar, three stat cards with icons, a chart panel beside a recent-activity panel) with the read-only Quality inspector open on the right: a 100/100 "Excellent" score, per-category bars all at 100 (spacing, color, typography, structure, consistency, cliche), and one advisory issue.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png?v=1.7)
 
 > Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars, the issue list, and a Design-system tab. The toolbar exposes breakpoint previews, Compare, Fit, JSON, and lifecycle actions.
 
