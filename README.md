@@ -2,13 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Release](https://img.shields.io/github/v/release/vicmaster/framesmith)](https://github.com/vicmaster/framesmith/releases) [![MCP](https://img.shields.io/badge/MCP-compatible-1f4838)](https://modelcontextprotocol.io)
 
-An open-source MCP server that gives your AI coding agent a visual canvas. Sketch the UI, review it in a browser, agree on the design — before any framework code gets written.
+An open-source MCP server that turns your AI coding agent into a capable UI designer. It gives the agent a visual canvas, a library of vetted design patterns, and a quality bar it must clear before showing you anything — so you review a real, non-slop design in the browser and agree on it *before* any framework code is written.
 
-**Contents:** [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
+**Contents:** [What it does](#what-framesmith-does) · [Capabilities](#capabilities-at-a-glance) · [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
-![framesmith viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and framesmith workspaces; framesmith organised into Design system, UI, and Releases projects.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
+![framesmith viewer — workspace sidebar on the left, and the Pattern library project on the right showing 11 vetted page patterns (auth, bento-grid, catalogue, dashboard, editorial-longform, marquee-hero, onboarding, pricing, settings, split-workbench, stat-led) as live thumbnails, each with a green 100 quality-score badge.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
 
-> Above: the framesmith viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
+> Above: the framesmith viewer, showing the built-in **pattern library** — 11 vetted page archetypes an agent starts from, each carrying its live quality score (all 100 here). Workspaces and projects sit in the sidebar; you browse canvases like design files.
 
 ```
 MCP Client → stdio → framesmith server
@@ -20,13 +20,35 @@ MCP Client → stdio → framesmith server
               Puppeteer (headless Chromium → PNG)
 ```
 
+## What framesmith does
+
+Left to itself, an AI agent tends to produce UI that *looks* AI-generated — generic spacing, no icons, a purple gradient by default, placeholder text that reads like placeholder text. framesmith closes that gap by moving design **before** code and holding it to a bar:
+
+1. **Start from taste, not a blank canvas.** The agent stamps one of **11 vetted page patterns** (dashboard, auth, pricing, settings, onboarding, and more) — each regression-tested to score **> 95 with zero cliché tells** across every theme — then adapts it. A blank canvas is where slop comes from; a pattern is a non-slop starting point. *(`list_structures` / `apply_structure`)*
+2. **Use the whole toolkit — like a real UI does.** Real icons (Lucide + Material Symbols), fonts resolved by name, real input controls (`toggle` / `checkbox` / `radio` / `select`), reusable components, and layered design tokens — never faked with Unicode glyphs or stray ellipses.
+3. **Evaluate, then self-correct.** `canvas_evaluate` scores the design across six craft categories plus a **cliché-tell** detector, and returns a **`READY` / `NOT READY` directive**. The agent resolves every warning and tell and only presents once it's `READY` — polishing to the bar is the agent's job, not yours.
+4. **Review in the browser, own the output.** You browse canvases like design files, with a live **quality inspector** and **design-system panel**. Designs persist as **open JSON checked into your repo** — no proprietary format, no lock-in — and can be re-imported from shipped HTML to keep the design honest.
+
+## Capabilities at a glance
+
+| Area | What you get |
+|------|--------------|
+| **Rendering** | Scene graph → HTML/CSS → Puppeteer PNG · responsive breakpoints · gradients, shadows, blur, glassmorphism · SVG paths · animations |
+| **Pattern library** | 11 vetted page archetypes + 5 component scaffolds, all scoring > 95 with zero cliché tells; taxonomy axes + a diversification signal so successive screens vary |
+| **Quality & taste** | `canvas_evaluate` (6 categories + cliché tells) with a `READY`/`NOT READY` directive · `canvas_autofix` (mechanical fixes) · optional vision-model rubric critique + `canvas_revise` |
+| **Design systems** | Layered `$token`s (workspace ▸ project ▸ canvas) · style presets · `DESIGN.md` import |
+| **Primitives** | Lucide + Material Symbols icons · Google Fonts by name · real form controls · components with instance overrides |
+| **Import from code** | `canvas_import_html` / `canvas_import_url` — token-mapped, structure-reconstructed · `canvas_sync_from_url` drift detection |
+| **Viewer** | Read-only browser gallery + detail view · quality inspector (score, issues, click-to-highlight) · design-system token panel |
+| **Open by design** | MIT · plain HTML/CSS · open JSON you own in your repo · works with any MCP-compatible client |
+
 ## Viewer
 
 Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
-![framesmith canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
+![framesmith canvas detail view — the dashboard pattern rendered (icon nav sidebar, three stat cards with icons, a chart panel beside a recent-activity panel) with the read-only Quality inspector open on the right: a 100/100 "Excellent" score, per-category bars all at 100 (spacing, color, typography, structure, consistency, cliche), and one advisory issue.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
 
-> Above: a single canvas in the detail view. The toolbar across the top exposes the breakpoint preview modes, Compare for side-by-side rendering, Fit for max-width, JSON for the raw scene graph, and lifecycle actions.
+> Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars, the issue list, and a Design-system tab. The toolbar exposes breakpoint previews, Compare, Fit, JSON, and lifecycle actions.
 
 **Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, genre-relaxed by the canvas's preset) — it's computed for display only and never written back.
 
@@ -364,7 +386,7 @@ List available layout structures — named scaffolds you stamp onto a canvas and
 
 Two kinds:
 
-- **`page`** — whole-page scaffolds stamped once at the canvas root: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`, `dashboard`, `auth`, `pricing`, `settings`, `onboarding`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout. Every page scaffold is regression-tested to score ≥ 90 with zero cliché tells across themes (the pattern library's taste bar), so it's a non-slop starting point you adapt, not boilerplate.
+- **`page`** — whole-page scaffolds stamped once at the canvas root: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`, `dashboard`, `auth`, `pricing`, `settings`, `onboarding`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout. Every page scaffold is regression-tested to score **> 95 with zero cliché tells** across all five presets (the pattern library's taste bar), so it's a non-slop starting point you adapt, not boilerplate.
 - **`component`** — reusable fragments stamped under **any** node via `targetId`, repeatably: `data-table` (header + 3 rows with avatar/name/email, role chip, status toggle, actions), `form-field`, `toolbar`, `stat-card`, `toggle-row`. A high-fidelity table costs one stamp instead of ~80 hand-placed nodes.
 
 ### `apply_structure`
@@ -490,7 +512,9 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 
 ### `canvas_evaluate`
 
-Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, and per-node actionable issues. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat.
+Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.
+
+The **`directive`** is the operating contract that keeps unfinished work off the user's screen. It reads `READY TO PRESENT` **only** when the score is > 95 **and** there are zero warnings **and** zero cliché tells; otherwise `NOT READY` with what to resolve. (Cliché tells block even at info severity — they're the slop signal; pure advisories like "consider extracting components" are optional.) Resolve everything and re-evaluate until it says `READY` before showing the design to the user.
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -527,7 +551,8 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
   ],
   "summary": "Overall quality: Good (87/100). Strongest: spacing (90/100). Weakest: color (75/100)...",
   "stats": { "totalNodes": 14, "textNodes": 5, "frameNodes": 8, "maxDepth": 4, "tokenUsagePercent": 61, "componentReusePercent": 0 },
-  "mode": "fast"
+  "mode": "fast",
+  "directive": "NOT READY — 87/100 with 1 issue(s) to resolve. Fix them now: canvas_autofix for the mechanical subset, batch_design for the rest, then re-run canvas_evaluate. Repeat until there are zero warnings/cliché tells and the score is > 95. Do NOT show this design to the user yet."
 }
 ```
 
@@ -769,64 +794,51 @@ I("document", { type: "instance", componentId: card, overrides: { title: { conte
 
 ## Usage Example
 
-Here's a complete session building a login card:
+A complete session designing a sign-in screen — the framesmith way: **start from a pattern, adapt it, and let the evaluator gate the result** (rather than building from a blank canvas and faking controls out of frames).
 
-**1. Create a canvas and set design tokens**
-
-```
-canvas_create({ name: "Login" })
-→ {
-    "canvasId": "abc123",
-    "rootId": "xyz789",
-    "name": "Login",
-    "projectId": "default-project",
-    "viewerUrl": "http://localhost:3001/canvas/abc123",
-    "galleryUrl": "http://localhost:3001"
-  }
-
-set_variables({
-  canvasId: "abc123",
-  variables: {
-    colors: { bg: "#0a0a0a", surface: "#1a1a2e", accent: "#e94560", text: "#ffffff" },
-    spacing: { sm: 8, md: 16, lg: 24, xl: 32 },
-    radius: { md: 8, lg: 16 }
-  }
-})
-```
-
-**2. Build the layout with `batch_design`**
+**1. Start from a vetted pattern, not a blank canvas**
 
 ```
+canvas_create({ name: "Sign in" })
+→ { "canvasId": "abc123", "viewerUrl": "http://localhost:3001/canvas/abc123", ... }
+
+apply_structure({ canvasId: "abc123", structure: "auth" })
+→ returns the placeholder node IDs to populate (au-title, au-sub, au-email, au-password, au-submit, ...)
+```
+
+The `auth` pattern already scores > 95 — a centered card with real form fields, a real submit button, honest placeholder copy, and an accent that isn't the default purple. You're adapting a good design, not inventing one.
+
+**2. Adapt it — set the brand accent and the copy**
+
+```
+project_set_design_system({ projectId: "default-project", variables: { colors: { accent: "#2563EB" } } })
+
 batch_design({
   canvasId: "abc123",
   operations: `
-    page=I("document", { type: "frame", width: 1440, height: 900, fill: "$bg", layout: "vertical", alignItems: "center", justifyContent: "center" })
-    card=I(page, { type: "frame", width: 400, fill: "$surface", cornerRadius: "$lg", padding: [32, 32, 32, 32], layout: "vertical", gap: 24 })
-    I(card, { type: "text", content: "Sign In", fontSize: 28, fontWeight: 700, color: "$text" })
-    I(card, { type: "frame", width: "100%", height: 44, fill: "#ffffff10", cornerRadius: "$md", padding: [0, 16, 0, 16], layout: "horizontal", alignItems: "center" })
-    I(card, { type: "frame", width: "100%", height: 44, fill: "#ffffff10", cornerRadius: "$md", padding: [0, 16, 0, 16], layout: "horizontal", alignItems: "center" })
-    btn=I(card, { type: "frame", width: "100%", height: 44, fill: "$accent", cornerRadius: "$md", layout: "horizontal", alignItems: "center", justifyContent: "center" })
-    I(btn, { type: "text", content: "Continue", fontSize: 16, fontWeight: 600, color: "$text" })
+    U("au-title", { content: "Welcome back" })
+    U("au-sub", { content: "Sign in to continue to your workspace." })
   `
 })
 ```
 
-**3. Take a screenshot to see the result**
+**3. Evaluate — and only present when the directive says READY**
 
 ```
-screenshot({ canvasId: "abc123" })
-→ returns base64 PNG image
+canvas_evaluate({ canvasId: "abc123", mode: "fast" })
+→ {
+    "overallScore": 98,
+    "issues": [],
+    "directive": "READY TO PRESENT — 98/100, no blocking issues."
+  }
 ```
 
-**4. Iterate — update the button color and verify**
+If it came back `NOT READY`, you'd apply `canvas_autofix` (mechanical fixes) / `batch_design` (the rest) and re-evaluate until it clears — then `screenshot` and share the viewer URL. The directive is what keeps an unfinished design off the user's screen.
+
+**4. Verify across breakpoints**
 
 ```
-batch_design({
-  canvasId: "abc123",
-  operations: `U("btn-id", { fill: "#3b82f6" })`
-})
-
-screenshot({ canvasId: "abc123" })
+screenshot_responsive({ canvasId: "abc123" })   // renders mobile / tablet / desktop
 ```
 
 ## Running the viewer
@@ -866,15 +878,17 @@ All canvases persist to `~/.framesmith/canvases/` as JSON files and survive proc
 
 ## Workflow
 
-1. Start the standalone viewer in a terminal tab: `npx -p framesmith framesmith-viewer`
-2. `canvas_create` → get canvas ID
-3. Open the viewer URL in your browser for live preview
-4. `apply_preset` or `set_variables` → set up design tokens
-5. `batch_design` → build the UI with frames, text, icons, components, gradients
-6. Watch the viewer auto-refresh as you design
-7. `screenshot_responsive` → preview at mobile/tablet/desktop sizes
-8. `canvas_diff` → compare before/after changes visually
-9. `export` → save final designs to PNG/PDF files
+The loop framesmith is built around — start from taste, adapt, and polish to the bar before anyone sees it:
+
+1. Start the standalone viewer in a terminal tab: `npx -p framesmith framesmith-viewer`, and open its URL for live preview.
+2. `canvas_create` → get a canvas ID (share the viewer URL).
+3. Set the design system once — `workspace_set_design_system` / `apply_preset` / `set_variables` (colors, spacing, radius, typography as `$token`s).
+4. **`apply_structure`** → stamp a vetted page pattern, then adapt it with `batch_design` (real icons, controls, and components — not faked from frames). This is the starting point; a blank canvas is the slow, sloppy path.
+5. Watch the viewer auto-refresh as you design; `screenshot` to check the render.
+6. **`canvas_evaluate`** → read the `directive`. Resolve every warning and cliché tell (`canvas_autofix` for the mechanical subset, `batch_design` for the rest), then re-evaluate. Repeat until it says `READY` — only then present the design.
+7. `screenshot_responsive` → confirm it holds at mobile / tablet / desktop.
+8. `canvas_diff` / `canvas_sync_from_url` → compare versions, or check the shipped app hasn't drifted from the approved design.
+9. `export` → save final designs to PNG/PDF.
 
 ## Development
 
