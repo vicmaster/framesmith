@@ -429,8 +429,8 @@ framesmith catches slop but doesn't yet proactively produce taste: from a blank 
 
 - [x] Pattern library — expanded `src/structures.ts` to 11 vetted page archetypes (added dashboard, auth, pricing, settings, onboarding; landing≈marquee-hero, data-screen≈split-workbench/catalogue) + elevated the existing ones to the bar
 - [x] Craft guidance — a "Designing with taste" section (focal point, hierarchy, type + spacing scale, restraint, pattern-first) on the agent surfaces (GUIDELINES + INSTRUCTIONS + cheatsheet), paired with the anti-slop tells
-- [x] Relentless loop — the core loop on every agent surface now reads generate → evaluate → fix/revise → repeat until ≥ 90 with no cliché tells before presenting
-- [x] Library quality gate — `test-patterns.ts`: every page structure regression-tested to ≥ 90 with zero cliché tells across all 5 presets (default/dark/light/material/minimal)
+- [x] Relentless loop — the core loop on every agent surface now reads generate → evaluate → fix/revise → repeat until > 95 with no cliché tells before presenting
+- [x] Library quality gate — `test-patterns.ts`: every page structure regression-tested to > 95 with zero cliché tells across all 5 presets (default/dark/light/material/minimal)
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-20-SPEC.md`](docs/specs/PHASE-20-SPEC.md). Built across PRs; Slices A (library + gate) and B/D (guidance + loop) shipped._
 

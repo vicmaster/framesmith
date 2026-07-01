@@ -52,7 +52,7 @@ Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer
 
 **Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, genre-relaxed by the canvas's preset) — it's computed for display only and never written back.
 
-**Design-system panel.** A second inspector tab shows the canvas's effective design tokens — color swatches, type scale, spacing, and radius — resolved through the full workspace ▸ project ▸ canvas inheritance chain. Each section notes its dominant source layer, and any token that *overrides* it is tagged (`canvas` / `project`) so you can see at a glance what a given canvas customized versus inherited.
+**Design-system panel.** A second inspector tab shows the canvas's effective design tokens — color swatches, type scale, spacing, and radius — resolved through the full workspace ▸ project ▸ canvas inheritance chain. Each section notes its dominant source layer, and any token resolving from a *different* layer is tagged (`canvas` / `project` / `workspace`) so you can see at a glance what a given canvas customized versus inherited.
 
 The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
 
@@ -521,7 +521,7 @@ The **`directive`** is the operating contract that keeps unfinished work off the
 | `canvasId` | string | Canvas ID to evaluate |
 | `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`, `cliche`. Defaults to all. |
-| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple). Defaults to the canvas's provenance preset if stamped. |
+| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple and white elevated surfaces). Defaults to the canvas's provenance preset if stamped. |
 
 **Categories and what they check**
 
@@ -603,7 +603,7 @@ Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a
 |-------|------|-------------|
 | `canvasId` | string | Canvas to autofix |
 | `categories` | string[]? | Restrict to fixes from these categories (default: all) |
-| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple). Defaults to the canvas's provenance preset if stamped. |
+| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple and white elevated surfaces). Defaults to the canvas's provenance preset if stamped. |
 
 **What gets auto-fixed**
 
