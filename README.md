@@ -6,9 +6,9 @@ An open-source MCP server that turns your AI coding agent into a capable UI desi
 
 **Contents:** [What it does](#what-framesmith-does) · [Capabilities](#capabilities-at-a-glance) · [Viewer](#viewer) · [Installation](#installation) · [Tools](#tools) · [Usage Example](#usage-example) · [Workflow](#workflow) · [Development](#development)
 
-![framesmith viewer — workspace sidebar on the left, gallery of canvas thumbnails on the right. Personal and framesmith workspaces; framesmith organised into Design system, UI, and Releases projects.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
+![framesmith viewer — workspace sidebar on the left, and the Pattern library project on the right showing 11 vetted page patterns (auth, bento-grid, catalogue, dashboard, editorial-longform, marquee-hero, onboarding, pricing, settings, split-workbench, stat-led) as live thumbnails, each with a green 100 quality-score badge.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-dashboard.png)
 
-> Above: the framesmith viewer. Workspaces and projects in the sidebar, canvases as live thumbnails on the right. AI agents create canvases via MCP tools; you browse them like Figma files.
+> Above: the framesmith viewer, showing the built-in **pattern library** — 11 vetted page archetypes an agent starts from, each carrying its live quality score (all 100 here). Workspaces and projects sit in the sidebar; you browse canvases like design files.
 
 ```
 MCP Client → stdio → framesmith server
@@ -46,9 +46,9 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 
 Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
-![framesmith canvas detail view — the phase8-release canvas open with Mobile / Tablet / Desktop / Compare / Fit / JSON / Archive / Delete buttons in the top toolbar, rendered canvas content below showing a glassmorphic release-notes layout](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
+![framesmith canvas detail view — the dashboard pattern rendered (icon nav sidebar, three stat cards with icons, a chart panel beside a recent-activity panel) with the read-only Quality inspector open on the right: a 100/100 "Excellent" score, per-category bars all at 100 (spacing, color, typography, structure, consistency, cliche), and one advisory issue.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png)
 
-> Above: a single canvas in the detail view. The toolbar across the top exposes the breakpoint preview modes, Compare for side-by-side rendering, Fit for max-width, JSON for the raw scene graph, and lifecycle actions.
+> Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars, the issue list, and a Design-system tab. The toolbar exposes breakpoint previews, Compare, Fit, JSON, and lifecycle actions.
 
 **Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, genre-relaxed by the canvas's preset) — it's computed for display only and never written back.
 
