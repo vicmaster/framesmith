@@ -51,7 +51,7 @@ Icons & typography: two bundled icon sets render by name via the icon node type 
 
 Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
 
-Structures come in two kinds (list_structures): page scaffolds (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue, dashboard, auth, pricing, settings, onboarding) stamp once at the root — each is taste-vetted (≥ 90, zero cliché tells) so it's a non-slop starting point to ADAPT, not boilerplate; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
+Structures come in two kinds (list_structures): page scaffolds (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue, dashboard, auth, pricing, settings, onboarding) stamp once at the root — each is taste-vetted (> 95, zero cliché tells) so it's a non-slop starting point to ADAPT, not boilerplate; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
@@ -1256,7 +1256,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
       .optional()
       .describe('Specific categories to evaluate (default: all)'),
     genre: z.string().optional()
-      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple). Defaults to the canvas provenance preset if stamped.'),
+      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple accents and white elevated surfaces). Defaults to the canvas provenance preset if stamped.'),
     floor: z.number().min(1).max(5).optional()
       .describe('llm mode only: per-axis rubric floor (1-5). Any axis below it sets needsRevision. Default 3 (or FRAMESMITH_CRITIQUE_FLOOR).'),
   },
@@ -1315,7 +1315,7 @@ server.tool(
       .optional()
       .describe('Restrict to fixes from these categories (default: all)'),
     genre: z.string().optional()
-      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple). Defaults to the canvas provenance preset if stamped.'),
+      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple accents and white elevated surfaces). Defaults to the canvas provenance preset if stamped.'),
   },
   async ({ canvasId, categories, genre }) => {
     const canvas = getCanvas(canvasId);
