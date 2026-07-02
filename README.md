@@ -39,7 +39,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 | **Design systems** | Layered `$token`s (workspace ▸ project ▸ canvas) · style presets · `DESIGN.md` import |
 | **Primitives** | Lucide + Material Symbols icons · Google Fonts by name · real form controls · components with instance overrides |
 | **Import from code** | `canvas_import_html` / `canvas_import_url` — token-mapped, structure-reconstructed · `canvas_sync_from_url` drift detection |
-| **Viewer** | Read-only browser gallery + detail view · quality inspector (score, issues, click-to-highlight) · design-system token panel |
+| **Viewer** | Browser gallery + detail view · quality inspector (score, issues, click-to-highlight) · design-system token panel · point-and-tell feedback (Comment mode + Feedback tab) |
 | **Open by design** | MIT · plain HTML/CSS · open JSON you own in your repo · works with any MCP-compatible client |
 
 ## Viewer
@@ -48,13 +48,15 @@ Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer
 
 ![framesmith canvas detail view — the dashboard pattern rendered (icon nav sidebar, three stat cards with icons, a chart panel beside a recent-activity panel) with the read-only Quality inspector open on the right: a 100/100 "Excellent" score, per-category bars all at 100 (spacing, color, typography, structure, consistency, cliche), and one advisory issue.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png?v=1.7)
 
-> Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars, the issue list, and a Design-system tab. The toolbar exposes breakpoint previews, Compare, Fit, JSON, and lifecycle actions.
+> Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars and the issue list; the inspector also has Design-system and Feedback tabs (not pictured). The toolbar exposes breakpoint previews, Compare, Fit, JSON, a **Comment** toggle for point-and-tell feedback, and lifecycle actions.
 
 **Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, genre-relaxed by the canvas's preset) — it's computed for display only and never written back.
 
+**Feedback panel.** Point-and-tell: toggle **Comment** in the toolbar and click any element in the preview to leave a note for the agent — a breadcrumb in the popover re-scopes the anchor from the exact element up to its card, section, or the whole page. The **Feedback** tab lists open comments (badge = open count) with click-to-highlight, lets you resolve or delete them, and shows the agent's resolution note as a reply once it has addressed the item. Comments persist on the canvas itself (`metadata.feedback` — git-diffable in bound repos) and the agent reads them over MCP via `get_feedback`; open feedback blocks the agent from presenting, same as open quality issues.
+
 **Design-system panel.** A second inspector tab shows the canvas's effective design tokens — color swatches, type scale, spacing, and radius — resolved through the full workspace ▸ project ▸ canvas inheritance chain. Each section notes its dominant source layer, and any token resolving from a *different* layer is tagged (`canvas` / `project` / `workspace`) so you can see at a glance what a given canvas customized versus inherited.
 
-The viewer is purely read-only — every canvas is authored through MCP tool calls from your AI assistant. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
+Designs are authored through MCP tool calls from your AI assistant — in the viewer you review, comment, and manage lifecycle; you don't edit nodes. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
 
 ## Installation
 
@@ -514,7 +516,7 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 
 Point-and-tell feedback: comments anchored to a specific node (or to the canvas as a whole), stored on the canvas at `metadata.feedback` — plain JSON that travels with the canvas and is git-diffable in bound repos. `get_feedback` returns open entries, each with the comment, the anchor `nodeId`, and a **node snapshot** (`{ type, name, text }`) captured at comment time, so the agent can act without extra lookups; `orphaned: true` marks a comment whose node no longer exists (it stays open — the concern usually applies to the node's replacement). Omit `canvasId` to sweep every canvas in the current context. `resolve_feedback` closes entries with an optional one-line note saying what changed. **Open feedback blocks presenting**, same as open inspector comments.
 
-The viewer's click-to-comment mode (Phase 21 Slice B) is the authoring surface; until it lands, entries can be added by editing the canvas JSON — the running server picks up external edits automatically.
+Comments are authored in the viewer: toggle **Comment** in the detail-page toolbar, click any element in the preview (a breadcrumb lets you re-scope from the exact element to its card, section, or the whole page), and type the note. The **Feedback** inspector tab lists open and resolved comments with click-to-highlight, and shows the agent's resolution note as a reply. Entries added any other way (hand-edited JSON, a teammate's `git pull`) reach the running server just the same.
 
 | Param | Type | Description |
 |-------|------|-------------|
