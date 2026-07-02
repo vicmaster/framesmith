@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
@@ -22,6 +22,20 @@ function ensureDir(): void {
   mkdirSync(canvasDir(), { recursive: true });
 }
 
+// id → mtimeMs of the global canvas file as this process last wrote/read it —
+// the global-backend mirror of repo-store's mtimeById (Phase 21 closeout).
+// Lets ensureFresh detect a write from ANOTHER process (the standalone viewer
+// saving a point-and-tell comment, a hand-edit) instead of clobbering it.
+const globalMtimeById = new Map<string, number>();
+
+function globalFileMtime(id: string): number | null {
+  try {
+    return statSync(join(canvasDir(), `${id}.json`)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
 function persistCanvas(canvas: Canvas): void {
   try {
     if (isRepoBound()) {
@@ -30,6 +44,8 @@ function persistCanvas(canvas: Canvas): void {
     }
     ensureDir();
     writeFileSync(join(canvasDir(), `${canvas.id}.json`), JSON.stringify(canvas, null, 2));
+    const m = globalFileMtime(canvas.id);
+    if (m !== null) globalMtimeById.set(canvas.id, m);
   } catch (err) {
     process.stderr.write(`Warning: Could not persist canvas ${canvas.id}: ${(err as Error).message}\n`);
   }
@@ -47,6 +63,7 @@ function removePersistedCanvas(id: string): void {
  * active backend. Used during bind migration to drop the global copy after the
  * canvas has been written into the repo `.framesmith/` dir. */
 export function purgeGlobalCanvas(id: string): void {
+  globalMtimeById.delete(id);
   try {
     const filePath = join(canvasDir(), `${id}.json`);
     if (existsSync(filePath)) unlinkSync(filePath);
@@ -84,6 +101,8 @@ export function loadPersistedCanvases(): number {
             migrated++;
           }
           store.set(data.id, data);
+          const m = globalFileMtime(data.id);
+          if (m !== null) globalMtimeById.set(data.id, m);
           loaded++;
         }
       } catch {}
@@ -145,23 +164,55 @@ export function getCanvas(id: string): Canvas | undefined {
 }
 
 /**
- * When repo-bound, reload a canvas from disk if its file changed externally
- * (git pull / branch switch / hand-edit) since the server last touched it — so
- * the caller mutates the current version instead of clobbering it. If the file
- * was deleted externally, drop it from the store (the caller's not-found path
- * then surfaces a clear error rather than re-creating it). No-op on the global
- * backend. Call this before any mutation + persist.
+ * Reload a canvas from disk if its file changed externally since this process
+ * last touched it — so the caller mutates the current version instead of
+ * clobbering it. Repo backend: git pull / branch switch / hand-edit. Global
+ * backend (Phase 21 closeout): the standalone viewer saving a point-and-tell
+ * comment from its own process, or a hand-edit of ~/.framesmith/canvases/.
+ * If the file was deleted externally, drop it from the store (the caller's
+ * not-found path then surfaces a clear error rather than re-creating it).
+ * Call this before any mutation + persist, and before feedback reads.
  */
 export function ensureFresh(id: string): void {
-  if (!isRepoBound()) return;
-  if (!externallyModified(repoDir(), id)) return;
-  const fresh = readCanvasFile(repoDir(), id);
-  if (fresh) {
-    store.set(id, fresh);
-    process.stderr.write(`canvas ${id} reloaded from disk (external change detected)\n`);
-  } else {
+  if (isRepoBound()) {
+    if (!externallyModified(repoDir(), id)) return;
+    const fresh = readCanvasFile(repoDir(), id);
+    if (fresh) {
+      store.set(id, fresh);
+      process.stderr.write(`canvas ${id} reloaded from disk (external change detected)\n`);
+    } else {
+      store.delete(id);
+      process.stderr.write(`canvas ${id} removed (deleted on disk externally)\n`);
+    }
+    return;
+  }
+  // Global backend. Only canvases we've seen a persisted file for are checked
+  // — a recorded-mtime miss means we can only baseline, not compare (and a
+  // canvas whose persist failed must not be dropped just because no file exists).
+  if (!store.has(id)) return;
+  const current = globalFileMtime(id);
+  const recorded = globalMtimeById.get(id);
+  if (recorded === undefined) {
+    if (current !== null) globalMtimeById.set(id, current);
+    return;
+  }
+  if (current === null) {
     store.delete(id);
+    globalMtimeById.delete(id);
     process.stderr.write(`canvas ${id} removed (deleted on disk externally)\n`);
+    return;
+  }
+  if (current === recorded) return;
+  try {
+    const fresh = JSON.parse(readFileSync(join(canvasDir(), `${id}.json`), 'utf-8')) as Canvas;
+    if (fresh.id && fresh.root) {
+      store.set(id, fresh);
+      globalMtimeById.set(id, current);
+      process.stderr.write(`canvas ${id} reloaded from disk (external change detected)\n`);
+    }
+  } catch {
+    // Mid-write / unreadable — keep the in-memory copy and leave the recorded
+    // mtime stale so the next call retries the reload.
   }
 }
 
