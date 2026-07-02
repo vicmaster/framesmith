@@ -28,9 +28,9 @@ try {
   ensureDefaultWorkspaceAndProject();
   const canvas = createCanvas('logo-favicon-test', DEFAULT_PROJECT_ID);
 
-  const gallery = renderProjectPage(DEFAULT_PROJECT_ID, 3001)!;
+  const gallery = (await renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
   const archive = renderArchivePage(3001);
-  const detail = renderDetailPage(canvas, 3001);
+  const detail = await renderDetailPage(canvas, 3001);
 
   // --- Favicon present on every page ---
   for (const [name, html] of [['gallery', gallery], ['archive', archive], ['detail', detail]] as const) {
