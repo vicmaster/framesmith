@@ -100,6 +100,37 @@ check('global file exists', existsSync(globalFile));
 const persisted = JSON.parse(readFileSync(globalFile, 'utf-8'));
 check('feedback persisted in global file', persisted.metadata?.feedback?.length === 2);
 
+// ---- Part 2b: global backend external-change pickup (Phase 21 closeout) -------
+// The standalone viewer writes comments to ~/.framesmith/canvases/<id>.json from
+// its OWN process; a separately running (unbound) MCP server must see them on the
+// next ensureFresh instead of clobbering the file with its stale in-memory copy.
+{
+  const extTarget = sg.createCanvas('Global external');
+  const gFile = join(globalHome, 'canvases', `${extTarget.id}.json`);
+  const gDisk = JSON.parse(readFileSync(gFile, 'utf-8'));
+  gDisk.metadata = { ...(gDisk.metadata ?? {}), feedback: [{ id: 'fb-glob0001', comment: 'from the standalone viewer', at: new Date().toISOString() }] };
+  writeFileSync(gFile, JSON.stringify(gDisk, null, 2));
+  const bump = new Date(Date.now() + 2000);
+  utimesSync(gFile, bump, bump); // defeat same-ms mtime granularity
+  sg.ensureFresh(extTarget.id);
+  check('global ensureFresh delivers viewer-written comment', openFeedbackCount(sg.getCanvas(extTarget.id)!) === 1);
+  // and the reloaded copy is what persists next — the external comment survives a server-side write
+  resolveFeedback(sg.getCanvas(extTarget.id)!, ['fb-glob0001'], 'agent', 'done');
+  sg.touchCanvas(extTarget.id);
+  const gAfter = JSON.parse(readFileSync(gFile, 'utf-8'));
+  check('global resolve persisted without clobbering', gAfter.metadata.feedback[0].resolvedBy === 'agent');
+  // unchanged file → no reload churn
+  sg.ensureFresh(extTarget.id);
+  check('global ensureFresh no-ops when unchanged', openFeedbackCount(sg.getCanvas(extTarget.id)!) === 0);
+  // external delete drops it from the store (mirrors the repo behavior)
+  const gone = sg.createCanvas('Global deleted externally');
+  const goneFile = join(globalHome, 'canvases', `${gone.id}.json`);
+  const { unlinkSync } = await import('node:fs');
+  unlinkSync(goneFile);
+  sg.ensureFresh(gone.id);
+  check('global ensureFresh drops externally deleted canvas', sg.getCanvas(gone.id) === undefined);
+}
+
 // ---- Part 3: repo backend ----------------------------------------------------
 const { mkdtempSync } = await import('node:fs');
 const { tmpdir } = await import('node:os');
