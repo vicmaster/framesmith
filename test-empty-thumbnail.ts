@@ -31,7 +31,7 @@ const emptyCanvas = sg.createCanvas('empty-one');
 const withContent = sg.createCanvas('has-content');
 withContent.root.children = [{ id: 'child', type: 'frame', fill: '#FF0000', width: 100, height: 100 }];
 
-const html = viewer.renderGalleryPage(3001);
+const html = await viewer.renderGalleryPage(3001);
 
 // The empty canvas's card should carry the placeholder markup and class.
 check(

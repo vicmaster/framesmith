@@ -1,11 +1,12 @@
-import { createServer, type Server } from 'node:http';
-import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas } from './scene-graph.js';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas, ensureFresh, touchCanvas } from './scene-graph.js';
 import { resolveVariables } from './variables.js';
 import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDesignSystem, getWorkspaceDesignSystem } from './workspaces.js';
-import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas } from './aggregate.js';
-import { DEFAULT_PROJECT_ID, type Canvas } from './types.js';
+import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
+import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { evaluateCanvas, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
+import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
 
 let runningPort: number | null = null;
 let externalViewerUrl: string | null = null;
@@ -23,6 +24,35 @@ export function setExternalViewerUrl(url: string): void {
 export function getViewerUrl(): string | null {
   if (externalViewerUrl) return externalViewerUrl;
   return runningPort ? `http://localhost:${runningPort}` : null;
+}
+
+/** Read + parse a JSON request body (Phase 21 — the feedback POSTs are the
+ * viewer's first body-carrying endpoints). Empty body → {}. */
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; if (raw.length > 64 * 1024) reject(new Error('Body too large')); });
+    req.on('end', () => {
+      if (!raw.trim()) { resolve({}); return; }
+      try { resolve(JSON.parse(raw)); } catch { reject(new Error('Invalid JSON body')); }
+    });
+    req.on('error', reject);
+  });
+}
+
+/** Mutate a canvas's feedback through the right backend: repo mirrors write
+ * back to their `.framesmith/` file (standalone viewer), everything else goes
+ * through the store + touchCanvas (which persists global canvases, and repo
+ * canvases when this is the MCP server's embedded viewer). Mirrors the
+ * archive-endpoint routing at the top of startViewer. */
+function mutateFeedback(id: string, mutate: (c: Canvas) => boolean): boolean {
+  if (getRepoLocation(id)) return updateRepoCanvas(id, mutate);
+  ensureFresh(id); // embedded-viewer case: pick up external edits before mutating
+  const c = getCanvas(id);
+  if (!c) return false;
+  if (!mutate(c)) return false;
+  touchCanvas(id);
+  return true;
 }
 
 function tryListen(httpServer: Server, port: number): Promise<number> {
@@ -152,6 +182,56 @@ export async function startViewer(port: number): Promise<number> {
         res.end(JSON.stringify({ ok: true, canvasId: id, archived: false }));
         return;
       }
+      // Feedback API (Phase 21 Slice B) — point-and-tell comments. Same
+      // backend routing as the lifecycle endpoints above.
+      const feedbackApi = path.match(/^\/api\/canvas\/([^/]+)\/feedback$/);
+      if (feedbackApi && req.method === 'GET') {
+        const canvas = getCanvas(feedbackApi[1]);
+        if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ openCount: openFeedbackCount(canvas), entries: listFeedback(canvas, { includeResolved: true }) }));
+        return;
+      }
+      if (feedbackApi && req.method === 'POST') {
+        const id = feedbackApi[1];
+        const body = await readJsonBody(req);
+        const nodeId = typeof body.nodeId === 'string' && body.nodeId ? body.nodeId : undefined;
+        const comment = typeof body.comment === 'string' ? body.comment : '';
+        let entry: unknown = null;
+        let addError: string | null = null;
+        const ok = mutateFeedback(id, (c) => {
+          try { entry = addFeedback(c, { nodeId, comment }); return true; }
+          catch (e) { addError = (e as Error).message; return false; }
+        });
+        if (addError) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: false, error: addError })); return; }
+        if (!ok) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, entry }));
+        return;
+      }
+      const feedbackItemApi = path.match(/^\/api\/canvas\/([^/]+)\/feedback\/([^/]+)$/);
+      if (feedbackItemApi && req.method === 'DELETE') {
+        const [, id, fbId] = feedbackItemApi;
+        let removed = false;
+        const ok = mutateFeedback(id, (c) => { removed = deleteFeedback(c, fbId); return removed; });
+        if (!ok || !removed) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, deleted: fbId }));
+        return;
+      }
+      const feedbackResolveApi = path.match(/^\/api\/canvas\/([^/]+)\/feedback\/([^/]+)\/resolve$/);
+      if (feedbackResolveApi && req.method === 'POST') {
+        const [, id, fbId] = feedbackResolveApi;
+        const body = await readJsonBody(req);
+        const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim() : undefined;
+        let resolved = false;
+        const ok = mutateFeedback(id, (c) => { resolved = resolveFeedback(c, [fbId], 'user', note).resolved.length > 0; return resolved; });
+        if (!ok || !resolved) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: true, resolved: fbId }));
+        return;
+      }
+
       const deleteApi = path.match(/^\/api\/canvas\/([^/]+)$/);
       if (deleteApi && req.method === 'DELETE') {
         const id = deleteApi[1];
@@ -880,8 +960,26 @@ function renderDesignSystem(canvas: Canvas): string {
   </div>`;
 }
 
+/** Phase 21 — id → { name, type } for every node, embedded in the detail page
+ * so the comment-mode breadcrumb can label ancestors without extra requests. */
+function buildNodeIndex(root: SceneNode): Record<string, { name?: string; type: string }> {
+  const index: Record<string, { name?: string; type: string }> = {};
+  const walk = (n: SceneNode) => {
+    index[n.id] = { ...(n.name ? { name: n.name } : {}), type: n.type };
+    for (const child of n.children ?? []) walk(child);
+  };
+  walk(root);
+  return index;
+}
+
+/** JSON.stringify safe to inline inside a <script> block. */
+function scriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
   const grade = gradeFor(ev.overallScore);
+  const fbOpen = openFeedbackCount(canvas);
   const cats = ev.categories.map((c) => `
       <div class="insp-cat">
         <span class="insp-cat-name">${esc(c.name)}</span>
@@ -896,6 +994,7 @@ function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
     <div class="insp-tabs">
       <span class="insp-tab active" data-tab="quality">Quality</span>
       <span class="insp-tab" data-tab="design">Design system</span>
+      <span class="insp-tab" data-tab="feedback">Feedback<span class="fb-badge" id="fb-badge"${fbOpen ? '' : ' hidden'}>${fbOpen}</span></span>
       <span class="insp-tab disabled" title="Coming in Phase 19 Slice C">Import</span>
     </div>
     <div class="insp-tabpane" data-pane="quality">
@@ -918,6 +1017,13 @@ function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
       </div>
     </div>
     ${renderDesignSystem(canvas)}
+    <div class="insp-tabpane" data-pane="feedback" hidden>
+      <div class="insp-section">
+        <div class="insp-section-head"><span class="insp-section-label">Point-and-tell</span></div>
+        <div class="fb-hint">Toggle <b>Comment</b> in the toolbar, then click any element in the preview to leave a note for the agent.</div>
+        <div id="fb-pane"></div>
+      </div>
+    </div>
   </aside>`;
 }
 
@@ -1066,6 +1172,35 @@ ${FAVICON_HTML}
   .ds-rad { display: flex; flex-direction: column; gap: 6px; align-items: center; }
   .ds-rad-tile { width: 56px; height: 40px; background: var(--surface-elevated); border: 1px solid var(--border); }
   .ds-rad-label { font-size: 10px; font-weight: 500; color: var(--text-muted); }
+  /* Point-and-tell feedback (Phase 21 Slice B) */
+  .fb-badge { font-size: 10px; font-weight: 700; color: var(--accent-soft); background: var(--accent-tint); border-radius: 8px; padding: 1px 6px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+  .fb-hint { font-size: 11px; color: var(--text-tertiary); line-height: 1.5; }
+  .fb-hint b { color: var(--text-secondary); }
+  #fb-pane { display: flex; flex-direction: column; gap: 10px; }
+  .fb-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+  .fb-card:hover { border-color: var(--border); background: var(--surface-hover); }
+  .fb-card.sel { border-color: var(--accent); background: var(--accent-tint); }
+  .fb-card.resolved { opacity: 0.55; cursor: default; }
+  .fb-card-top { display: flex; align-items: center; gap: 8px; }
+  .fb-anchor { font-size: 10px; font-weight: 600; color: var(--accent-soft); background: var(--surface-elevated); border-radius: 6px; padding: 2px 7px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-orphan { font-size: 10px; font-weight: 600; color: #d9a441; }
+  .fb-when { margin-left: auto; font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .fb-comment { font-size: 12px; font-weight: 500; color: var(--text-primary); line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+  .fb-reply { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; border-left: 2px solid var(--border); padding-left: 8px; }
+  .fb-actions { display: flex; gap: 6px; margin-top: 2px; }
+  .fb-btn { background: var(--surface-elevated); border: 1px solid var(--border); color: var(--text-secondary); padding: 3px 10px; border-radius: 5px; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
+  .fb-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
+  .fb-btn--danger:hover { background: var(--danger-bg); border-color: var(--danger); color: #fecaca; }
+  .fb-sep { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
+  .fb-empty { font-size: 12px; color: var(--text-tertiary); }
+  /* Comment popover — parent-page overlay anchored near the clicked element. */
+  .fb-popover { position: fixed; z-index: 30; width: 300px; background: var(--sidebar); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 28px rgba(0,0,0,0.45); }
+  .fb-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .fb-chip { font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-chip.sel { color: var(--accent-soft); background: var(--accent-tint); border-color: var(--accent); }
+  .fb-popover textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-family: inherit; font-size: 12px; line-height: 1.45; padding: 8px; min-height: 60px; resize: vertical; }
+  .fb-popover textarea:focus { outline: none; border-color: var(--accent); }
+  .fb-pop-actions { display: flex; justify-content: flex-end; gap: 6px; }
   @media (max-width: 900px) { .inspector { width: 300px; } }
   @media (max-width: 720px) { .detail-main { flex-direction: column; } .inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
@@ -1110,6 +1245,7 @@ ${FAVICON_HTML}
     <div class="toolbar-cluster">
       <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
       <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
+      <button class="btn" onclick="toggleComment()" id="btn-comment" title="Click any element in the preview to leave a note for the agent">Comment</button>
     </div>
     <span class="toolbar-divider" aria-hidden="true"></span>
     <div class="toolbar-cluster">
@@ -1148,6 +1284,11 @@ ${FAVICON_HTML}
     const canvasId = '${canvas.id}';
     let lastModified = '${canvas.lastModified}';
     let currentBp = 'desktop';
+
+    // Phase 21 — point-and-tell: initial feedback entries + node labels for
+    // the breadcrumb. Kept fresh client-side via GET /api/canvas/:id/feedback.
+    const FB_INIT = ${scriptJson(listFeedback(canvas, { includeResolved: true }))};
+    const NODE_INDEX = ${scriptJson(buildNodeIndex(canvas.root))};
 
     // Auto-refresh polling
     setInterval(async () => {
@@ -1258,6 +1399,253 @@ ${FAVICON_HTML}
         alert('Action failed: ' + err.message);
       }
     }
+
+    // ── Phase 21 — point-and-tell feedback ─────────────────────────────────
+    // Pane renderer: cards are built with DOM APIs (never innerHTML from user
+    // text) so comment content can't inject markup.
+    function nodeLabel(nodeId) {
+      const n = NODE_INDEX[nodeId];
+      return n ? (n.name || n.type) : nodeId;
+    }
+
+    function fbCard(entry) {
+      const card = document.createElement('div');
+      card.className = 'fb-card' + (entry.resolvedAt ? ' resolved' : '');
+      const top = document.createElement('div');
+      top.className = 'fb-card-top';
+      const anchor = document.createElement('span');
+      anchor.className = 'fb-anchor';
+      anchor.textContent = entry.nodeId ? ((entry.node && (entry.node.name || entry.node.type)) || nodeLabel(entry.nodeId)) : 'whole page';
+      top.appendChild(anchor);
+      if (entry.orphaned) {
+        const o = document.createElement('span');
+        o.className = 'fb-orphan';
+        o.title = 'The anchored node no longer exists — the concern may still apply to its replacement';
+        o.textContent = 'node gone';
+        top.appendChild(o);
+      }
+      const when = document.createElement('span');
+      when.className = 'fb-when';
+      when.textContent = new Date(entry.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      top.appendChild(when);
+      card.appendChild(top);
+      const msg = document.createElement('div');
+      msg.className = 'fb-comment';
+      msg.textContent = entry.comment;
+      card.appendChild(msg);
+      if (entry.resolutionNote) {
+        const reply = document.createElement('div');
+        reply.className = 'fb-reply';
+        reply.textContent = (entry.resolvedBy === 'agent' ? 'agent: ' : '') + entry.resolutionNote;
+        card.appendChild(reply);
+      }
+      if (!entry.resolvedAt) {
+        const actions = document.createElement('div');
+        actions.className = 'fb-actions';
+        const resolveBtn = document.createElement('button');
+        resolveBtn.className = 'fb-btn';
+        resolveBtn.textContent = 'Resolve';
+        resolveBtn.onclick = (e) => { e.stopPropagation(); fbAction('/feedback/' + entry.id + '/resolve', 'POST'); };
+        const delBtn = document.createElement('button');
+        delBtn.className = 'fb-btn fb-btn--danger';
+        delBtn.textContent = 'Delete';
+        delBtn.onclick = (e) => { e.stopPropagation(); if (confirm('Delete this comment?')) fbAction('/feedback/' + entry.id, 'DELETE'); };
+        actions.appendChild(resolveBtn);
+        actions.appendChild(delBtn);
+        card.appendChild(actions);
+      }
+      if (entry.nodeId && !entry.orphaned) {
+        card.onclick = () => {
+          const wasSel = card.classList.contains('sel');
+          document.querySelectorAll('.fb-card.sel').forEach((o) => o.classList.remove('sel'));
+          if (wasSel) { highlightNode(null, false); return; }
+          card.classList.add('sel');
+          highlightNode(entry.nodeId, true);
+        };
+      }
+      return card;
+    }
+
+    function renderFeedbackPane(entries) {
+      const pane = document.getElementById('fb-pane');
+      const badge = document.getElementById('fb-badge');
+      if (!pane) return;
+      pane.replaceChildren();
+      const open = entries.filter((e) => !e.resolvedAt);
+      const done = entries.filter((e) => e.resolvedAt);
+      if (badge) { badge.textContent = String(open.length); badge.hidden = open.length === 0; }
+      if (!open.length && !done.length) {
+        const empty = document.createElement('div');
+        empty.className = 'fb-empty';
+        empty.textContent = 'No comments yet.';
+        pane.appendChild(empty);
+        return;
+      }
+      open.forEach((e) => pane.appendChild(fbCard(e)));
+      if (done.length) {
+        const sep = document.createElement('div');
+        sep.className = 'fb-sep';
+        sep.textContent = 'Resolved';
+        pane.appendChild(sep);
+        done.forEach((e) => pane.appendChild(fbCard(e)));
+      }
+    }
+
+    async function loadFeedback() {
+      try {
+        const res = await fetch('/api/canvas/' + canvasId + '/feedback');
+        const data = await res.json();
+        renderFeedbackPane(data.entries);
+      } catch { /* pane keeps its last state */ }
+    }
+
+    async function fbAction(suffix, method) {
+      try {
+        const res = await fetch('/api/canvas/' + canvasId + suffix, { method });
+        if (!res.ok) throw new Error('Request failed: ' + res.status);
+        loadFeedback();
+      } catch (err) { alert('Action failed: ' + err.message); }
+    }
+
+    // Comment mode: crosshair + hover outline inside the main iframe; click
+    // resolves the nearest data-node-id, a popover picks scope + takes the note.
+    let commentMode = false;
+    const HOVER_STYLE_ID = 'fs-comment-hover';
+
+    function frameDoc() {
+      const frame = document.getElementById('frame');
+      try { return frame.contentDocument; } catch { return null; }
+    }
+
+    function setFrameCommentAffordance(on) {
+      const doc = frameDoc();
+      if (!doc || !doc.body) return;
+      doc.getElementById(HOVER_STYLE_ID)?.remove();
+      if (on) {
+        const style = doc.createElement('style');
+        style.id = HOVER_STYLE_ID;
+        style.textContent = 'body { cursor: crosshair !important; } [data-node-id]:hover { outline: 1px dashed #f59e0b !important; outline-offset: 1px; }';
+        doc.head.appendChild(style);
+      }
+    }
+
+    function onFrameClick(e) {
+      if (!commentMode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const target = e.target.closest ? e.target.closest('[data-node-id]') : null;
+      const chain = [];
+      let el = target;
+      while (el) {
+        chain.push(el.getAttribute('data-node-id'));
+        el = el.parentElement && el.parentElement.closest('[data-node-id]');
+      }
+      openPopover(chain, e);
+    }
+
+    function hookFrame() {
+      const doc = frameDoc();
+      if (!doc) return;
+      doc.removeEventListener('click', onFrameClick, true);
+      doc.addEventListener('click', onFrameClick, true);
+      setFrameCommentAffordance(commentMode);
+    }
+
+    function toggleComment() {
+      commentMode = !commentMode;
+      document.getElementById('btn-comment').classList.toggle('active', commentMode);
+      if (!commentMode) closePopover();
+      hookFrame();
+    }
+
+    let popoverEl = null;
+    let popoverSelected = null; // nodeId or null = whole page
+
+    function closePopover() {
+      if (popoverEl) { popoverEl.remove(); popoverEl = null; }
+      highlightNode(null, false);
+    }
+
+    function openPopover(chain, clickEvent) {
+      closePopover();
+      popoverSelected = chain.length ? chain[0] : null;
+      const pop = document.createElement('div');
+      pop.className = 'fb-popover';
+      const chips = document.createElement('div');
+      chips.className = 'fb-chips';
+      const allChips = [];
+      const makeChip = (label, nodeId, title) => {
+        const chip = document.createElement('span');
+        chip.className = 'fb-chip';
+        chip.textContent = label;
+        if (title) chip.title = title;
+        chip.onclick = () => {
+          popoverSelected = nodeId;
+          allChips.forEach((c) => c.classList.remove('sel'));
+          chip.classList.add('sel');
+          highlightNode(nodeId, !!nodeId);
+        };
+        allChips.push(chip);
+        chips.appendChild(chip);
+        return chip;
+      };
+      chain.slice(0, 5).forEach((nodeId) => makeChip(nodeLabel(nodeId), nodeId, 'Anchor the comment to this element'));
+      makeChip('whole page', null, 'A general note not tied to one element');
+      const selIdx = chain.length ? 0 : allChips.length - 1;
+      allChips[selIdx].classList.add('sel');
+      if (popoverSelected) highlightNode(popoverSelected, true);
+      pop.appendChild(chips);
+      const ta = document.createElement('textarea');
+      ta.placeholder = 'Tell the agent what to change…';
+      pop.appendChild(ta);
+      const actions = document.createElement('div');
+      actions.className = 'fb-pop-actions';
+      const cancel = document.createElement('button');
+      cancel.className = 'fb-btn';
+      cancel.textContent = 'Cancel';
+      cancel.onclick = closePopover;
+      const save = document.createElement('button');
+      save.className = 'fb-btn';
+      save.textContent = 'Save comment';
+      save.onclick = async () => {
+        const comment = ta.value.trim();
+        if (!comment) { ta.focus(); return; }
+        try {
+          const res = await fetch('/api/canvas/' + canvasId + '/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(popoverSelected ? { nodeId: popoverSelected, comment } : { comment }),
+          });
+          if (!res.ok) throw new Error('Request failed: ' + res.status);
+          closePopover();
+          loadFeedback();
+          const fbTab = document.querySelector('.insp-tab[data-tab="feedback"]');
+          if (fbTab) fbTab.click();
+        } catch (err) { alert('Could not save comment: ' + err.message); }
+      };
+      actions.appendChild(cancel);
+      actions.appendChild(save);
+      pop.appendChild(actions);
+      document.body.appendChild(pop);
+      popoverEl = pop;
+      // Position near the click, mapping iframe coords → page coords (handles
+      // Fit-mode scaling); clamp so the popover stays on-screen.
+      const frame = document.getElementById('frame');
+      const rect = frame.getBoundingClientRect();
+      const win = frame.contentWindow;
+      const sx = win && win.innerWidth ? rect.width / win.innerWidth : 1;
+      const sy = win && win.innerHeight ? rect.height / win.innerHeight : 1;
+      const px = rect.left + clickEvent.clientX * sx;
+      const py = rect.top + clickEvent.clientY * sy;
+      pop.style.left = Math.max(8, Math.min(px, window.innerWidth - 316)) + 'px';
+      pop.style.top = Math.max(60, Math.min(py + 8, window.innerHeight - pop.offsetHeight - 8)) + 'px';
+      ta.focus();
+    }
+
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePopover(); });
+    document.getElementById('frame').addEventListener('load', hookFrame);
+    hookFrame();
+    renderFeedbackPane(FB_INIT);
 
     // Phase 19 Slice A — click an issue to outline its node in the preview.
     // The render carries data-node-id on every element; iframes are same-origin

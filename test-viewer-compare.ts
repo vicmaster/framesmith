@@ -21,7 +21,7 @@ const canvas: Canvas = {
   lastModified: '2026-05-16T00:00:00Z',
 };
 
-const html = renderDetailPage(canvas, 3001);
+const html = await renderDetailPage(canvas, 3001);
 
 const markupChecks: Array<{ name: string; needle: string | RegExp }> = [
   { name: 'Compare toolbar button', needle: 'id="bp-compare"' },

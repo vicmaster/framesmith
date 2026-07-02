@@ -40,7 +40,7 @@ sg.archiveCanvas(archivedB.id);
 
 // ---- 1. Sidebar Archive entry on a project page ------------------------
 {
-  const html = viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001)!;
+  const html = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
   check('project page: sidebar contains Archive link', html.includes('class="sidebar-archive'));
   check('project page: Archive link points to /archive', html.includes('href="/archive"'));
   check('project page: Archive count = 2 (cross-project total)',
@@ -89,7 +89,7 @@ sg.archiveCanvas(archivedB.id);
 // ---- 4. Detail page lifecycle buttons ---------------------------------
 {
   // Non-archived canvas → Archive button + Delete button, NO Restore button
-  const detailActive = viewer.renderDetailPage(sg.getCanvas(active.id)!, 3001);
+  const detailActive = await viewer.renderDetailPage(sg.getCanvas(active.id)!, 3001);
   check('detail (active): Archive button present', detailActive.includes('id="btn-archive"'));
   check('detail (active): Restore button absent', !detailActive.includes('id="btn-restore"'));
   check('detail (active): Delete button present', detailActive.includes('id="btn-delete"'));
@@ -98,7 +98,7 @@ sg.archiveCanvas(archivedB.id);
     detailActive.includes(`/project/${DEFAULT_PROJECT_ID}`));
 
   // Archived canvas → Restore button instead of Archive
-  const detailArchived = viewer.renderDetailPage(sg.getCanvas(archivedA.id)!, 3001);
+  const detailArchived = await viewer.renderDetailPage(sg.getCanvas(archivedA.id)!, 3001);
   check('detail (archived): Restore button present', detailArchived.includes('id="btn-restore"'));
   check('detail (archived): Archive button absent', !detailArchived.includes('id="btn-archive"'));
   check('detail (archived): Delete button still present', detailArchived.includes('id="btn-delete"'));
@@ -108,7 +108,7 @@ sg.archiveCanvas(archivedB.id);
 {
   // Delete the archived canvas, archive count should drop in the sidebar.
   sg.deleteCanvas(archivedA.id);
-  const html = viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001)!;
+  const html = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
   check('after delete: sidebar archive count drops to 0',
     /class="sidebar-archive-count">0<\/span>/.test(html));
 }

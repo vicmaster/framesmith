@@ -43,7 +43,7 @@ const archivedOne = sg.createCanvas('old', projInDefault.id);
 sg.archiveCanvas(archivedOne.id);
 
 // Render the default-project page
-const htmlDefault = viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001)!;
+const htmlDefault = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
 
 // ---- 1. Sidebar tree structure ------------------------------------------
 check('sidebar: contains "Framesmith" logo', htmlDefault.includes('sidebar-logo'));
@@ -85,7 +85,7 @@ check('main: grid does NOT contain Acme canvases', !htmlDefault.includes(`>logo<
 check('main: grid does NOT contain archived "old" canvas', !htmlDefault.includes('>old<'));
 
 // ---- 6. Acme project page scoping ---------------------------------------
-const htmlAcme = viewer.renderProjectPage(projAcmeA.id, 3001)!;
+const htmlAcme = (await viewer.renderProjectPage(projAcmeA.id, 3001))!;
 check('acme page: breadcrumb shows "Acme / Brand"', htmlAcme.includes('Acme / Brand'));
 check('acme page: title shows "Brand"', /<h1 class="project-title">Brand<\/h1>/.test(htmlAcme));
 check('acme page: active highlight is on Brand, not Untitled',
@@ -94,12 +94,12 @@ check('acme page: active highlight is on Brand, not Untitled',
 );
 
 // ---- 7. Empty-project state ---------------------------------------------
-const htmlEmptyProj = viewer.renderProjectPage(projAcmeB.id, 3001)!;
+const htmlEmptyProj = (await viewer.renderProjectPage(projAcmeB.id, 3001))!;
 check('empty project: shows "No canvases in Marketing yet"', htmlEmptyProj.includes('No canvases in Marketing yet'));
 check('empty project: hint suggests canvas_create with this projectId', htmlEmptyProj.includes(`canvas_create({ projectId: \"${projAcmeB.id}\" })`));
 
 // ---- 8. Unknown project → null (404 path) -------------------------------
-check('renderProjectPage: returns null for unknown projectId', viewer.renderProjectPage('does-not-exist', 3001) === null);
+check('renderProjectPage: returns null for unknown projectId', (await viewer.renderProjectPage('does-not-exist', 3001)) === null);
 
 // ---- 9. Mobile sidebar toggle (off-canvas drawer below 768px) ------------
 check('mobile: page includes sidebar-toggle hamburger button', htmlDefault.includes('class="sidebar-toggle"'));
