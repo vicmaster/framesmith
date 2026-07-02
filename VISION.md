@@ -440,10 +440,10 @@ Machine critique flows to the agent as structured data; human critique arrives a
 
 - [x] Data model + core — `FeedbackEntry` on `canvas.metadata.feedback[]` (node-anchored or canvas-level, snapshot for orphan resilience), pure `src/feedback.ts`, persistence on both backends (global + repo write-back)
 - [x] Agent tools — `get_feedback` (open comments + node context, `orphaned` flag) / `resolve_feedback` (per-id results, resolution note); `ensureFresh` delivers viewer-written comments to the running server without restart
-- [ ] Viewer comment mode — click-to-anchor with ancestor breadcrumb re-scoping, popover, Feedback inspector tab with click-to-highlight + user-side resolve/delete
+- [x] Viewer comment mode — click-to-anchor with ancestor breadcrumb re-scoping, popover, Feedback inspector tab with click-to-highlight + user-side resolve/delete
 - [ ] Loop integration — `openFeedback` count on `canvas_list`/`canvas_evaluate`; operating contract: open feedback blocks present, same bar as open inspector comments
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-21-SPEC.md`](docs/specs/PHASE-21-SPEC.md). Slice A (data model + core + agent tools) shipped; Slices B/C pending._
+_Full spec-driven breakdown in [`docs/specs/PHASE-21-SPEC.md`](docs/specs/PHASE-21-SPEC.md). Slices A (data model + core + agent tools) and B (viewer comment mode) shipped; Slice C pending._
 
 ---
 
