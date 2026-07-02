@@ -210,6 +210,28 @@ export interface CritiqueVerdict {
   at: string;
 }
 
+/** Phase 21 — a point-and-tell comment the user left in the viewer, anchored
+ * to a node (or to the canvas as a whole when `nodeId` is absent). Lives on
+ * `Canvas.metadata.feedback` so it travels with the canvas (git-diffable in
+ * bound repos) and reaches a running server via the ensureFresh mtime reload.
+ * `node` is a snapshot captured at comment time so the entry stays meaningful
+ * after the node changes or is deleted (orphan resilience — C4). */
+export interface FeedbackEntry {
+  /** "fb-" + random suffix; unique within the canvas. */
+  id: string;
+  /** Anchor node. Absent = canvas-level note ("whole thing feels cramped"). */
+  nodeId?: string;
+  comment: string;
+  /** ISO-8601 timestamp when the comment was written. */
+  at: string;
+  /** Snapshot of the anchor at comment time (text truncated to ~80 chars). */
+  node?: { type: string; name?: string; text?: string };
+  resolvedAt?: string;
+  resolvedBy?: 'agent' | 'user';
+  /** The agent's reply when resolving — tells the user what changed. */
+  resolutionNote?: string;
+}
+
 /** Phase 11 — one per-project build-log entry: a provenance record plus the
  * canvas it describes. The diversification signal reads the last N entries to
  * steer the next canvas toward differing on >= 1 axis. */
@@ -249,6 +271,8 @@ export interface Canvas {
     provenance?: Provenance;
     /** Phase 13 — latest rubric critique verdict (LLM judge). */
     critique?: CritiqueVerdict;
+    /** Phase 21 — point-and-tell comments from the viewer. */
+    feedback?: FeedbackEntry[];
     [key: string]: unknown;
   };
 }

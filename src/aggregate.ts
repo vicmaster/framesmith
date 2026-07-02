@@ -15,6 +15,7 @@
 
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, mergeRepoWorkspace } from './workspaces.js';
 import { loadPersistedCanvases, ingestCanvases, getCanvas, deleteCanvas } from './scene-graph.js';
+import type { Canvas } from './types.js';
 import { readRegistry, readWorkspaceFile, readRepoCanvasEntries, writeCanvasFileAt, deleteCanvasFileAt } from './repo-store.js';
 import { watch, existsSync, type FSWatcher } from 'node:fs';
 import { join } from 'node:path';
@@ -121,21 +122,31 @@ export function watchAggregateSources(
   };
 }
 
-/** Archive/unarchive a mirrored repo canvas: flip the flag in the store and
- * write it back to the repo file. Returns false if the id isn't a repo mirror
- * (caller falls back to the global path). */
-export function archiveRepoCanvas(id: string, archived: boolean): boolean {
+/** Mutate a mirrored repo canvas in the store and write it back to the repo
+ * file it came from (Phase 21 — the generic shape archive always had). The
+ * mutator returns false to abort without writing. Returns false if the id
+ * isn't a repo mirror (caller falls back to the global path). */
+export function updateRepoCanvas(id: string, mutate: (c: Canvas) => boolean): boolean {
   const loc = repoLocations.get(id);
   if (!loc) return false;
   const c = getCanvas(id);
   if (!c) return false;
-  c.archived = archived;
-  const now = new Date().toISOString();
-  if (archived) c.archivedAt = now;
-  else delete c.archivedAt;
-  c.lastModified = now;
+  if (!mutate(c)) return false;
+  c.lastModified = new Date().toISOString();
   writeCanvasFileAt(loc.canvasDir, loc.absFile, c);
   return true;
+}
+
+/** Archive/unarchive a mirrored repo canvas: flip the flag in the store and
+ * write it back to the repo file. Returns false if the id isn't a repo mirror
+ * (caller falls back to the global path). */
+export function archiveRepoCanvas(id: string, archived: boolean): boolean {
+  return updateRepoCanvas(id, (c) => {
+    c.archived = archived;
+    if (archived) c.archivedAt = new Date().toISOString();
+    else delete c.archivedAt;
+    return true;
+  });
 }
 
 /** Delete a mirrored repo canvas: remove its repo file and drop it from the

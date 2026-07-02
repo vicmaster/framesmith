@@ -510,6 +510,19 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 | `height` | number? | Viewport height (default 900) |
 | `scale` | number? | Device scale (default 1) |
 
+### `get_feedback` / `resolve_feedback`
+
+Point-and-tell feedback: comments anchored to a specific node (or to the canvas as a whole), stored on the canvas at `metadata.feedback` — plain JSON that travels with the canvas and is git-diffable in bound repos. `get_feedback` returns open entries, each with the comment, the anchor `nodeId`, and a **node snapshot** (`{ type, name, text }`) captured at comment time, so the agent can act without extra lookups; `orphaned: true` marks a comment whose node no longer exists (it stays open — the concern usually applies to the node's replacement). Omit `canvasId` to sweep every canvas in the current context. `resolve_feedback` closes entries with an optional one-line note saying what changed. **Open feedback blocks presenting**, same as open inspector comments.
+
+The viewer's click-to-comment mode (Phase 21 Slice B) is the authoring surface; until it lands, entries can be added by editing the canvas JSON — the running server picks up external edits automatically.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string? (`get`) / string (`resolve`) | Canvas ID; omit on `get_feedback` to sweep the current context |
+| `includeResolved` | boolean? | `get_feedback`: also return resolved entries (default false) |
+| `feedbackIds` | string[] | `resolve_feedback`: entry ids (`fb-...`) to mark resolved |
+| `note` | string? | `resolve_feedback`: reply shown next to the user's comment — what you changed |
+
 ### `canvas_evaluate`
 
 Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.

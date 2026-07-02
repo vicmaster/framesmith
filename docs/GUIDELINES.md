@@ -148,6 +148,7 @@ Practical notes:
 - **`canvas_revise`** closes the loop: it judges, and for any failing axis asks the model for targeted `batch_design` ops, applies them, and re-judges — up to `maxIterations` passes (1–3). It **mutates the canvas**, reverts any pass that doesn't improve the overall, and stops on pass / cap / no-improvement. Opt-in and costly (≥2 API calls per pass); reach for it when you want the model to act on its own critique instead of you hand-translating it.
 - **`screenshot_responsive`** renders the same scene at mobile / tablet / desktop. Inspect all three; if `responsive` hints are set correctly the mobile layout will look right with no extra work.
 - **`snapshot_layout`** returns computed bounding boxes — useful for asserting alignment or detecting overflow programmatically.
+- **The human can point.** `get_feedback` returns comments the user anchored to specific nodes (each with a node snapshot — type / name / text — so you can act without extra lookups; `orphaned: true` means the node is gone but the concern likely still applies to its replacement). Check it whenever you pick up an existing canvas — feedback may have arrived while you were away, and the running server picks up externally written comments automatically. **Open feedback blocks presenting**, exactly like open inspector comments: address every item, then close each with `resolve_feedback` and a one-line note saying what changed — the note is your reply to the user.
 
 ## Designing with taste
 

@@ -19,6 +19,7 @@ import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots,
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
+import { listFeedback, resolveFeedback, openFeedbackCount } from './feedback.js';
 import { importHtml, importUrl, renderImportedTree, snapToTokens } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
@@ -55,6 +56,8 @@ Structures come in two kinds (list_structures): page scaffolds (marquee-hero, be
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
+Point-and-tell feedback: the user can click any element in the viewer and leave a comment anchored to that node. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed.
+
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
 - import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.`;
@@ -78,6 +81,7 @@ const WORKFLOW_CHEATSHEET = [
   'screenshot → review the render → iterate.',
   'canvas_evaluate → resolve EVERY comment (canvas_autofix mechanical / batch_design rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
+  'Picking up an existing canvas? get_feedback first — the user may have left point-and-tell comments in the viewer. Address every open item, then resolve_feedback with a note saying what changed.',
 ];
 
 const GOTCHAS = [
@@ -91,6 +95,7 @@ const GOTCHAS = [
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
+  'Point-and-tell feedback: the user can click elements in the viewer and leave node-anchored comments. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed.',
   'Cliché tells (canvas_evaluate "cliche" category): avoid default purple/indigo accents, gradient/glow overuse, fake window chrome, fabricated metrics, slop copy (filler verbs / scroll cues / "Jane Doe" / hype labels), an eyebrow above every section (keep to ~1 per 3 sections), mixed radius systems (one radius scale), pure black/white (use off-black/off-white), and competing accents (one accent hue + neutrals).',
 ];
 
@@ -1238,6 +1243,54 @@ where value is a color (\`#hex\`, \`rgba(...)\`) for colors, \`Npx\` for spacing
         }, null, 2),
       }, ...await warmFontsContent(preset.variables)],
     };
+  }
+);
+
+// --- get_feedback ---
+server.tool(
+  'get_feedback',
+  `Read point-and-tell feedback: comments the user left by clicking elements in the viewer, each anchored to a specific node (or to the canvas as a whole when nodeId is absent). Returns open entries by default — each carries the comment, the anchor nodeId, and a node snapshot { type, name, text } captured at comment time, so you can act without extra lookups. "orphaned": true marks a comment whose anchor node no longer exists — it stays open because the concern usually still applies to the node's replacement. Omit canvasId to sweep every canvas in the current context and find where feedback is waiting. OPEN FEEDBACK BLOCKS PRESENTING, same as open inspector comments: check this tool when picking up a canvas, address each item (batch_design etc.), then close it with resolve_feedback.`,
+  {
+    canvasId: z.string().optional().describe('Canvas ID. Omit to sweep all canvases in the current context and return only those with feedback.'),
+    includeResolved: z.boolean().optional().describe('Also return resolved entries (default false — open only)'),
+  },
+  async ({ canvasId, includeResolved }) => {
+    if (canvasId) {
+      ensureFresh(canvasId); // the comment may have just arrived from the viewer
+      const canvas = getCanvas(canvasId);
+      if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+      const entries = listFeedback(canvas, { includeResolved });
+      return { content: [{ type: 'text', text: JSON.stringify({ canvasId, openCount: openFeedbackCount(canvas), entries }, null, 2) }] };
+    }
+    const perCanvas = [];
+    for (const summary of listCanvases()) {
+      if (summary.archived) continue;
+      ensureFresh(summary.id);
+      const canvas = getCanvas(summary.id);
+      if (!canvas) continue;
+      const entries = listFeedback(canvas, { includeResolved });
+      if (entries.length > 0) perCanvas.push({ canvasId: canvas.id, name: canvas.name, openCount: openFeedbackCount(canvas), entries });
+    }
+    return { content: [{ type: 'text', text: JSON.stringify({ canvasesWithFeedback: perCanvas.length, canvases: perCanvas }, null, 2) }] };
+  }
+);
+
+// --- resolve_feedback ---
+server.tool(
+  'resolve_feedback',
+  `Close point-and-tell feedback entries after addressing them (see get_feedback). Marks each id resolved with resolvedBy: "agent" and an optional note — write the note as your reply to the user ("tightened the card header gap to 8"), it shows up next to their comment in the viewer. Unknown or already-resolved ids come back in notFound instead of failing the call. Resolve only what you actually addressed; the remaining openCount still blocks presenting.`,
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    feedbackIds: z.array(z.string()).min(1).describe('Feedback entry ids (fb-...) to mark resolved'),
+    note: z.string().optional().describe('One-line reply shown to the user next to their comment — what you changed'),
+  },
+  async ({ canvasId, feedbackIds, note }) => {
+    ensureFresh(canvasId);
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    const result = resolveFeedback(canvas, feedbackIds, 'agent', note);
+    if (result.resolved.length > 0) touchCanvas(canvasId);
+    return { content: [{ type: 'text', text: JSON.stringify({ ...result, openCount: openFeedbackCount(canvas) }, null, 2) }] };
   }
 );
 
