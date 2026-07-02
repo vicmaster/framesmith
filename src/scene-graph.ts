@@ -172,17 +172,26 @@ export interface CanvasSummary {
   lastModified: string;
   projectId: string;
   archived: boolean;
+  /** Phase 21 slice C — open point-and-tell comments. Present only when > 0
+   * so summaries stay lean; open feedback blocks presenting the canvas. */
+  openFeedback?: number;
 }
 
 export function listCanvases(): CanvasSummary[] {
-  return Array.from(store.values()).map((c) => ({
-    id: c.id,
-    name: c.name,
-    createdAt: c.createdAt,
-    lastModified: c.lastModified,
-    projectId: c.projectId,
-    archived: c.archived === true,
-  }));
+  return Array.from(store.values()).map((c) => {
+    // Inline count (not feedback.ts's openFeedbackCount) — feedback.ts imports
+    // from this module, so using the helper here would be a circular import.
+    const openFeedback = (c.metadata?.feedback ?? []).filter((e) => !e.resolvedAt).length;
+    return {
+      id: c.id,
+      name: c.name,
+      createdAt: c.createdAt,
+      lastModified: c.lastModified,
+      projectId: c.projectId,
+      archived: c.archived === true,
+      ...(openFeedback > 0 ? { openFeedback } : {}),
+    };
+  });
 }
 
 export function deleteCanvas(id: string): boolean {

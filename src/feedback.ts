@@ -106,3 +106,11 @@ export function deleteFeedback(canvas: Canvas, id: string): boolean {
 export function openFeedbackCount(canvas: Canvas): number {
   return (canvas.metadata?.feedback ?? []).filter((e) => !e.resolvedAt).length;
 }
+
+/** Slice C — fold open feedback into canvas_evaluate's present/keep-working
+ * directive. Open comments block presenting even when the score is READY:
+ * the human's note outranks the heuristics. */
+export function appendFeedbackDirective(directive: string, open: number): string {
+  if (open <= 0) return directive;
+  return `${directive} ALSO BLOCKING: ${open} open point-and-tell comment(s) from the user — read them with get_feedback, address each, then resolve_feedback. Do NOT present while feedback is open.`;
+}

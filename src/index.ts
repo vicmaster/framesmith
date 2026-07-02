@@ -19,7 +19,7 @@ import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots,
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
 import { parseDesignMd } from './design-md-parser.js';
-import { listFeedback, resolveFeedback, openFeedbackCount } from './feedback.js';
+import { listFeedback, resolveFeedback, openFeedbackCount, appendFeedbackDirective } from './feedback.js';
 import { importHtml, importUrl, renderImportedTree, snapToTokens } from './import.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas } from './evaluate.js';
@@ -95,7 +95,7 @@ const GOTCHAS = [
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
-  'Point-and-tell feedback: the user clicks elements in the viewer (Comment mode) to leave node-anchored or whole-page comments, stored on the canvas at metadata.feedback. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed (shown as your reply in the viewer\'s Feedback tab).',
+  'Point-and-tell feedback: the user clicks elements in the viewer (Comment mode) to leave node-anchored or whole-page comments, stored on the canvas at metadata.feedback. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed (shown as your reply in the viewer\'s Feedback tab). canvas_list rows and canvas_evaluate results carry an openFeedback count (and the evaluate directive stays blocking) while comments are open.',
   'Cliché tells (canvas_evaluate "cliche" category): avoid default purple/indigo accents, gradient/glow overuse, fake window chrome, fabricated metrics, slop copy (filler verbs / scroll cues / "Jane Doe" / hype labels), an eyebrow above every section (keep to ~1 per 3 sections), mixed radius systems (one radius scale), pure black/white (use off-black/off-white), and competing accents (one accent hue + neutrals).',
 ];
 
@@ -155,7 +155,7 @@ server.tool(
 // --- canvas_list ---
 server.tool(
   'canvas_list',
-  'List canvases. By default returns all non-archived canvases. Filter by `projectId` to scope to one project. Set `includeArchived: true` to include archived canvases in the result.',
+  'List canvases. By default returns all non-archived canvases. Filter by `projectId` to scope to one project. Set `includeArchived: true` to include archived canvases in the result. A row carrying `openFeedback: n` has open point-and-tell comments from the user waiting — read them with get_feedback before working on (or presenting) that canvas.',
   {
     projectId: z.string().optional().describe('Only list canvases in this project'),
     includeArchived: z.boolean().optional().describe('Include archived canvases in the result (default false)'),
@@ -1301,7 +1301,7 @@ server.tool(
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
   - "llm": fast-mode heuristics plus a vision-model critique against a FIXED rubric (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field: { rubric: { hierarchy, execution, specificity, restraint, variety } each {score 1-5, rationale}, score (0-100 derived), summary, suggestions, needsRevision, failingAxes }. The verdict is stamped on the canvas (metadata.critique) + the per-project build log for auditability. Cost: one paid API call per invocation. To CLOSE the loop and auto-fix failing axes, use canvas_revise.
-Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset). The result includes a "directive" field — a present/keep-working verdict: resolve EVERY comment and clear > 95 before showing the design to the user; the directive tells you when it's safe to present.`,
+Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset). The result includes a "directive" field — a present/keep-working verdict: resolve EVERY comment and clear > 95 before showing the design to the user; the directive tells you when it's safe to present. An "openFeedback" field (when > 0) counts the user's open point-and-tell comments — they block presenting even at a READY score; read them with get_feedback and close them with resolve_feedback.`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
     mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model rubric critique'),
@@ -1314,6 +1314,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
       .describe('llm mode only: per-axis rubric floor (1-5). Any axis below it sets needsRevision. Default 3 (or FRAMESMITH_CRITIQUE_FLOOR).'),
   },
   async ({ canvasId, mode, categories, genre, floor }) => {
+    ensureFresh(canvasId); // a point-and-tell comment may have just arrived from the viewer
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
@@ -1348,12 +1349,16 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
     const optional = result.issues.length - blocking;
     const ready = blocking === 0 && result.overallScore > 95;
     const optTail = optional ? ` ${optional} optional refinement(s) noted (info) — address if easy, not required.` : '';
-    const directive = ready
+    const baseDirective = ready
       ? `READY TO PRESENT — ${result.overallScore}/100, no blocking issues.${optTail}`
       : `NOT READY — ${result.overallScore}/100 with ${blocking} issue(s) to resolve${optional ? ` (+${optional} optional)` : ''}. Fix them now: canvas_autofix for the mechanical subset, batch_design for the rest (cliché tells included), then re-run canvas_evaluate. Repeat until there are zero warnings/cliché tells and the score is > 95. Do NOT show this design to the user yet.`;
+    // Slice C — open point-and-tell comments block presenting even at READY:
+    // the human's note outranks the heuristics.
+    const openFeedback = openFeedbackCount(canvas);
+    const directive = appendFeedbackDirective(baseDirective, openFeedback);
 
     return {
-      content: [{ type: 'text', text: JSON.stringify({ ...result, directive }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ ...result, ...(openFeedback > 0 ? { openFeedback } : {}), directive }, null, 2) }],
     };
   }
 );
@@ -1496,6 +1501,8 @@ server.tool(
   async ({ dir, workspaceName, projects }) => {
     const result = initWorkspace({ dir, workspaceName, projects });
     if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
+    // Slice C — surface waiting point-and-tell comments at session start.
+    const openFeedbackTotal = listCanvases().reduce((sum, c) => sum + (c.openFeedback ?? 0), 0);
     return {
       content: [{
         type: 'text',
@@ -1504,6 +1511,12 @@ server.tool(
           workspace: result.workspace,
           projects: result.projects,
           projectsCreatedThisCall: result.projectsCreated,
+          ...(openFeedbackTotal > 0 ? {
+            openFeedback: {
+              total: openFeedbackTotal,
+              note: 'Open point-and-tell comments from the user are waiting — run get_feedback (no canvasId) to see them; they block presenting those canvases.',
+            },
+          } : {}),
           designSystem: {
             layer: 'workspace',
             tokenCount: result.designSystemTokenCount,

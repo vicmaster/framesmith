@@ -17,7 +17,7 @@ const globalHome = process.env.FRAMESMITH_HOME!;
 
 const sg = await import('./src/scene-graph.js');
 const ws = await import('./src/workspaces.js');
-const { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } = await import('./src/feedback.js');
+const { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount, appendFeedbackDirective } = await import('./src/feedback.js');
 const { parseAndExecute } = await import('./src/operations.js');
 
 let allPass = true;
@@ -82,6 +82,16 @@ check('snapshot survives the node (type/name intact)', views.find((e) => e.id ==
 
 check('deleteFeedback removes', deleteFeedback(canvas, general.id) && openFeedbackCount(canvas) === 1);
 check('deleteFeedback unknown → false', deleteFeedback(canvas, 'fb-unknown') === false);
+
+// Slice C — checkpoint surfacing
+const summary = sg.listCanvases().find((c) => c.id === canvas.id)!;
+check('listCanvases surfaces openFeedback when > 0', summary.openFeedback === 1);
+const clean = sg.createCanvas('No feedback');
+const cleanSummary = sg.listCanvases().find((c) => c.id === clean.id)!;
+check('listCanvases omits openFeedback at 0', !('openFeedback' in cleanSummary));
+check('appendFeedbackDirective no-ops at 0', appendFeedbackDirective('READY TO PRESENT — 98/100.', 0) === 'READY TO PRESENT — 98/100.');
+const blocked = appendFeedbackDirective('READY TO PRESENT — 98/100.', 2);
+check('appendFeedbackDirective blocks at > 0', blocked.includes('2 open point-and-tell') && blocked.includes('Do NOT present'));
 
 // ---- Part 2: global-store persistence ----------------------------------------
 sg.touchCanvas(canvas.id);
