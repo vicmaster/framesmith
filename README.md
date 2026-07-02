@@ -151,7 +151,7 @@ One-call onboarding — **the recommended first call each session**, and safe to
 | `workspaceName` | string? | Name for the workspace when binding fresh. Defaults to the repo folder name. |
 | `projects` | string[]? | Projects to ensure exist (default: `["Foundations", "UI"]`). Existing projects are never removed, so it's safe for adding feature/area projects like `Onboarding`. |
 
-Returns the bound workspace + project IDs (binding **re-keys** IDs to `repo-*` — use the ones `init` returns), the on-disk layout, the workspace-layer token count, a workflow cheatsheet, the current gotchas, the `framesmith://guidelines` URI, and the viewer URL. It does **not** seed design tokens — set those at the workspace layer with `workspace_set_design_system`. The default `Foundations` project is just a canvas that visualizes the workspace tokens (which is where the design system actually lives).
+Returns the bound workspace + project IDs (binding **re-keys** IDs to `repo-*` — use the ones `init` returns), the on-disk layout, the workspace-layer token count, a workflow cheatsheet, the current gotchas, the `framesmith://guidelines` URI, and the viewer URL. If any canvas in the workspace has open point-and-tell comments, the result also carries `openFeedback: { total, note }` — a nudge to run `get_feedback` before doing anything else. It does **not** seed design tokens — set those at the workspace layer with `workspace_set_design_system`. The default `Foundations` project is just a canvas that visualizes the workspace tokens (which is where the design system actually lives).
 
 ### `canvas_create`
 
@@ -166,14 +166,14 @@ The response also carries a `diversification` signal for the target project: the
 
 ### `canvas_list`
 
-List canvases. Excludes archived canvases by default.
+List canvases. Excludes archived canvases by default. A row carrying `openFeedback: n` has open point-and-tell comments waiting — read them with `get_feedback` before working on that canvas.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `projectId` | string? | Scope to one project |
 | `includeArchived` | bool? | Include archived canvases (default false) |
 
-Returns `[{ id, name, createdAt, lastModified, projectId, archived }]`.
+Returns `[{ id, name, createdAt, lastModified, projectId, archived, openFeedback? }]` — `openFeedback` (a count) is present only when > 0.
 
 ### `canvas_move` / `canvas_archive` / `canvas_unarchive` / `canvas_delete`
 
@@ -514,7 +514,7 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 
 ### `get_feedback` / `resolve_feedback`
 
-Point-and-tell feedback: comments anchored to a specific node (or to the canvas as a whole), stored on the canvas at `metadata.feedback` — plain JSON that travels with the canvas and is git-diffable in bound repos. `get_feedback` returns open entries, each with the comment, the anchor `nodeId`, and a **node snapshot** (`{ type, name, text }`) captured at comment time, so the agent can act without extra lookups; `orphaned: true` marks a comment whose node no longer exists (it stays open — the concern usually applies to the node's replacement). Omit `canvasId` to sweep every canvas in the current context. `resolve_feedback` closes entries with an optional one-line note saying what changed. **Open feedback blocks presenting**, same as open inspector comments.
+Point-and-tell feedback: comments anchored to a specific node (or to the canvas as a whole), stored on the canvas at `metadata.feedback` — plain JSON that travels with the canvas and is git-diffable in bound repos. `get_feedback` returns open entries, each with the comment, the anchor `nodeId`, and a **node snapshot** (`{ type, name, text }`) captured at comment time, so the agent can act without extra lookups; `orphaned: true` marks a comment whose node no longer exists (it stays open — the concern usually applies to the node's replacement). Omit `canvasId` to sweep every canvas in the current context. `resolve_feedback` closes entries with an optional one-line note saying what changed. **Open feedback blocks presenting**, same as open inspector comments — `canvas_list` rows and `canvas_evaluate` results surface an `openFeedback` count (and `init` reports the workspace total) so waiting comments are visible at every checkpoint.
 
 Comments are authored in the viewer: toggle **Comment** in the detail-page toolbar, click any element in the preview (a breadcrumb lets you re-scope from the exact element to its card, section, or the whole page), and type the note. The **Feedback** inspector tab lists open and resolved comments with click-to-highlight, and shows the agent's resolution note as a reply. Entries added any other way (hand-edited JSON, a teammate's `git pull`) reach the running server just the same.
 
@@ -532,6 +532,8 @@ Comments are authored in the viewer: toggle **Comment** in the detail-page toolb
 Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.
 
 The **`directive`** is the operating contract that keeps unfinished work off the user's screen. It reads `READY TO PRESENT` **only** when the score is > 95 **and** there are zero warnings **and** zero cliché tells; otherwise `NOT READY` with what to resolve. (Cliché tells block even at info severity — they're the slop signal; pure advisories like "consider extracting components" are optional.) Resolve everything and re-evaluate until it says `READY` before showing the design to the user.
+
+Open point-and-tell comments block too: when the canvas has any, the result carries `openFeedback: n` and the directive stays blocking even at a READY score — the human's note outranks the heuristics. Read them with `get_feedback`, address each, close them with `resolve_feedback`.
 
 | Param | Type | Description |
 |-------|------|-------------|
