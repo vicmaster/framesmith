@@ -434,6 +434,17 @@ framesmith catches slop but doesn't yet proactively produce taste: from a blank 
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-20-SPEC.md`](docs/specs/PHASE-20-SPEC.md). Built across PRs; Slices A (library + gate) and B/D (guidance + loop) shipped._
 
+### Phase 21 — Point-and-tell feedback (v1.8)
+
+Machine critique flows to the agent as structured data; human critique arrives as prose the agent must re-ground by guessing ("the third card — no, the other one"). The viewer already knows which node every pixel belongs to (`data-node-id` on every rendered element, same-origin iframes) — let the human click an element, type a note, and have it land as `{ nodeId, comment }` the agent reads through a tool. The inverse of `canvas_evaluate`: point-and-tell instead of describe-and-hope.
+
+- [ ] Data model + core — `FeedbackEntry` on `canvas.metadata.feedback[]` (node-anchored or canvas-level, snapshot for orphan resilience), pure `src/feedback.ts`, persistence on both backends (global + repo write-back)
+- [ ] Agent tools — `get_feedback` (open comments + node context, `orphaned` flag) / `resolve_feedback` (per-id results, resolution note); `ensureFresh` delivers viewer-written comments to the running server without restart
+- [ ] Viewer comment mode — click-to-anchor with ancestor breadcrumb re-scoping, popover, Feedback inspector tab with click-to-highlight + user-side resolve/delete
+- [ ] Loop integration — `openFeedback` count on `canvas_list`/`canvas_evaluate`; operating contract: open feedback blocks present, same bar as open inspector comments
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-21-SPEC.md`](docs/specs/PHASE-21-SPEC.md)._
+
 ---
 
 ## Installation (target)
