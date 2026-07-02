@@ -523,6 +523,8 @@ The viewer's click-to-comment mode (Phase 21 Slice B) is the authoring surface; 
 | `feedbackIds` | string[] | `resolve_feedback`: entry ids (`fb-...`) to mark resolved |
 | `note` | string? | `resolve_feedback`: reply shown next to the user's comment — what you changed |
 
+`get_feedback` with `canvasId` returns `{ canvasId, openCount, entries }`; omitted, it sweeps and returns `{ canvasesWithFeedback, canvases: [{ canvasId, name, openCount, entries }] }` (only canvases that have feedback). `resolve_feedback` returns `{ resolved: string[], notFound: string[], openCount }` — unknown or already-resolved ids land in `notFound` instead of throwing.
+
 ### `canvas_evaluate`
 
 Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.

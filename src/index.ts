@@ -56,7 +56,7 @@ Structures come in two kinds (list_structures): page scaffolds (marquee-hero, be
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
-Point-and-tell feedback: the user can click any element in the viewer and leave a comment anchored to that node. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed.
+Point-and-tell feedback: comments anchored to a specific node (or the canvas as a whole), stored on the canvas so they're git-diffable in bound repos. The viewer's click-to-comment UI is landing in a later slice; for now entries can be written directly into the canvas JSON and the running server picks them up automatically. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed.
 
 Gotchas (current sharp edges):
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.
@@ -81,7 +81,7 @@ const WORKFLOW_CHEATSHEET = [
   'screenshot → review the render → iterate.',
   'canvas_evaluate → resolve EVERY comment (canvas_autofix mechanical / batch_design rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
-  'Picking up an existing canvas? get_feedback first — the user may have left point-and-tell comments in the viewer. Address every open item, then resolve_feedback with a note saying what changed.',
+  'Picking up an existing canvas? get_feedback first — point-and-tell comments may be waiting (node-anchored or canvas-level). Address every open item, then resolve_feedback with a note saying what changed.',
 ];
 
 const GOTCHAS = [
@@ -95,7 +95,7 @@ const GOTCHAS = [
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
-  'Point-and-tell feedback: the user can click elements in the viewer and leave node-anchored comments. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed.',
+  'Point-and-tell feedback: node-anchored (or canvas-level) comments stored on the canvas at metadata.feedback. The viewer\'s click-to-comment UI is not shipped yet — entries arrive via hand-written JSON for now, or a future viewer release. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed.',
   'Cliché tells (canvas_evaluate "cliche" category): avoid default purple/indigo accents, gradient/glow overuse, fake window chrome, fabricated metrics, slop copy (filler verbs / scroll cues / "Jane Doe" / hype labels), an eyebrow above every section (keep to ~1 per 3 sections), mixed radius systems (one radius scale), pure black/white (use off-black/off-white), and competing accents (one accent hue + neutrals).',
 ];
 
