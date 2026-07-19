@@ -1,0 +1,323 @@
+{
+  "components": {},
+  "createdAt": "2026-06-26T16:47:09.645Z",
+  "id": "JzNhWRNHrM",
+  "lastModified": "2026-06-26T16:47:09.645Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-06-26T16:47:09.645Z",
+      "axes": {
+        "alignment": "left",
+        "density": "dense",
+        "heroTreatment": "none",
+        "rhythm": "asymmetric"
+      },
+      "structure": "bento-grid"
+    }
+  },
+  "name": "bento-grid",
+  "projectId": "QTrOgC44pt",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "$accent",
+                "content": "Eyebrow — section label",
+                "fontSize": 14,
+                "fontWeight": 600,
+                "id": "bn-eyebrow",
+                "letterSpacing": 1,
+                "type": "text"
+              },
+              {
+                "color": "$text-primary",
+                "content": "Headline",
+                "fontSize": 40,
+                "fontWeight": 700,
+                "id": "bn-title",
+                "lineHeight": 1.2,
+                "type": "text"
+              }
+            ],
+            "gap": 8,
+            "id": "bn-header",
+            "layout": "vertical",
+            "name": "Header",
+            "type": "frame"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Feature card — primary",
+                    "fontSize": 20,
+                    "fontWeight": 600,
+                    "id": "bn-card-1-label",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Body copy — to confirm",
+                    "fontSize": 14,
+                    "id": "bn-card-1-body",
+                    "lineHeight": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 16,
+                "height": 280,
+                "id": "bn-card-1",
+                "justifyContent": "space-between",
+                "layout": "vertical",
+                "name": "Feature card — primary",
+                "padding": 24,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 560
+              },
+              {
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Card — supporting",
+                    "fontSize": 20,
+                    "fontWeight": 600,
+                    "id": "bn-card-2-label",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Body copy — to confirm",
+                    "fontSize": 14,
+                    "id": "bn-card-2-body",
+                    "lineHeight": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 16,
+                "height": 280,
+                "id": "bn-card-2",
+                "justifyContent": "space-between",
+                "layout": "vertical",
+                "name": "Card — supporting",
+                "padding": 24,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 300
+              },
+              {
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Card — metric",
+                    "fontSize": 20,
+                    "fontWeight": 600,
+                    "id": "bn-card-3-label",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Metric — to confirm",
+                    "fontSize": 14,
+                    "id": "bn-card-3-body",
+                    "lineHeight": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-elevated",
+                "gap": 16,
+                "height": 200,
+                "id": "bn-card-3",
+                "justifyContent": "space-between",
+                "layout": "vertical",
+                "name": "Card — metric",
+                "padding": 24,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 280
+              },
+              {
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Card — supporting",
+                    "fontSize": 20,
+                    "fontWeight": 600,
+                    "id": "bn-card-4-label",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Body copy — to confirm",
+                    "fontSize": 14,
+                    "id": "bn-card-4-body",
+                    "lineHeight": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 16,
+                "height": 200,
+                "id": "bn-card-4",
+                "justifyContent": "space-between",
+                "layout": "vertical",
+                "name": "Card — supporting",
+                "padding": 24,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 280
+              },
+              {
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Card — wide",
+                    "fontSize": 20,
+                    "fontWeight": 600,
+                    "id": "bn-card-5-label",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Body copy — to confirm",
+                    "fontSize": 14,
+                    "id": "bn-card-5-body",
+                    "lineHeight": 1.5,
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 16,
+                "height": 200,
+                "id": "bn-card-5",
+                "justifyContent": "space-between",
+                "layout": "vertical",
+                "name": "Card — wide",
+                "padding": 24,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 580
+              }
+            ],
+            "gap": 24,
+            "id": "bn-grid",
+            "layout": "horizontal",
+            "name": "Bento grid",
+            "responsive": "wrap",
+            "type": "frame",
+            "wrap": true
+          }
+        ],
+        "fill": "$bg-primary",
+        "gap": 32,
+        "id": "bn-page",
+        "layout": "vertical",
+        "name": "Page",
+        "padding": [
+          48,
+          48
+        ],
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "kfD6E-_CrH",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#3b82f6",
+      "accent-hover": "#2563eb",
+      "bg-elevated": "#1a1a1a",
+      "bg-primary": "#0a0a0a",
+      "bg-surface": "#111111",
+      "border": "#ffffff1a",
+      "error": "#ef4444",
+      "success": "#22c55e",
+      "text-muted": "#ffffff4d",
+      "text-primary": "#ffffffde",
+      "text-secondary": "#ffffffa0",
+      "warning": "#f59e0b"
+    },
+    "radius": {
+      "full": 9999,
+      "lg": 16,
+      "md": 8,
+      "sm": 4
+    },
+    "spacing": {
+      "2xl": 48,
+      "3xl": 64,
+      "lg": 24,
+      "md": 16,
+      "sm": 8,
+      "xl": 32,
+      "xs": 4
+    },
+    "typography": {
+      "body": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 15,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "body-sm": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "caption": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 11,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "heading": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "heading-lg": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1.3
+      },
+      "heading-xl": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "lineHeight": 1.2
+      },
+      "mono": {
+        "fontFamily": "JetBrains Mono, monospace",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.6
+      }
+    }
+  }
+}

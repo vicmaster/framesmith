@@ -1,0 +1,185 @@
+{
+  "components": {},
+  "createdAt": "2026-06-26T16:47:09.659Z",
+  "id": "M4860CCLKJ",
+  "lastModified": "2026-06-26T16:47:09.659Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-06-26T16:47:09.659Z",
+      "axes": {
+        "alignment": "centered",
+        "density": "airy",
+        "heroTreatment": "none",
+        "rhythm": "uniform"
+      },
+      "structure": "onboarding"
+    }
+  },
+  "name": "onboarding",
+  "projectId": "QTrOgC44pt",
+  "root": {
+    "children": [
+      {
+        "alignItems": "center",
+        "children": [
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "icon": "sparkles",
+                "iconColor": "$accent",
+                "iconSize": 28,
+                "id": "ob-glyph-icon",
+                "type": "icon"
+              }
+            ],
+            "cornerRadius": 16,
+            "fill": "$bg-elevated",
+            "height": 64,
+            "id": "ob-glyph",
+            "justifyContent": "center",
+            "layout": "vertical",
+            "name": "Glyph",
+            "stroke": "$border",
+            "strokeWidth": 1,
+            "type": "frame",
+            "width": 64
+          },
+          {
+            "color": "$text-primary",
+            "content": "Get started",
+            "fontSize": 28,
+            "fontWeight": 700,
+            "id": "ob-title",
+            "textAlign": "center",
+            "type": "text"
+          },
+          {
+            "color": "$text-secondary",
+            "content": "Body copy — explain the empty state and the next step in a sentence.",
+            "fontSize": 16,
+            "id": "ob-body",
+            "lineHeight": 1.5,
+            "maxWidth": 420,
+            "textAlign": "center",
+            "type": "text"
+          },
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "color": "$bg-primary",
+                "content": "Primary action",
+                "fontSize": 16,
+                "fontWeight": 600,
+                "id": "ob-cta-label",
+                "type": "text"
+              }
+            ],
+            "cornerRadius": 8,
+            "fill": "$accent",
+            "id": "ob-cta",
+            "justifyContent": "center",
+            "layout": "horizontal",
+            "name": "Primary action",
+            "padding": [
+              8,
+              24
+            ],
+            "type": "frame"
+          }
+        ],
+        "fill": "$bg-primary",
+        "gap": 16,
+        "id": "ob-page",
+        "justifyContent": "center",
+        "layout": "vertical",
+        "name": "Page",
+        "padding": 48,
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "_EvW0aNYY5",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#3b82f6",
+      "accent-hover": "#2563eb",
+      "bg-elevated": "#1a1a1a",
+      "bg-primary": "#0a0a0a",
+      "bg-surface": "#111111",
+      "border": "#ffffff1a",
+      "error": "#ef4444",
+      "success": "#22c55e",
+      "text-muted": "#ffffff4d",
+      "text-primary": "#ffffffde",
+      "text-secondary": "#ffffffa0",
+      "warning": "#f59e0b"
+    },
+    "radius": {
+      "full": 9999,
+      "lg": 16,
+      "md": 8,
+      "sm": 4
+    },
+    "spacing": {
+      "2xl": 48,
+      "3xl": 64,
+      "lg": 24,
+      "md": 16,
+      "sm": 8,
+      "xl": 32,
+      "xs": 4
+    },
+    "typography": {
+      "body": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 15,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "body-sm": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "caption": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 11,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "heading": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "heading-lg": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1.3
+      },
+      "heading-xl": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "lineHeight": 1.2
+      },
+      "mono": {
+        "fontFamily": "JetBrains Mono, monospace",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.6
+      }
+    }
+  }
+}

@@ -1,0 +1,441 @@
+{
+  "components": {},
+  "createdAt": "2026-06-26T16:47:09.650Z",
+  "id": "qKsSzzVj6y",
+  "lastModified": "2026-06-26T16:47:09.651Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-06-26T16:47:09.651Z",
+      "axes": {
+        "alignment": "left",
+        "density": "balanced",
+        "heroTreatment": "none",
+        "rhythm": "uniform"
+      },
+      "structure": "catalogue"
+    }
+  },
+  "name": "catalogue",
+  "projectId": "QTrOgC44pt",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "color": "$text-primary",
+                "content": "Headline",
+                "fontSize": 32,
+                "fontWeight": 700,
+                "id": "cat-title",
+                "type": "text"
+              },
+              {
+                "color": "$text-secondary",
+                "content": "Filter — options",
+                "fontSize": 16,
+                "id": "cat-filter",
+                "type": "text"
+              }
+            ],
+            "id": "cat-header",
+            "justifyContent": "space-between",
+            "layout": "horizontal",
+            "name": "Header",
+            "responsive": "stack",
+            "type": "frame",
+            "width": "100%"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-1-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-1-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-1-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-1-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-1",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              },
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-2-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-2-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-2-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-2-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-2",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              },
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-3-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-3-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-3-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-3-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-3",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              },
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-4-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-4-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-4-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-4-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-4",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              },
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-5-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-5-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-5-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-5-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-5",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              },
+              {
+                "children": [
+                  {
+                    "fill": "$bg-elevated",
+                    "height": 200,
+                    "id": "cat-6-media",
+                    "name": "Media",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Item title",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "cat-6-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Meta — to confirm",
+                        "fontSize": 13,
+                        "id": "cat-6-meta",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 8,
+                    "id": "cat-6-content",
+                    "layout": "vertical",
+                    "padding": 16,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "id": "cat-6",
+                "layout": "vertical",
+                "name": "Catalogue item",
+                "overflow": "hidden",
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 368
+              }
+            ],
+            "gap": 24,
+            "id": "cat-grid",
+            "layout": "horizontal",
+            "name": "Catalogue grid",
+            "responsive": "wrap",
+            "type": "frame",
+            "width": "100%",
+            "wrap": true
+          }
+        ],
+        "fill": "$bg-primary",
+        "gap": 32,
+        "id": "cat-page",
+        "layout": "vertical",
+        "name": "Page",
+        "padding": [
+          48,
+          48
+        ],
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "uU8MPEr4JF",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#3b82f6",
+      "accent-hover": "#2563eb",
+      "bg-elevated": "#1a1a1a",
+      "bg-primary": "#0a0a0a",
+      "bg-surface": "#111111",
+      "border": "#ffffff1a",
+      "error": "#ef4444",
+      "success": "#22c55e",
+      "text-muted": "#ffffff4d",
+      "text-primary": "#ffffffde",
+      "text-secondary": "#ffffffa0",
+      "warning": "#f59e0b"
+    },
+    "radius": {
+      "full": 9999,
+      "lg": 16,
+      "md": 8,
+      "sm": 4
+    },
+    "spacing": {
+      "2xl": 48,
+      "3xl": 64,
+      "lg": 24,
+      "md": 16,
+      "sm": 8,
+      "xl": 32,
+      "xs": 4
+    },
+    "typography": {
+      "body": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 15,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "body-sm": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "caption": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 11,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "heading": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "heading-lg": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1.3
+      },
+      "heading-xl": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "lineHeight": 1.2
+      },
+      "mono": {
+        "fontFamily": "JetBrains Mono, monospace",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.6
+      }
+    }
+  }
+}
