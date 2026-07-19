@@ -333,6 +333,51 @@ export function insertNode(root: SceneNode, parentId: string, data: Partial<Scen
   return node;
 }
 
+/** Structural equality for property values: strict for primitives, JSON-shape
+ * for structured values (gradient stops, shadows, padding arrays). Token refs
+ * ("$surface") are plain strings, so they compare literally. */
+function propEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+  return false;
+}
+
+export interface BulkMatchOptions {
+  /** Limit the walk to the subtree rooted at this node (inclusive). Default: whole document. */
+  scopeId?: string;
+  /** Only consider nodes of this type. */
+  type?: SceneNode['type'];
+}
+
+/** Issue #127 — every node (scope-inclusive) whose properties equal ALL the
+ * `match` entries, in document order. Throws when the scope node is missing. */
+export function collectMatchingNodes(root: SceneNode, match: Record<string, unknown>, opts: BulkMatchOptions = {}): SceneNode[] {
+  const scope = opts.scopeId ? findNode(root, opts.scopeId)?.node : root;
+  if (!scope) throw new Error(`Scope node "${opts.scopeId}" not found`);
+  const matched: SceneNode[] = [];
+  const visit = (node: SceneNode): void => {
+    if ((!opts.type || node.type === opts.type) &&
+        Object.entries(match).every(([key, value]) => propEquals(node[key as keyof SceneNode], value))) {
+      matched.push(node);
+    }
+    node.children?.forEach(visit);
+  };
+  visit(scope);
+  return matched;
+}
+
+/** Issue #127 — apply `set` to every node matching `match` in one pass.
+ * `id`/`type` are stripped from `set` (same safety rule as updateNode).
+ * Returns the mutated nodes; the caller persists. */
+export function replaceMatchingProperties(root: SceneNode, match: Record<string, unknown>, set: Partial<SceneNode>, opts: BulkMatchOptions = {}): SceneNode[] {
+  const matched = collectMatchingNodes(root, match, opts);
+  const { id: _id, type: _type, ...safeUpdates } = set;
+  for (const node of matched) Object.assign(node, safeUpdates);
+  return matched;
+}
+
 export function updateNode(root: SceneNode, nodeId: string, updates: Partial<SceneNode>): SceneNode {
   const result = findNode(root, nodeId);
   if (!result) throw new Error(`Node "${nodeId}" not found`);

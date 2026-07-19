@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
@@ -56,6 +56,8 @@ Structures come in two kinds (list_structures): page scaffolds (marquee-hero, be
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
+Bulk edits: replace_matching_properties applies one property change to EVERY node matching a value predicate in a single call (scope subtree + node-type filters; dryRun previews the match set first) — reach for it instead of hand-writing one batch_design U() per node when the same change spans many nodes (table cells, repeated cards).
+
 Point-and-tell feedback: the user toggles Comment mode in the viewer and clicks any element to leave a note anchored to that node (or to the whole page). Comments are stored on the canvas, git-diffable in bound repos, and reach the running server automatically. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed (your note shows up as a reply in the viewer's Feedback tab).
 
 Gotchas (current sharp edges):
@@ -88,6 +90,7 @@ const GOTCHAS = [
   'The bar: craft beautiful UI/UX a designer would sign off on, and polish to it YOURSELF — start from a pattern, use the whole toolkit (icons/fonts/controls/components), and run canvas_evaluate → resolve EVERY comment → re-evaluate until clean and > 95 BEFORE presenting. The evaluate result\'s "directive" field says when it\'s safe to present. Never show the user an unpolished design.',
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
+  'Bulk edits: replace_matching_properties changes a property across every node matching a value predicate in one call (scope/type filters; dryRun previews the match set) — use it instead of one batch_design U() per node when the same change spans many nodes.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
   'canvas_import_html: Tailwind classes map to intent directly (bg-surface → fill "$surface", gap-4 → 16, bg-red-500 → the bundled v4 palette hex) and literal colors snap to the design system — a bare snippet styles via the common utilities + palette; pass the compiled CSS via the css param for everything else. Always read the returned report (snapped/literals/layout/warnings); the import is honest about what it dropped.',
   'Imports reconstruct STRUCTURE: tables → proportional columns, grids → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry. Check report.layout — a "stack-fallback" entry names a container that needs hand-fixing; everything else arrived structurally correct, so do not rebuild it.',
@@ -493,6 +496,53 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
         ...(viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
       ],
     };
+  }
+);
+
+// --- replace_matching_properties (issue #127) ---
+server.tool(
+  'replace_matching_properties',
+  `Bulk property edit: find every node whose properties equal ALL the \`match\` entries (AND across keys) and apply the \`set\` properties to each in one call — instead of hand-writing one batch_design U() per node ("set width: "100%" on all nodes currently width: 110" is one call, not 68).
+
+Matching is by value equality: numbers/strings literally (a $token ref like "$surface" matches as its literal string), structured values (gradient, shadows, padding arrays) by shape. Narrow the blast radius with \`scope\` (limit to a subtree) and/or \`type\` (only nodes of that type). \`set\` cannot change id or type — use batch_design R() to retype a node.
+
+ALWAYS preview with dryRun: true first when the match value could be common (width: 150 can match far more nodes than intended): it returns the matched nodes ({ id, type, name }) and count without writing. The non-dry result returns the same match list plus ok — mirrors batch_design's shape.`,
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    match: z.record(z.any()).describe('Property/value predicate — a node matches when EVERY entry equals its current value (e.g. { "width": 110 } or { "fill": "$secondary-container" }). Must be non-empty.'),
+    set: z.record(z.any()).describe('Properties to write on every matched node (e.g. { "width": "100%" }). id/type are ignored. Must be non-empty.'),
+    scope: z.string().optional().describe('Node ID — limit the match to this subtree (inclusive). Default: the whole document.'),
+    type: z.string().optional().describe('Only match nodes of this type (frame, text, rectangle, ellipse, image, icon, path, component, instance, toggle, checkbox, radio, select).'),
+    dryRun: z.boolean().optional().describe('Preview: return the matched nodes + count WITHOUT writing. Use it before any wide match.'),
+  },
+  async ({ canvasId, match, set, scope, type, dryRun }) => {
+    if (!match || Object.keys(match).length === 0) {
+      return { content: [{ type: 'text', text: 'Error: `match` must be non-empty — an empty predicate would match every node. Use batch_design U() ops for targeted edits.' }], isError: true };
+    }
+    if (!dryRun && (!set || Object.keys(set).length === 0)) {
+      return { content: [{ type: 'text', text: 'Error: `set` must be non-empty (nothing to write). Use dryRun: true to only preview matches.' }], isError: true };
+    }
+    ensureFresh(canvasId);
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+
+    try {
+      const opts = { scopeId: scope, type: type as SceneNode['type'] | undefined };
+      const matched = dryRun
+        ? collectMatchingNodes(canvas.root, match, opts)
+        : replaceMatchingProperties(canvas.root, match, set as Partial<SceneNode>, opts);
+      if (!dryRun) touchCanvas(canvasId);
+      const matches = matched.map((n) => ({ id: n.id, type: n.type, ...(n.name ? { name: n.name } : {}) }));
+      const viewerUrl = getViewerUrl();
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ ok: true, ...(dryRun ? { dryRun: true } : {}), count: matches.length, matches }, null, 2) },
+          ...(!dryRun && viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
+        ],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
   }
 );
 

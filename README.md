@@ -267,6 +267,21 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
+### `replace_matching_properties`
+
+Bulk property edit: find every node whose properties equal **all** the `match` entries and apply the `set` properties to each — one call instead of one `U()` op per node.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `match` | object | Property/value predicate, AND across keys — e.g. `{ "width": 110 }` or `{ "fill": "$secondary-container" }` (token refs match literally; structured values like `shadows` match by shape) |
+| `set` | object | Properties to write on every matched node — e.g. `{ "width": "100%" }`. Can't change `id`/`type` |
+| `scope` | string? | Node ID — limit matching to this subtree (inclusive). Default: whole document |
+| `type` | string? | Only match nodes of this type (`text`, `frame`, …) |
+| `dryRun` | bool? | Preview the matched nodes + count without writing |
+
+**Returns** `{ ok, count, matches, dryRun? }` where `matches` is `[{ id, type, name? }]`; `dryRun: true` is present only on preview calls. Preview with `dryRun: true` before wide matches — a value like `width: 150` can match more nodes than intended.
+
 ### `screenshot`
 
 Render canvas to PNG (returned as base64 image).
