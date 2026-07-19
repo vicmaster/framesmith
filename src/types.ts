@@ -2,6 +2,14 @@ export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'i
   // Phase 16 — input primitives: static, token-styled control renders.
   | 'toggle' | 'checkbox' | 'radio' | 'select';
 
+/** Phase 22 slice A — a single border side. `style` defaults to "solid";
+ * "dashed"/"dotted" cover the forecast/placeholder/draft conventions. */
+export interface BorderSide {
+  width: number;
+  color: string;
+  style?: 'solid' | 'dashed' | 'dotted';
+}
+
 export interface SceneNode {
   id: string;
   type: NodeType;
@@ -34,6 +42,13 @@ export interface SceneNode {
 
   // Visual
   fill?: string;
+  /** Phase 22 slice A — one side of a per-side border (row rules, accent bars).
+   * Composable with `stroke`: the all-sides border renders first, a per-side
+   * entry wins on its side (CSS cascade order). */
+  borderTop?: BorderSide;
+  borderRight?: BorderSide;
+  borderBottom?: BorderSide;
+  borderLeft?: BorderSide;
   gradient?: {
     type: 'linear' | 'radial';
     angle?: number;
@@ -41,6 +56,8 @@ export interface SceneNode {
   };
   stroke?: string;
   strokeWidth?: number;
+  /** Line style for the all-sides `stroke` border (frames). Default "solid". */
+  strokeStyle?: 'solid' | 'dashed' | 'dotted';
   cornerRadius?: number | [number, number, number, number];
   opacity?: number;
   overflow?: 'visible' | 'hidden' | 'auto';
@@ -104,6 +121,9 @@ export interface SceneNode {
   viewBox?: string;
   strokeLinecap?: 'butt' | 'round' | 'square';
   strokeLinejoin?: 'miter' | 'round' | 'bevel';
+  /** SVG dash pattern for path strokes — "6 4" or [6, 4]. The convention for
+   * projected/forecast lines vs solid actuals. */
+  strokeDasharray?: string | number[];
 
   // CSS animation, referencing a built-in keyframe. The renderer auto-emits
   // the `@keyframes` block only when any node references the name.
