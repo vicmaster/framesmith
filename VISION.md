@@ -445,6 +445,10 @@ Machine critique flows to the agent as structured data; human critique arrives a
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-21-SPEC.md`](docs/specs/PHASE-21-SPEC.md). All slices shipped — Phase 21 complete._
 
+### Issue-driven improvements (post-v1.8)
+
+- [x] `replace_matching_properties` — bulk property edit: apply one `set` to every node matching a property/value predicate (AND across keys, token refs match literally, structured values by shape) with `scope`/`type` filters and a `dryRun` preview; ends the one-`U()`-per-node grind for wide changes (issue #127)
+
 ---
 
 ## Installation (target)
