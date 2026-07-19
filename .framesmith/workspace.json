@@ -88,6 +88,11 @@
       "dir": "releases",
       "id": "repo-proj-bTSbHvdQ",
       "name": "Releases"
+    },
+    {
+      "dir": "pattern-library",
+      "id": "QTrOgC44pt",
+      "name": "Pattern library"
     }
   ],
   "schemaVersion": 1,

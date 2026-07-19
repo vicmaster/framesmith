@@ -1,0 +1,294 @@
+{
+  "components": {},
+  "createdAt": "2026-06-26T16:47:09.646Z",
+  "id": "xPfq0kWO7g",
+  "lastModified": "2026-06-26T16:47:09.647Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-06-26T16:47:09.647Z",
+      "axes": {
+        "alignment": "centered",
+        "density": "balanced",
+        "heroTreatment": "stat-led",
+        "rhythm": "uniform"
+      },
+      "structure": "stat-led"
+    }
+  },
+  "name": "stat-led",
+  "projectId": "QTrOgC44pt",
+  "root": {
+    "children": [
+      {
+        "alignItems": "center",
+        "children": [
+          {
+            "alignItems": "center",
+            "children": [
+              {
+                "color": "$accent",
+                "content": "Eyebrow — short label",
+                "fontSize": 14,
+                "fontWeight": 600,
+                "id": "sl-eyebrow",
+                "letterSpacing": 1,
+                "textAlign": "center",
+                "type": "text"
+              },
+              {
+                "color": "$text-primary",
+                "content": "Headline",
+                "fontSize": 48,
+                "fontWeight": 700,
+                "id": "sl-headline",
+                "lineHeight": 1.15,
+                "maxWidth": 760,
+                "textAlign": "center",
+                "type": "text"
+              },
+              {
+                "color": "$text-secondary",
+                "content": "Body copy — one supporting sentence.",
+                "fontSize": 18,
+                "id": "sl-subhead",
+                "lineHeight": 1.5,
+                "maxWidth": 600,
+                "textAlign": "center",
+                "type": "text"
+              }
+            ],
+            "gap": 16,
+            "id": "sl-head",
+            "layout": "vertical",
+            "name": "Heading",
+            "type": "frame",
+            "width": "100%"
+          },
+          {
+            "children": [
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "trending-up",
+                    "iconColor": "$accent",
+                    "iconSize": 24,
+                    "id": "sl-stat-1-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-primary",
+                    "content": "Metric — to confirm",
+                    "fontSize": 28,
+                    "fontWeight": 700,
+                    "id": "sl-stat-1-value",
+                    "textAlign": "center",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Stat label",
+                    "fontSize": 14,
+                    "id": "sl-stat-1-label",
+                    "textAlign": "center",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 8,
+                "id": "sl-stat-1",
+                "layout": "vertical",
+                "name": "Stat",
+                "padding": 32,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 300
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "users",
+                    "iconColor": "$accent",
+                    "iconSize": 24,
+                    "id": "sl-stat-2-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-primary",
+                    "content": "Metric — to confirm",
+                    "fontSize": 28,
+                    "fontWeight": 700,
+                    "id": "sl-stat-2-value",
+                    "textAlign": "center",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Stat label",
+                    "fontSize": 14,
+                    "id": "sl-stat-2-label",
+                    "textAlign": "center",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 8,
+                "id": "sl-stat-2",
+                "layout": "vertical",
+                "name": "Stat",
+                "padding": 32,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 300
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "activity",
+                    "iconColor": "$accent",
+                    "iconSize": 24,
+                    "id": "sl-stat-3-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-primary",
+                    "content": "Metric — to confirm",
+                    "fontSize": 28,
+                    "fontWeight": 700,
+                    "id": "sl-stat-3-value",
+                    "textAlign": "center",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Stat label",
+                    "fontSize": 14,
+                    "id": "sl-stat-3-label",
+                    "textAlign": "center",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 16,
+                "fill": "$bg-surface",
+                "gap": 8,
+                "id": "sl-stat-3",
+                "layout": "vertical",
+                "name": "Stat",
+                "padding": 32,
+                "stroke": "$border",
+                "strokeWidth": 1,
+                "type": "frame",
+                "width": 300
+              }
+            ],
+            "gap": 24,
+            "id": "sl-stats",
+            "justifyContent": "center",
+            "layout": "horizontal",
+            "name": "Stat row",
+            "responsive": "stack",
+            "type": "frame"
+          }
+        ],
+        "fill": "$bg-primary",
+        "gap": 32,
+        "id": "sl-section",
+        "layout": "vertical",
+        "name": "Stat hero",
+        "padding": [
+          64,
+          48
+        ],
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "8s0FZKTQDS",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#3b82f6",
+      "accent-hover": "#2563eb",
+      "bg-elevated": "#1a1a1a",
+      "bg-primary": "#0a0a0a",
+      "bg-surface": "#111111",
+      "border": "#ffffff1a",
+      "error": "#ef4444",
+      "success": "#22c55e",
+      "text-muted": "#ffffff4d",
+      "text-primary": "#ffffffde",
+      "text-secondary": "#ffffffa0",
+      "warning": "#f59e0b"
+    },
+    "radius": {
+      "full": 9999,
+      "lg": 16,
+      "md": 8,
+      "sm": 4
+    },
+    "spacing": {
+      "2xl": 48,
+      "3xl": 64,
+      "lg": 24,
+      "md": 16,
+      "sm": 8,
+      "xl": 32,
+      "xs": 4
+    },
+    "typography": {
+      "body": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 15,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "body-sm": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "caption": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 11,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "heading": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "heading-lg": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1.3
+      },
+      "heading-xl": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "lineHeight": 1.2
+      },
+      "mono": {
+        "fontFamily": "JetBrains Mono, monospace",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.6
+      }
+    }
+  }
+}

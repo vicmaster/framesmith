@@ -1,0 +1,551 @@
+{
+  "components": {},
+  "createdAt": "2026-06-26T16:47:09.652Z",
+  "id": "Y5vNp2j8aB",
+  "lastModified": "2026-06-26T16:47:09.653Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-06-26T16:47:09.653Z",
+      "axes": {
+        "alignment": "split",
+        "density": "dense",
+        "heroTreatment": "none",
+        "rhythm": "uniform"
+      },
+      "structure": "dashboard"
+    }
+  },
+  "name": "dashboard",
+  "projectId": "QTrOgC44pt",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "$text-primary",
+                "content": "Brand",
+                "fontSize": 16,
+                "fontWeight": 700,
+                "id": "db-brand",
+                "type": "text"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "layout-dashboard",
+                    "iconColor": "$text-secondary",
+                    "iconSize": 16,
+                    "id": "db-nav-1-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Overview",
+                    "fontSize": 14,
+                    "id": "db-nav-1-label",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 8,
+                "fill": "$bg-elevated",
+                "gap": 8,
+                "id": "db-nav-1",
+                "layout": "horizontal",
+                "name": "Overview",
+                "padding": [
+                  8,
+                  16
+                ],
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "users",
+                    "iconColor": "$text-secondary",
+                    "iconSize": 16,
+                    "id": "db-nav-2-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Nav item",
+                    "fontSize": 14,
+                    "id": "db-nav-2-label",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 8,
+                "fill": "$bg-elevated",
+                "gap": 8,
+                "id": "db-nav-2",
+                "layout": "horizontal",
+                "name": "Nav item",
+                "padding": [
+                  8,
+                  16
+                ],
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "folder",
+                    "iconColor": "$text-secondary",
+                    "iconSize": 16,
+                    "id": "db-nav-3-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Nav item",
+                    "fontSize": 14,
+                    "id": "db-nav-3-label",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 8,
+                "fill": "$bg-elevated",
+                "gap": 8,
+                "id": "db-nav-3",
+                "layout": "horizontal",
+                "name": "Nav item",
+                "padding": [
+                  8,
+                  16
+                ],
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "settings",
+                    "iconColor": "$text-secondary",
+                    "iconSize": 16,
+                    "id": "db-nav-4-icon",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "Nav item",
+                    "fontSize": 14,
+                    "id": "db-nav-4-label",
+                    "type": "text"
+                  }
+                ],
+                "cornerRadius": 8,
+                "fill": "$bg-elevated",
+                "gap": 8,
+                "id": "db-nav-4",
+                "layout": "horizontal",
+                "name": "Nav item",
+                "padding": [
+                  8,
+                  16
+                ],
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "fill": "$bg-surface",
+            "gap": 8,
+            "id": "db-sidebar",
+            "layout": "vertical",
+            "name": "Sidebar",
+            "padding": 24,
+            "stroke": "$border",
+            "strokeWidth": 1,
+            "type": "frame",
+            "width": 240
+          },
+          {
+            "children": [
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Dashboard",
+                    "fontSize": 28,
+                    "fontWeight": 700,
+                    "id": "db-title",
+                    "type": "text"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$bg-primary",
+                        "content": "Primary action",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "db-action-label",
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": 8,
+                    "fill": "$accent",
+                    "id": "db-action",
+                    "justifyContent": "center",
+                    "layout": "horizontal",
+                    "name": "Primary action",
+                    "padding": [
+                      8,
+                      24
+                    ],
+                    "type": "frame"
+                  }
+                ],
+                "id": "db-topbar",
+                "justifyContent": "space-between",
+                "layout": "horizontal",
+                "name": "Topbar",
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "icon": "trending-up",
+                        "iconColor": "$accent",
+                        "iconSize": 24,
+                        "id": "db-stat-1-icon",
+                        "type": "icon"
+                      },
+                      {
+                        "color": "$text-primary",
+                        "content": "Metric — to confirm",
+                        "fontSize": 28,
+                        "fontWeight": 700,
+                        "id": "db-stat-1-value",
+                        "textAlign": "center",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Stat label",
+                        "fontSize": 14,
+                        "id": "db-stat-1-label",
+                        "textAlign": "center",
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": 16,
+                    "fill": "$bg-surface",
+                    "gap": 8,
+                    "id": "db-stat-1",
+                    "layout": "vertical",
+                    "name": "Stat",
+                    "padding": 32,
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": 300
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "icon": "users",
+                        "iconColor": "$accent",
+                        "iconSize": 24,
+                        "id": "db-stat-2-icon",
+                        "type": "icon"
+                      },
+                      {
+                        "color": "$text-primary",
+                        "content": "Metric — to confirm",
+                        "fontSize": 28,
+                        "fontWeight": 700,
+                        "id": "db-stat-2-value",
+                        "textAlign": "center",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Stat label",
+                        "fontSize": 14,
+                        "id": "db-stat-2-label",
+                        "textAlign": "center",
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": 16,
+                    "fill": "$bg-surface",
+                    "gap": 8,
+                    "id": "db-stat-2",
+                    "layout": "vertical",
+                    "name": "Stat",
+                    "padding": 32,
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": 300
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "icon": "activity",
+                        "iconColor": "$accent",
+                        "iconSize": 24,
+                        "id": "db-stat-3-icon",
+                        "type": "icon"
+                      },
+                      {
+                        "color": "$text-primary",
+                        "content": "Metric — to confirm",
+                        "fontSize": 28,
+                        "fontWeight": 700,
+                        "id": "db-stat-3-value",
+                        "textAlign": "center",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Stat label",
+                        "fontSize": 14,
+                        "id": "db-stat-3-label",
+                        "textAlign": "center",
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": 16,
+                    "fill": "$bg-surface",
+                    "gap": 8,
+                    "id": "db-stat-3",
+                    "layout": "vertical",
+                    "name": "Stat",
+                    "padding": 32,
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": 300
+                  }
+                ],
+                "gap": 24,
+                "id": "db-stats",
+                "layout": "horizontal",
+                "name": "Stat row",
+                "responsive": "wrap",
+                "type": "frame",
+                "width": "100%",
+                "wrap": true
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Overview",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "db-chart-title",
+                        "type": "text"
+                      },
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Chart — placeholder",
+                            "fontSize": 14,
+                            "id": "db-chart-label",
+                            "type": "text"
+                          }
+                        ],
+                        "cornerRadius": 8,
+                        "fill": "$bg-elevated",
+                        "height": 224,
+                        "id": "db-chart-area",
+                        "justifyContent": "center",
+                        "layout": "vertical",
+                        "name": "Chart area",
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "cornerRadius": 16,
+                    "fill": "$bg-surface",
+                    "gap": 16,
+                    "id": "db-chart",
+                    "layout": "vertical",
+                    "name": "Chart panel",
+                    "padding": 24,
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": 720
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Recent activity",
+                        "fontSize": 16,
+                        "fontWeight": 600,
+                        "id": "db-side-title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Activity item — to confirm",
+                        "fontSize": 14,
+                        "id": "db-act-1",
+                        "lineHeight": 1.5,
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Activity item — to confirm",
+                        "fontSize": 14,
+                        "id": "db-act-2",
+                        "lineHeight": 1.5,
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Activity item — to confirm",
+                        "fontSize": 14,
+                        "id": "db-act-3",
+                        "lineHeight": 1.5,
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": 16,
+                    "fill": "$bg-surface",
+                    "gap": 16,
+                    "id": "db-side",
+                    "layout": "vertical",
+                    "name": "Activity panel",
+                    "padding": 24,
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": 352
+                  }
+                ],
+                "gap": 24,
+                "id": "db-content",
+                "layout": "horizontal",
+                "name": "Content",
+                "responsive": "stack",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "fill": "$bg-primary",
+            "gap": 24,
+            "id": "db-main",
+            "layout": "vertical",
+            "name": "Main",
+            "padding": 24,
+            "type": "frame",
+            "width": 1160
+          }
+        ],
+        "fill": "$bg-primary",
+        "id": "db-shell",
+        "layout": "horizontal",
+        "name": "Shell",
+        "responsive": "stack",
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "XdB0vIrwWN",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "accent": "#3b82f6",
+      "accent-hover": "#2563eb",
+      "bg-elevated": "#1a1a1a",
+      "bg-primary": "#0a0a0a",
+      "bg-surface": "#111111",
+      "border": "#ffffff1a",
+      "error": "#ef4444",
+      "success": "#22c55e",
+      "text-muted": "#ffffff4d",
+      "text-primary": "#ffffffde",
+      "text-secondary": "#ffffffa0",
+      "warning": "#f59e0b"
+    },
+    "radius": {
+      "full": 9999,
+      "lg": 16,
+      "md": 8,
+      "sm": 4
+    },
+    "spacing": {
+      "2xl": 48,
+      "3xl": 64,
+      "lg": 24,
+      "md": 16,
+      "sm": 8,
+      "xl": 32,
+      "xs": 4
+    },
+    "typography": {
+      "body": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 15,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "body-sm": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "caption": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 11,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "heading": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 22,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "heading-lg": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1.3
+      },
+      "heading-xl": {
+        "fontFamily": "Inter, system-ui, sans-serif",
+        "fontSize": 36,
+        "fontWeight": 700,
+        "lineHeight": 1.2
+      },
+      "mono": {
+        "fontFamily": "JetBrains Mono, monospace",
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.6
+      }
+    }
+  }
+}
