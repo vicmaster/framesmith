@@ -12,6 +12,7 @@ import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
 import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
+import { promoteToComponent, copyNodesAcross } from './components.js';
 import { resolveVariables, setVariables, getVariables, applyPresetTokens } from './variables.js';
 import { renderToHtml, type RenderOptions } from './renderer.js';
 import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl, collectReferencedFamilies, unverifiedFamiliesInOps } from './fonts.js';
@@ -51,6 +52,8 @@ Use the whole toolkit by default — a real UI uses these, so a good design must
 Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content. Input controls (toggle / checkbox / radio / select) are real node types ({ type: "toggle", checked: true }) styled from design tokens — never fake a control from frames + ellipses.
 
 Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Generic shorthands "mono" / "sans" render as CSS monospace / sans-serif — no registration, no network. batch_design warns immediately when a call writes a fontFamily nothing can serve yet (not cached / not registered / not generic) — heed it, and heed "Font warnings" in screenshot results: a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources; with a css2 stylesheet URL, the family label you pass is the family that gets registered.
+
+Reuse instead of rebuild: create_component promotes any existing subtree into a reusable component (an instance takes its place, render-identical); stamp more instances via batch_design ({ type: "instance", componentId, overrides: { "<childName>": {...} } } — overrides match children by NAME). copy_nodes copies subtrees across canvases with fresh ids + an idMap, carrying referenced component defs along — the app shell is built once and copied everywhere, never re-authored node-by-node.
 
 Structures come in two kinds (list_structures): page scaffolds (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue, dashboard, auth, pricing, settings, onboarding) stamp once at the root — each is taste-vetted (> 95, zero cliché tells) so it's a non-slop starting point to ADAPT, not boilerplate; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
@@ -93,6 +96,7 @@ const GOTCHAS = [
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
   'Bulk edits & queries: replace_matching_properties changes a property across every node matching a value predicate in one call (scope/type filters; dryRun previews the match set); find_nodes is the read-only twin — locate nodes by property/text/name and get ids + paths instead of guessing from read_nodes trees. canvas_autofix apply: true writes the whole mechanical fix set in one call.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
+  'Shared chrome is a component, not a copy-paste: create_component promotes a built subtree (render-identical; overrides target named children), batch_design I() stamps more instances, copy_nodes carries subtrees + their component defs to sibling canvases. Rebuilding an app shell node-by-node on every canvas is the anti-pattern.',
   'canvas_import_html: Tailwind classes map to intent directly (bg-surface → fill "$surface", gap-4 → 16, bg-red-500 → the bundled v4 palette hex) and literal colors snap to the design system — a bare snippet styles via the common utilities + palette; pass the compiled CSS via the css param for everything else. Always read the returned report (snapped/literals/layout/warnings); the import is honest about what it dropped.',
   'Imports reconstruct STRUCTURE: tables → proportional columns, grids → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry. Check report.layout — a "stack-fallback" entry names a container that needs hand-fixing; everything else arrived structurally correct, so do not rebuild it.',
   'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. "mono" / "sans" are generic shorthands (render as monospace / sans-serif, no registration). batch_design warns at write time when a family is not yet servable; a "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts (with a css2 URL, YOUR family label is what gets registered).',
@@ -470,6 +474,8 @@ Icons: two bundled sets render by name — use these instead of Unicode glyph st
   - Lucide (1,900+, stroke style): I("parent", { type: "icon", icon: "search", iconSize: 24, iconColor: "$primary" }) — browse at lucide.dev
   - Material Symbols (3,800+, fill style): icon: "material:check" + optional iconStyle: "outlined"|"rounded"|"sharp" (default outlined); "-fill" suffix selects the filled variant (e.g. "material:star-fill") — browse at fonts.google.com/icons
 
+Components: I("parent", { type: "instance", componentId: "cmp-shell", overrides: { "<childName>": { content: "..." } } }) stamps a registered component (create_component promotes an existing subtree into one; overrides match def children by NAME). Instance-level props override the def root.
+
 Input controls: toggle / checkbox / radio / select are real node types — I("parent", { type: "toggle", checked: true }), I("parent", { type: "select", value: "Admin", width: 200 }). Colors default from design tokens ($accent / $border / $bg-surface / $text-primary, neutral fallbacks when unthemed); fill / stroke / color override. NEVER fake a control from frames + ellipses.
 
 Responsive layout (author desktop-first, adapt down):
@@ -585,6 +591,74 @@ ALWAYS preview with dryRun: true first when the match value could be common (wid
         content: [
           { type: 'text', text: JSON.stringify({ ok: true, ...(dryRun ? { dryRun: true } : {}), count: matches.length, matches }, null, 2) },
           ...(!dryRun && viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
+        ],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+// --- create_component (Phase 22 slice E, #130) ---
+server.tool(
+  'create_component',
+  `Promote an existing subtree to a reusable component: the subtree moves into the canvas's component registry and an \`instance\` node takes its place — the render is pixel-identical. Returns the componentId plus \`overridableChildren\`, the named descendants that \`overrides\` can target.
+
+Stamp more copies with batch_design: I("parent", { type: "instance", componentId: "<id>", overrides: { "<childName>": { content: "..." } } }) — overrides match children BY NAME, so name the parts you'll vary. Instance-level props (width, opacity, ...) override the def's root.
+
+Use this the moment the same chunk exists (or is about to exist) twice — app shells, cards, rows. canvas_evaluate's "no component instances" advisory is satisfied by real instances, and copy_nodes carries the component def along when you copy an instance to another canvas.`,
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    nodeId: z.string().describe('Root of the subtree to promote (cannot be the document root or an existing instance)'),
+    name: z.string().optional().describe('Component name (default: the node\'s name, then its type). Also seeds the componentId slug.'),
+  },
+  async ({ canvasId, nodeId, name }) => {
+    ensureFresh(canvasId);
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    try {
+      const result = promoteToComponent(canvas, nodeId, name);
+      touchCanvas(canvasId);
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          ...result,
+          next: `Stamp copies via batch_design: I("parentId", { type: "instance", componentId: "${result.componentId}", overrides: { ${result.overridableChildren.length ? `"${result.overridableChildren[0]}": { content: "..." }` : '/* name children to make them overridable */'} } })`,
+        }, null, 2) }],
+      };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
+// --- copy_nodes (Phase 22 slice E, #130) ---
+server.tool(
+  'copy_nodes',
+  `Copy subtrees from one canvas into another (or duplicate within the same canvas) — the cross-canvas reuse batch_design's C() can't do. Every copied node gets a fresh id; the result's idMap (sourceId → newId, every node) and rootIds let you retarget follow-up ops immediately. Component definitions referenced by the copied trees travel along automatically (an id collision with a different def re-keys the incoming one and remaps the copied instances).
+
+The shared-app-shell workflow: build the shell once, create_component it, then copy_nodes the instance into each sibling canvas — the def travels, and each canvas overrides the parts that differ (active nav item, page title).`,
+  {
+    fromCanvasId: z.string().describe('Source canvas'),
+    nodeIds: z.array(z.string()).min(1).describe('Roots of the subtrees to copy'),
+    toCanvasId: z.string().describe('Target canvas (may equal fromCanvasId to duplicate)'),
+    parentId: z.string().optional().describe('Target parent node (default: the target document root)'),
+    index: z.number().optional().describe('Insert position among the parent\'s children (default: append)'),
+  },
+  async ({ fromCanvasId, nodeIds, toCanvasId, parentId, index }) => {
+    ensureFresh(fromCanvasId);
+    if (toCanvasId !== fromCanvasId) ensureFresh(toCanvasId);
+    const source = getCanvas(fromCanvasId);
+    if (!source) return { content: [{ type: 'text', text: `Error: Source canvas "${fromCanvasId}" not found` }], isError: true };
+    const target = getCanvas(toCanvasId);
+    if (!target) return { content: [{ type: 'text', text: `Error: Target canvas "${toCanvasId}" not found` }], isError: true };
+    try {
+      const result = copyNodesAcross(source, target, nodeIds, parentId, index);
+      touchCanvas(toCanvasId);
+      const viewerUrl = getViewerUrl();
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ ok: true, copied: nodeIds.length, ...result }, null, 2) },
+          ...(viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${toCanvasId}` }] : []),
         ],
       };
     } catch (err) {

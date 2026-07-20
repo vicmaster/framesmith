@@ -520,6 +520,7 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
       severity: 'info',
       nodeId: entries[0].node.id,
       message: `No component instances found in ${totalNodes} nodes. Consider extracting repeated patterns into components.`,
+      suggestion: `Promote a repeated subtree with create_component, then stamp copies via batch_design ({ type: "instance", componentId, overrides }).`,
     });
   }
 

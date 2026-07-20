@@ -106,6 +106,17 @@ Authoring rules:
 
 Merge semantics are per-category: a project that only sets `colors` doesn't reset the workspace's `spacing`/`radius`/`typography`. A canvas that only overrides `colors.primary` keeps every other workspace color.
 
+## Components & reuse
+
+**Shared chrome is a component, not a copy-paste.** When the same chunk exists (or is about to exist) twice — an app shell, a stat card, a table row — promote it and instance it instead of re-authoring:
+
+1. Build it once, **name the parts you'll vary** (`name: "Title"`, `name: "ActiveNav"`).
+2. `create_component({ canvasId, nodeId })` — the subtree becomes a component and an `instance` replaces it, render-identical. The result's `overridableChildren` lists what you can override.
+3. Stamp more copies: `I("parent", { type: "instance", componentId, overrides: { "Title": { content: "Settings" } } })` — overrides match def children **by name**; instance-level props (width, opacity) override the def root.
+4. Cross-canvas: `copy_nodes({ fromCanvasId, nodeIds: [instanceId], toCanvasId })` — the component def travels with the copy, so 15 sibling screens share one shell definition.
+
+`canvas_evaluate`'s "no component instances found" advisory is the nudge; these two tools are the action. Current sharp edge: `batch_design` ops address the **tree**, so they can't edit a def after promotion — a def child's id no longer resolves (those nodes left the tree), and `U(instanceId, ...)` sets instance-level props, not the def. To revise a component: build the new version as a plain subtree, `create_component` it, point instances at the new `componentId` with `U()`, and delete the scaffold.
+
 ## Custom fonts
 
 **Name the family and it loads.** Set `fontFamily` in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically — at token-write time and again as a render-time backstop. Binaries are cached under `~/.framesmith/fonts/`, so after the first resolve, rendering is offline and deterministic. A family that can't be resolved degrades to the system fallback stack **with a warning in the tool result** — if a screenshot reports a font warning, act on it; the render is not showing the face you asked for.
