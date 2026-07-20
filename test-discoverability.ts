@@ -115,6 +115,21 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('every cliche tell surfaced in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
 }
 
+// ── 7. every relax-genre is surfaced where agents look ───────────────────────
+// Mirrors the RELAXED_BY_GENRE keys in evaluate.ts (module-private, so parsed
+// from source). A new genre must be named in index.ts (genre param / GOTCHAS)
+// and GUIDELINES or agents can never discover it.
+{
+  const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
+  const table = evaluateSrc.match(/const RELAXED_BY_GENRE[^=]*=\s*\{([\s\S]*?)\n\};/)?.[1] ?? '';
+  const genres = [...table.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+  expect('relax-genres found', genres.length >= 3, genres.join(', '));
+  const missingIdx = genres.filter((g) => !indexSrc.includes(`"${g}"`));
+  expect('every relax-genre named in src/index.ts', missingIdx.length === 0, missingIdx.join(', '));
+  const missingGl = genres.filter((g) => !guidelines.includes(`"${g}"`));
+  expect('every relax-genre named in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;

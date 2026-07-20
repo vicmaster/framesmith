@@ -576,7 +576,7 @@ Open point-and-tell comments block too: when the canvas has any, the result carr
 | `canvasId` | string | Canvas ID to evaluate |
 | `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`, `cliche`. Defaults to all. |
-| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple and white elevated surfaces). Defaults to the canvas's provenance preset if stamped. |
+| `genre` | string? | Style that relaxes specific `cliche` gates — `"material"` allows purple and white elevated surfaces; `"dashboard"` (alias `"data"`) allows realistic figures on data-dense screens. Defaults to the canvas's provenance preset if stamped. |
 
 **Categories and what they check**
 
@@ -584,7 +584,7 @@ Open point-and-tell comments block too: when the canvas has any, the result carr
 |----------|--------|--------|
 | `spacing` | 20 | Off-scale padding/gap values, too many unique spacing values |
 | `color` | 25 | WCAG AA contrast ratios for text against nearest background |
-| `typography` | 20 | Type-scale ratios (1.15–1.75), font-family count, weight variation |
+| `typography` | 20 | Type-scale ratios (1.1–2.0; adjacent sizes both declared as typography tokens are pinned and skip the check), font-family count, weight variation |
 | `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse |
 | `consistency` | 20 | Frames missing `layout`, inconsistent sibling padding, sibling overlap (detailed mode) |
 | `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos, eyebrow rhythm (an eyebrow above nearly every section), slop copy (stock AI phrasing — filler verbs, scroll cues, placeholder names, hype labels), radius consistency (too many distinct corner radii), pure black/white (`#000000` ink / `#ffffff` page vs off-black/off-white), accent consistency (multiple competing accent hues). Each issue carries a `tell` discriminator; all advisory (warning/info). Relaxable per `genre`. |
@@ -658,7 +658,7 @@ Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a
 |-------|------|-------------|
 | `canvasId` | string | Canvas to autofix |
 | `categories` | string[]? | Restrict to fixes from these categories (default: all) |
-| `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple and white elevated surfaces). Defaults to the canvas's provenance preset if stamped. |
+| `genre` | string? | Style that relaxes specific `cliche` gates — `"material"` allows purple and white elevated surfaces; `"dashboard"` (alias `"data"`) allows realistic figures on data-dense screens. Defaults to the canvas's provenance preset if stamped. |
 | `apply` | bool? | Write the fixes to the canvas in this call (default `false`: propose only) |
 
 **What gets auto-fixed**

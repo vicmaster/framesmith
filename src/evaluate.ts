@@ -365,7 +365,7 @@ function checkColorContrast(entries: NodeEntry[]): CheckResult {
   return { score, issues };
 }
 
-function checkTypography(entries: NodeEntry[]): CheckResult {
+function checkTypography(entries: NodeEntry[], variables: DesignVariables = {}): CheckResult {
   const issues: EvaluationIssue[] = [];
   const textNodes = entries.filter((e) => e.node.type === 'text');
 
@@ -376,11 +376,18 @@ function checkTypography(entries: NodeEntry[]): CheckResult {
   const fontFamilies = new Set(textNodes.map((e) => e.node.fontFamily).filter(Boolean));
   const fontWeights = new Set(textNodes.map((e) => e.node.fontWeight).filter((w) => w !== undefined));
 
+  // Phase 22 slice C (#135) — sizes declared as typography tokens are a PINNED
+  // scale: declaring them is the intentionality signal (e.g. matching an
+  // existing app's 14/13/12/11). An adjacent pair where BOTH sizes are pinned
+  // is compliant by definition; pairs involving an undeclared size still flag.
+  const pinnedSizes = new Set(Object.values(variables.typography ?? {}).map((t) => t.fontSize));
+
   let score = 100;
 
   // Check type scale ratios
   if (uniqueSizes.length >= 2) {
     for (let i = 0; i < uniqueSizes.length - 1; i++) {
+      if (pinnedSizes.has(uniqueSizes[i]) && pinnedSizes.has(uniqueSizes[i + 1])) continue;
       const ratio = uniqueSizes[i] / uniqueSizes[i + 1];
       if (ratio < 1.1 || ratio > 2.0) {
         score -= 10;
@@ -388,8 +395,8 @@ function checkTypography(entries: NodeEntry[]): CheckResult {
           category: 'typography',
           severity: 'warning',
           nodeId: textNodes.find((e) => e.node.fontSize === uniqueSizes[i])?.node.id ?? entries[0].node.id,
-          message: `Font sizes ${uniqueSizes[i]}px → ${uniqueSizes[i + 1]}px have ratio ${ratio.toFixed(2)} (expected 1.15-1.75).`,
-          suggestion: `Adjust to create a cleaner type scale.`,
+          message: `Font sizes ${uniqueSizes[i]}px → ${uniqueSizes[i + 1]}px have ratio ${ratio.toFixed(2)} (expected 1.1-2.0).`,
+          suggestion: `Adjust to create a cleaner type scale — or, if these sizes deliberately match an existing app's scale, declare them as typography tokens to pin them.`,
         });
       }
     }
@@ -640,6 +647,12 @@ const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
   // Material Design legitimately uses a purple accent AND white elevated
   // surfaces (cards on an off-white background), so both are intentional here.
   material: ['accent-hue', 'pure-black-white'],
+  // Phase 22 slice C (#135) — data-dense product screens: realistic figures
+  // ARE the design (they drive column widths, wrapping, $2.7M-vs-$2,700,000
+  // legibility), so "fabricated data" flags would zero the category for the
+  // screen's whole reason to exist. `data` is an alias.
+  dashboard: ['honest-content'],
+  data: ['honest-content'],
 };
 
 /** Canonical unconfigured AI accents — Tailwind indigo/violet/purple defaults,
@@ -935,7 +948,7 @@ function tellHonestContent(ctx: ClicheCtx): EvaluationIssue[] {
       nodeId: node.id,
       nodeName: node.name,
       message: `"${text.slice(0, 40)}" looks like fabricated data (${reason}).`,
-      suggestion: `Use a labeled placeholder until real data exists, e.g. "<Label> — to confirm" + a neutral block.`,
+      suggestion: `Use a labeled placeholder until real data exists, e.g. "<Label> — to confirm" + a neutral block. If this is a data-dense product screen whose realistic figures ARE the design (a dashboard mockup), pass genre: "dashboard" instead — it relaxes this tell.`,
     });
   }
   return issues;
@@ -1263,7 +1276,7 @@ export async function evaluateCanvas(
     results.set('color', checkColorContrast(entries));
   }
   if (activeCategories.includes('typography')) {
-    results.set('typography', checkTypography(entries));
+    results.set('typography', checkTypography(entries, mergedTokens));
   }
   if (activeCategories.includes('structure')) {
     results.set('structure', checkStructure(rawEntries, canvas));
