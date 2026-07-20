@@ -1,6 +1,27 @@
 export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'icon' | 'component' | 'instance' | 'document' | 'path'
   // Phase 16 — input primitives: static, token-styled control renders.
-  | 'toggle' | 'checkbox' | 'radio' | 'select';
+  | 'toggle' | 'checkbox' | 'radio' | 'select'
+  // Phase 22 slice F — data-driven chart (line/bar): the node does the
+  // value→coordinate math, so a chart edit is a data edit.
+  | 'chart';
+
+/** Phase 22 slice F (#129) — one plotted series of a `chart` node. X positions
+ * are data indexes (0-based); a series shorter than the chart's x-range stops
+ * early (e.g. 7 booked months against a 12-month target line). */
+export interface ChartSeries {
+  data: number[];
+  /** Series name — reserved for a future legend; not rendered in v1. */
+  label?: string;
+  /** Line / bar color. `$token` refs resolve; defaults cycle a neutral ramp. */
+  stroke?: string;
+  strokeWidth?: number;
+  /** Dash pattern ("6 4" or [6, 4]) — the projected/forecast convention. Lines only. */
+  strokeDasharray?: string | number[];
+  /** Fill under the line at ~12% opacity. Lines only. */
+  area?: boolean;
+  /** Dot markers on each data point. Lines only. */
+  points?: boolean;
+}
 
 /** Phase 22 slice A — a single border side. `style` defaults to "solid";
  * "dashed"/"dotted" cover the forecast/placeholder/draft conventions. */
@@ -144,6 +165,21 @@ export interface SceneNode {
     easing?: 'ease' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'linear';
     delay?: number;      // ms
   };
+
+  // Chart (only for type: 'chart'). Sized by width/height like any node;
+  // fill/stroke/cornerRadius style the box, series carry the plot colors.
+  kind?: 'line' | 'bar';
+  series?: ChartSeries[];
+  /** Index range plotted on x (default [0, longestSeries - 1]). */
+  xDomain?: [number, number];
+  /** Value range on y (default: min/max across series; bars floor at 0). */
+  yDomain?: [number, number];
+  curve?: 'linear' | 'smooth';
+  /** Count of horizontal hairlines spread evenly across the plot (incl. baseline + top when >= 2). */
+  gridlines?: number;
+  /** Tick labels spread evenly along the bottom / left edge. */
+  xLabels?: string[];
+  yLabels?: string[];
 
   // Component / Instance
   componentId?: string;

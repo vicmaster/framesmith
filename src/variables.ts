@@ -21,12 +21,21 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
 
   // Phase 22 slice A — object-valued props hold colors the top-level walk
   // above can't see. Resolve $refs one level in (extend this list when a new
-  // structured prop carries tokens, e.g. chart series in slice F).
+  // structured prop carries tokens).
   for (const key of NESTED_TOKEN_PROPS) {
     const obj = node[key];
     if (obj && typeof obj === 'object' && typeof obj.color === 'string' && obj.color.startsWith('$')) {
       const resolved = lookupToken(obj.color.slice(1), variables);
       if (resolved !== undefined) obj.color = resolved as string;
+    }
+  }
+  // Phase 22 slice F — chart series carry their own stroke colors.
+  if (Array.isArray(node.series)) {
+    for (const s of node.series) {
+      if (s && typeof s.stroke === 'string' && s.stroke.startsWith('$')) {
+        const resolved = lookupToken(s.stroke.slice(1), variables);
+        if (resolved !== undefined) s.stroke = resolved as string;
+      }
     }
   }
 

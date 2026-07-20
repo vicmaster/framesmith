@@ -594,9 +594,16 @@ const dashboard: Structure = {
                   children: [
                     { id: 'db-chart-title', type: 'text', content: 'Overview', fontSize: 16, fontWeight: 600, color: COLOR.textPrimary },
                     {
-                      id: 'db-chart-area', type: 'frame', name: 'Chart area', width: '100%', height: 224,
-                      cornerRadius: 8, fill: COLOR.bgElevated, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
-                      children: [{ id: 'db-chart-label', type: 'text', content: 'Chart — placeholder', fontSize: 14, color: COLOR.textSecondary }],
+                      // Phase 22 slice F — a real data-driven chart instead of a
+                      // labeled placeholder box. Neutral placeholder shape (adapt
+                      // the data); accent series + a muted dashed reference line.
+                      id: 'db-chart-area', type: 'chart', name: 'Chart area', width: 672, height: 224,
+                      kind: 'line', curve: 'smooth', gridlines: 4,
+                      series: [
+                        { data: [12, 18, 15, 24, 22, 30, 34], stroke: COLOR.accent, strokeWidth: 2.5, area: true },
+                        { data: [10, 12, 14, 16, 18, 20, 22], stroke: COLOR.border, strokeDasharray: '6 4' },
+                      ],
+                      xLabels: ['Label', '', '', '', '', '', 'Label'],
                     },
                   ],
                 },
@@ -1089,6 +1096,10 @@ export function applyStructure(
       for (const field of COLOR_FIELDS) {
         const v = (n as unknown as Record<string, unknown>)[field];
         if (typeof v === 'string' && v.startsWith('$')) referenced.add(v.slice(1));
+      }
+      // Phase 22 slice F — chart series carry their own $color refs.
+      for (const s of n.series ?? []) {
+        if (typeof s?.stroke === 'string' && s.stroke.startsWith('$')) referenced.add(s.stroke.slice(1));
       }
     });
   }
