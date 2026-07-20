@@ -37,8 +37,12 @@ const allIds = (root: SceneNode): string[] => {
   const structures = listStructures();
   const pages = structures.filter((s) => s.kind === 'page');
   const components = structures.filter((s) => s.kind === 'component');
-  expect('6 page structures', pages.length === 6, `got ${pages.length}`);
-  expect('5 component structures', components.length === 5, components.map((c) => c.name).join(','));
+  // Phase 19/20 grew the page library (6 → 11) and outdated a hardcoded count
+  // here; assert a floor + the vetted core instead so growth doesn't re-break it.
+  expect('page structures cover the vetted archetypes', pages.length >= 11
+    && ['marquee-hero', 'bento-grid', 'stat-led', 'editorial-longform', 'split-workbench', 'catalogue', 'dashboard', 'auth', 'pricing', 'settings', 'onboarding'].every((n) => pages.some((p) => p.name === n)),
+    `got ${pages.length}: ${pages.map((p) => p.name).join(',')}`);
+  expect('component structures cover the scaffolds', components.length >= 5, components.map((c) => c.name).join(','));
   expect('pages carry axes', pages.every((s) => s.axes !== undefined));
   expect('components carry no axes', components.every((s) => s.axes === undefined));
   expect('expected component names', ['data-table', 'form-field', 'toolbar', 'stat-card', 'toggle-row'].every((n) => components.some((c) => c.name === n)));
