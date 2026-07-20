@@ -37,7 +37,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 | **Pattern library** | 11 vetted page archetypes + 5 component scaffolds, all scoring > 95 with zero cliché tells; taxonomy axes + a diversification signal so successive screens vary |
 | **Quality & taste** | `canvas_evaluate` (6 categories + cliché tells) with a `READY`/`NOT READY` directive · `canvas_autofix` (mechanical fixes) · optional vision-model rubric critique + `canvas_revise` |
 | **Design systems** | Layered `$token`s (workspace ▸ project ▸ canvas) · style presets · `DESIGN.md` import |
-| **Primitives** | Lucide + Material Symbols icons · Google Fonts by name · real form controls · components with instance overrides |
+| **Primitives** | Lucide + Material Symbols icons · Google Fonts by name · real form controls · components with instance overrides — `create_component` promotes existing work, `copy_nodes` carries subtrees (and their component defs) across canvases |
 | **Import from code** | `canvas_import_html` / `canvas_import_url` — token-mapped, structure-reconstructed · `canvas_sync_from_url` drift detection |
 | **Viewer** | Browser gallery + detail view · quality inspector (score, issues, click-to-highlight) · design-system token panel · point-and-tell feedback (Comment mode + Feedback tab) |
 | **Open by design** | MIT · plain HTML/CSS · open JSON you own in your repo · works with any MCP-compatible client |
@@ -298,6 +298,32 @@ Bulk property edit: find every node whose properties equal **all** the `match` e
 | `dryRun` | bool? | Preview the matched nodes + count without writing |
 
 **Returns** `{ ok, count, matches, dryRun? }` where `matches` is `[{ id, type, name? }]`; `dryRun: true` is present only on preview calls. Preview with `dryRun: true` before wide matches — a value like `width: 150` can match more nodes than intended.
+
+### `create_component`
+
+Promote an existing subtree to a reusable component — the subtree moves into the canvas's component registry and an `instance` node takes its place, render-identical. Answers the evaluator's "no component instances found" advisory with a one-call action.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `nodeId` | string | Root of the subtree to promote (not the document root, not an existing instance) |
+| `name` | string? | Component name (default: the node's name, then type); seeds the componentId slug |
+
+**Returns** `{ componentId, instanceId, name, overridableChildren }` — `overridableChildren` lists the named descendants that instance `overrides` can target (overrides match children **by name**). Stamp more copies via `batch_design`: `I("parent", { type: "instance", componentId, overrides: { "Title": { content: "…" } } })`.
+
+### `copy_nodes`
+
+Copy subtrees from one canvas into another (or duplicate within one) — the cross-canvas reuse `C()` can't do. Component definitions referenced by the copied trees travel along automatically.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `fromCanvasId` | string | Source canvas |
+| `nodeIds` | string[] | Roots of the subtrees to copy |
+| `toCanvasId` | string | Target canvas (may equal the source to duplicate) |
+| `parentId` | string? | Target parent (default: the target document root) |
+| `index` | number? | Insert position (default: append) |
+
+**Returns** `{ ok, copied, idMap, rootIds, copiedComponents }` — `idMap` maps every source node id to its new id; a componentId collision with a *different* def re-keys the incoming def and remaps the copied instances.
 
 ### `screenshot`
 
@@ -836,10 +862,19 @@ Built-in keyframe names: `fadeIn`, `slideUp`, `slideDown`, `scaleIn`. All end at
 
 ## Components
 
-Define reusable components and create instances with overrides:
+The usual path is `create_component` (see [Tools](#create_component)): build the subtree once, promote it, then stamp instances. Promoting is preferred over hand-authoring a `type: "component"` node from scratch because it keeps ids stable and reports back exactly which children are overridable:
 
 ```
-# Define a component (a frame subtree that gets registered)
+create_component({ canvasId: "abc123", nodeId: "card-1", name: "Card" })
+→ { "componentId": "cmp-card", "instanceId": "card-1", "overridableChildren": ["title", "subtitle"] }
+
+I("document", { type: "instance", componentId: "cmp-card", overrides: { title: { content: "My Card" }, subtitle: { content: "Custom text" } } })
+```
+
+You can also define a component from scratch with `batch_design` (a frame subtree that gets registered directly, without an existing node to promote):
+
+```
+# Define a component
 card=I("document", { type: "component", name: "Card", width: 300, fill: "#1a1a1a", cornerRadius: 12, layout: "vertical", padding: 16, gap: 8 })
 I(card, { type: "text", name: "title", content: "Default Title", fontSize: 20, color: "#fff" })
 I(card, { type: "text", name: "subtitle", content: "Default subtitle", fontSize: 14, color: "#888" })
@@ -847,6 +882,8 @@ I(card, { type: "text", name: "subtitle", content: "Default subtitle", fontSize:
 # Create instances with overrides (matched by child name)
 I("document", { type: "instance", componentId: card, overrides: { title: { content: "My Card" }, subtitle: { content: "Custom text" } } })
 ```
+
+`copy_nodes` (see [Tools](#copy_nodes)) copies an instance — and the component def it references — into another canvas, so a shared shell is authored once and reused across sibling screens.
 
 ## Usage Example
 
