@@ -368,6 +368,46 @@ export function collectMatchingNodes(root: SceneNode, match: Record<string, unkn
   return matched;
 }
 
+export interface FindNodesQuery extends BulkMatchOptions {
+  /** Property/value predicate — same semantics as replace_matching_properties. */
+  match?: Record<string, unknown>;
+  /** Case-insensitive substring match on text `content`. */
+  text?: string;
+  /** Exact match on the node's `name`. */
+  name?: string;
+}
+
+export interface FoundNode {
+  node: SceneNode;
+  /** Human-readable location: names (type when unnamed) from the walk root
+   * down to the node itself, " / "-joined. */
+  path: string;
+}
+
+/** Phase 22 slice B (#136) — find nodes by property/text/name instead of id.
+ * All provided predicates AND together; results come back in document order
+ * with a readable ancestor path. Read-only counterpart to
+ * replaceMatchingProperties. Throws when the scope node is missing. */
+export function findNodesDetailed(root: SceneNode, query: FindNodesQuery): FoundNode[] {
+  const scope = query.scopeId ? findNode(root, query.scopeId)?.node : root;
+  if (!scope) throw new Error(`Scope node "${query.scopeId}" not found`);
+  const text = query.text?.toLowerCase();
+  const out: FoundNode[] = [];
+  const visit = (node: SceneNode, trail: string[]): void => {
+    const label = node.name ?? node.type;
+    const here = [...trail, label];
+    const hit =
+      (!query.type || node.type === query.type) &&
+      (!query.match || Object.entries(query.match).every(([key, value]) => propEquals(node[key as keyof SceneNode], value))) &&
+      (text === undefined || (typeof node.content === 'string' && node.content.toLowerCase().includes(text))) &&
+      (query.name === undefined || node.name === query.name);
+    if (hit) out.push({ node, path: here.join(' / ') });
+    node.children?.forEach((child) => visit(child, here));
+  };
+  visit(scope, []);
+  return out;
+}
+
 /** Issue #127 — apply `set` to every node matching `match` in one pass.
  * `id`/`type` are stripped from `set` (same safety rule as updateNode).
  * Returns the mutated nodes; the caller persists. */

@@ -197,10 +197,13 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
     ? Object.values(variables.spacing).sort((a, b) => a - b)
     : DEFAULT_SPACING_SCALE;
 
-  // `fixable` is false for padding when the source value is an array — the
-  // off-scale entry might be any index, so a single Update op would clobber
-  // the others. Scalar padding and gap are always single-property fixes.
-  const allValues: { value: number; nodeId: string; nodeName?: string; prop: string; fixable: boolean }[] = [];
+  // Scalar padding and gap are single-property fixes. Array-form padding gets
+  // ONE combined issue per node whose fix writes the complete snapped array —
+  // per-entry ops would clobber each other (Phase 22 slice B, #133). Array
+  // members still enter `allValues` for the score math, but `arrayMember`
+  // routes their reporting to the combined issue below.
+  const allValues: { value: number; nodeId: string; nodeName?: string; prop: string; fixable: boolean; arrayMember?: boolean }[] = [];
+  const arrayPaddings: { nodeId: string; nodeName?: string; padding: number[] }[] = [];
 
   for (const { node } of entries) {
     if (node.gap !== undefined && typeof node.gap === 'number') {
@@ -209,10 +212,11 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
     if (node.padding !== undefined) {
       if (typeof node.padding === 'number' && node.padding > 0) {
         allValues.push({ value: node.padding, nodeId: node.id, nodeName: node.name, prop: 'padding', fixable: true });
-      } else if (Array.isArray(node.padding)) {
+      } else if (Array.isArray(node.padding) && node.padding.every((p) => typeof p === 'number')) {
+        arrayPaddings.push({ nodeId: node.id, nodeName: node.name, padding: node.padding as number[] });
         for (const p of node.padding) {
-          if (typeof p === 'number' && p > 0) {
-            allValues.push({ value: p, nodeId: node.id, nodeName: node.name, prop: 'padding', fixable: false });
+          if (p > 0) {
+            allValues.push({ value: p, nodeId: node.id, nodeName: node.name, prop: 'padding', fixable: false, arrayMember: true });
           }
         }
       }
@@ -221,11 +225,14 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
 
   if (allValues.length === 0) return { score: 100, issues };
 
+  const nearestOnScale = (value: number) => scale.reduce((a, b) => (Math.abs(b - value) < Math.abs(a - value) ? b : a));
+
   let offScaleCount = 0;
   for (const v of allValues) {
-    const nearest = scale.reduce((a, b) => (Math.abs(b - v.value) < Math.abs(a - v.value) ? b : a));
     if (!scale.includes(v.value)) {
       offScaleCount++;
+      if (v.arrayMember) continue; // reported as one combined issue per node below
+      const nearest = nearestOnScale(v.value);
       const issue: EvaluationIssue = {
         category: 'spacing',
         severity: 'warning',
@@ -242,6 +249,26 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
       }
       issues.push(issue);
     }
+  }
+
+  // Array-form padding: one issue per node, fix = the complete snapped array
+  // (zero/negative entries pass through untouched — they were never flagged).
+  for (const ap of arrayPaddings) {
+    const offScale = ap.padding.filter((p) => p > 0 && !scale.includes(p));
+    if (offScale.length === 0) continue;
+    const snapped = ap.padding.map((p) => (p > 0 && !scale.includes(p) ? nearestOnScale(p) : p));
+    issues.push({
+      category: 'spacing',
+      severity: 'warning',
+      nodeId: ap.nodeId,
+      nodeName: ap.nodeName,
+      message: `padding: [${ap.padding.join(', ')}] has off-scale entries (${offScale.join(', ')}).`,
+      suggestion: `Use [${snapped.join(', ')}] instead.`,
+      fix: {
+        op: formatUpdateOp(ap.nodeId, { padding: snapped }),
+        rationale: `Snap padding to [${snapped.join(', ')}] on the spacing scale`,
+      },
+    });
   }
 
   const uniqueValues = new Set(allValues.map((v) => v.value)).size;
