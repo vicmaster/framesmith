@@ -217,8 +217,15 @@ const fontsDir = join(process.env.FRAMESMITH_HOME!, 'fonts');
   expect('css2 url detected as stylesheet', isStylesheetUrl('https://fonts.googleapis.com/css2?family=Inter'));
   expect('binary url is not a stylesheet', !isStylesheetUrl('https://fonts.gstatic.com/s/inter/v18/latin.woff2'));
   const { fetchImpl } = makeStubFetch();
-  const faces = await resolveStylesheetUrl('https://fonts.googleapis.com/css2?family=Inter:wght@400;700', { fetchImpl });
+  const { faces, stylesheetFamilies } = await resolveStylesheetUrl('https://fonts.googleapis.com/css2?family=Inter:wght@400;700', { fetchImpl });
   expect('stylesheet url yields persistable faces', faces.length === 2 && faces.every((f) => f.url.startsWith('https://fonts.gstatic.com/')));
+  expect('stylesheet families reported', stylesheetFamilies.length === 1 && stylesheetFamilies[0] === 'Inter', stylesheetFamilies.join(', '));
+
+  // Phase 22 slice D (#134) — the caller's label wins: faces register under it.
+  const { fetchImpl: fetchImpl2 } = makeStubFetch();
+  const labeled = await resolveStylesheetUrl('https://fonts.googleapis.com/css2?family=Inter:wght@400;700', { fetchImpl: fetchImpl2 }, 'mono');
+  expect('caller label relabels the extracted faces', labeled.faces.length === 2 && labeled.faces.every((f) => f.family === 'mono'));
+  expect('label registration reports the stylesheet name', labeled.stylesheetFamilies[0] === 'Inter');
 }
 
 // ── 9. renderToHtml integration (no Chrome needed) ───────────────────────────

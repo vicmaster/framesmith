@@ -452,7 +452,7 @@ Eight issues from one dogfooding session (a financial dashboard: #129–#136) sh
 - [x] Slice A — rendering primitives: per-side borders (`borderTop`…, style solid/dashed/dotted) + `strokeDasharray` on paths (#131, #132)
 - [x] Slice B — query + autofix: `find_nodes` (property/text/name → ids + paths), `canvas_autofix apply: true` + array-padding fixes (#136, #133)
 - [x] Slice C — evaluator calibration: `dashboard` genre relaxes honest-content; type-scale pinning from typography tokens; directive/llm-gate docs (#135)
-- [ ] Slice D — fonts: generic aliases (mono/sans → CSS generics), stylesheet-URL family label honored, authoring-time unresolved-family warning (#134)
+- [x] Slice D — fonts: generic aliases (mono/sans → CSS generics), stylesheet-URL family label honored, authoring-time unresolved-family warning (#134)
 - [ ] Slice E — components: `create_component` (promote subtree) + `copy_nodes` (cross-canvas, defs travel) (#130)
 - [ ] Slice F — charts: data-driven `chart` node (line + bar, multi-series, domains, gridlines/labels); dashboard pattern refresh (#129)
 
