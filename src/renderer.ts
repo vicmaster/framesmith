@@ -147,6 +147,151 @@ function renderPathSvg(node: SceneNode): string {
   return `<svg width="100%" height="100%" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="display: block"><path ${pathAttrs.join(' ')} /></svg>`;
 }
 
+// ── chart (Phase 22 slice F, #129) ───────────────────────────────────────────
+// Data in, SVG out: the node owns the value→coordinate math so "change one
+// data point" is a one-prop edit, not a hand-recomputed path. X positions are
+// data indexes; a shorter series stops early against a longer one's range.
+
+/** Neutral categorical ramp for series without an explicit stroke — no purple
+ * (the cliché guard is right about defaults). */
+const CHART_SERIES_COLORS = ['#2563EB', '#0D9488', '#DC2626', '#D97706', '#64748B'];
+const CHART_GRID_COLOR = 'rgba(0, 0, 0, 0.08)';
+const CHART_LABEL_COLOR = '#6B7280';
+const CHART_LABEL_SIZE = 11;
+
+interface ChartGeom {
+  x0: number; y0: number; plotW: number; plotH: number;
+  x: (index: number) => number;
+  y: (value: number) => number;
+}
+
+/** Pure scale math for a chart node — exported for tests. Returns null when
+ * there is nothing plottable (no series with >= 1 finite point). */
+export function chartGeometry(node: SceneNode, boxW: number, boxH: number): ChartGeom | null {
+  const series = chartSeriesData(node);
+  if (!series.length) return null;
+  const maxLen = Math.max(...series.map((s) => s.data.length));
+
+  const padLeft = node.yLabels?.length ? 44 : 0;
+  const padBottom = node.xLabels?.length ? 22 : 0;
+  const padTop = 4;
+  const plotW = Math.max(1, boxW - padLeft - 4);
+  const plotH = Math.max(1, boxH - padTop - padBottom);
+
+  const [dx0, dx1] = node.xDomain ?? [0, Math.max(1, maxLen - 1)];
+  const values = series.flatMap((s) => s.data);
+  let [dy0, dy1] = node.yDomain ?? [Math.min(...values), Math.max(...values)];
+  if (!node.yDomain && node.kind === 'bar') dy0 = Math.min(0, dy0);
+  if (dy1 === dy0) dy1 = dy0 + 1;
+
+  const xSpan = dx1 - dx0 || 1;
+  return {
+    x0: padLeft, y0: padTop, plotW, plotH,
+    x: (index) => padLeft + ((index - dx0) / xSpan) * plotW,
+    y: (value) => padTop + (1 - (value - dy0) / (dy1 - dy0)) * plotH,
+  };
+}
+
+/** Sanitized series: finite numbers only, empty series dropped, colors defaulted. */
+function chartSeriesData(node: SceneNode): Array<{ data: number[]; stroke: string; strokeWidth: number; dash: string | null; area: boolean; points: boolean }> {
+  return (node.series ?? [])
+    .filter((s) => s && Array.isArray(s.data))
+    .map((s, i) => ({
+      data: s.data.filter((v) => typeof v === 'number' && isFinite(v)),
+      stroke: s.stroke ?? CHART_SERIES_COLORS[i % CHART_SERIES_COLORS.length],
+      strokeWidth: s.strokeWidth ?? 2,
+      dash: dasharrayValue(s.strokeDasharray),
+      area: s.area === true,
+      points: s.points === true,
+    }))
+    .filter((s) => s.data.length > 0);
+}
+
+/** Catmull-Rom → cubic bezier path through the points (tension 1/6). */
+function smoothPath(pts: Array<[number, number]>): string {
+  if (pts.length < 3) return pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${round2(x)} ${round2(y)}`).join(' ');
+  let d = `M${round2(pts[0][0])} ${round2(pts[0][1])}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1: [number, number] = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2: [number, number] = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${round2(c1[0])} ${round2(c1[1])}, ${round2(c2[0])} ${round2(c2[1])}, ${round2(p2[0])} ${round2(p2[1])}`;
+  }
+  return d;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function renderChartSvg(node: SceneNode): string {
+  const boxW = typeof node.width === 'number' ? node.width : 600;
+  const boxH = typeof node.height === 'number' ? node.height : 240;
+  const geom = chartGeometry(node, boxW, boxH);
+  if (!geom) return '<!-- chart: no plottable series -->';
+  const series = chartSeriesData(node);
+  const parts: string[] = [];
+
+  // Gridlines: n horizontal hairlines spread evenly, baseline to top inclusive.
+  const gridCount = typeof node.gridlines === 'number' && node.gridlines >= 2 ? Math.min(24, Math.floor(node.gridlines)) : 0;
+  for (let i = 0; i < gridCount; i++) {
+    const gy = round2(geom.y0 + geom.plotH - (i / (gridCount - 1)) * geom.plotH);
+    parts.push(`<line x1="${geom.x0}" y1="${gy}" x2="${round2(geom.x0 + geom.plotW)}" y2="${gy}" stroke="${CHART_GRID_COLOR}" stroke-width="1" />`);
+  }
+
+  const baselineY = round2(geom.y0 + geom.plotH);
+  if (node.kind === 'bar') {
+    const maxLen = Math.max(...series.map((s) => s.data.length));
+    const band = geom.plotW / maxLen;
+    const inner = band * 0.8;
+    const barW = Math.max(1, (inner - 2 * (series.length - 1)) / series.length);
+    series.forEach((s, si) => {
+      const clampY = (y: number) => Math.min(Math.max(y, geom.y0), geom.y0 + geom.plotH);
+      const zeroY = clampY(geom.y(0)); // bars grow from the zero line (clamped into the plot)
+      s.data.forEach((v, i) => {
+        const yv = clampY(geom.y(v));
+        const top = Math.min(yv, zeroY);
+        const h = Math.max(1, Math.abs(zeroY - yv));
+        const bx = geom.x0 + i * band + (band - inner) / 2 + si * (barW + 2);
+        parts.push(`<rect x="${round2(bx)}" y="${round2(top)}" width="${round2(barW)}" height="${round2(h)}" fill="${escapeAttr(s.stroke)}" rx="2" />`);
+      });
+    });
+  } else {
+    for (const s of series) {
+      const pts: Array<[number, number]> = s.data.map((v, i) => [geom.x(i), geom.y(v)]);
+      const d = node.curve === 'smooth' ? smoothPath(pts) : pts.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${round2(x)} ${round2(y)}`).join(' ');
+      if (s.area && pts.length >= 2) {
+        const areaD = `${d} L${round2(pts[pts.length - 1][0])} ${baselineY} L${round2(pts[0][0])} ${baselineY} Z`;
+        parts.push(`<path d="${areaD}" fill="${escapeAttr(s.stroke)}" fill-opacity="0.12" stroke="none" />`);
+      }
+      parts.push(`<path d="${d}" fill="none" stroke="${escapeAttr(s.stroke)}" stroke-width="${s.strokeWidth}"${s.dash ? ` stroke-dasharray="${s.dash}"` : ''} stroke-linecap="round" stroke-linejoin="round" />`);
+      if (s.points) {
+        for (const [px, py] of pts) {
+          parts.push(`<circle cx="${round2(px)}" cy="${round2(py)}" r="${s.strokeWidth + 1.5}" fill="${escapeAttr(s.stroke)}" />`);
+        }
+      }
+    }
+  }
+
+  // Tick labels: spread evenly along the bottom / left edges.
+  const labelColor = escapeAttr(node.color ?? CHART_LABEL_COLOR);
+  for (const [i, label] of (node.xLabels ?? []).entries()) {
+    const n = node.xLabels!.length;
+    const lx = round2(geom.x0 + (n === 1 ? 0.5 : i / (n - 1)) * geom.plotW);
+    parts.push(`<text x="${lx}" y="${round2(baselineY + 16)}" font-size="${CHART_LABEL_SIZE}" fill="${labelColor}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}">${escapeHtml(label)}</text>`);
+  }
+  for (const [i, label] of (node.yLabels ?? []).entries()) {
+    const n = node.yLabels!.length;
+    const ly = round2(geom.y0 + geom.plotH - (n === 1 ? 0.5 : i / (n - 1)) * geom.plotH);
+    parts.push(`<text x="${geom.x0 - 8}" y="${ly + 4}" font-size="${CHART_LABEL_SIZE}" fill="${labelColor}" text-anchor="end">${escapeHtml(label)}</text>`);
+  }
+
+  return `<svg width="100%" height="100%" viewBox="0 0 ${boxW} ${boxH}" xmlns="http://www.w3.org/2000/svg" style="display: block" preserveAspectRatio="none">${parts.join('')}</svg>`;
+}
+
 function escapeAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -275,6 +420,10 @@ function renderNode(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<s
 
   if (node.type === 'path') {
     return `<div${dataAttr}${styleAttr}>${renderPathSvg(node)}</div>`;
+  }
+
+  if (node.type === 'chart') {
+    return `<div${dataAttr}${styleAttr}>${renderChartSvg(node)}</div>`;
   }
 
   // Phase 16 — input primitives. Static, deterministic control renders; colors

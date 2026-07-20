@@ -74,6 +74,16 @@ tags=I("document", { type: "frame", layout: "horizontal", gap: 8, responsive: "w
 bar=I("document", { type: "frame", layout: "horizontal", gap: 16, responsive: "fixed", padding: 16, alignItems: "center" })
 ```
 
+### Charts (data in, SVG out)
+
+The `chart` node owns the value→coordinate math — give it data and domains, never hand-computed path `d` strings or absolutely-positioned tick labels:
+
+- **One node per chart, multi-series inside.** `series: [{ data, stroke, strokeDasharray?, area?, points? }]` — the 4-series pace-to-goal chart is one node with a shared scale.
+- **Dash is the convention for projected vs actual.** Solid accent line + `strokeDasharray: "6 4"` reference/forecast lines — don't differentiate similar lines by colour alone.
+- **X positions are data indexes.** A 7-point booked series against a 12-point target series stops at 7/12 of the width automatically; `xDomain`/`yDomain` default from the data (bars floor at 0).
+- **Furniture is opt-in props**: `gridlines: 4`, `xLabels`/`yLabels` (spread evenly; empty strings skip intermediate ticks), `curve: "smooth"`, `kind: "bar"` for grouped bars.
+- **Editing a data point is a one-prop edit** — update the series array, done.
+
 ## Anti-patterns
 
 - **Three fixed-pixel cards in a horizontal row.** `width: 360` × 3 in a row without `responsive: "stack"` clips on a 390px mobile viewport instead of reflowing. Either set `responsive: "stack"` or use `width: "100%", maxWidth: 360`.
