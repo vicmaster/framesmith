@@ -41,7 +41,41 @@ export const SYSTEM_FAMILIES: ReadonlySet<string> = new Set([
   'verdana', 'tahoma', 'trebuchet ms', 'impact',
   'sf pro', 'sf pro text', 'sf pro display', 'sf mono', 'menlo', 'monaco', 'consolas',
   'roboto', // ships on Android/ChromeOS and is the renderer stack's own fallback member
+  // Phase 22 slice D (#134) — shorthand generics. Aliased to the real CSS
+  // generic at render time (GENERIC_ALIASES); listed here so they're never
+  // sent to Google Fonts and never warned about.
+  'mono', 'sans',
 ]);
+
+/** Phase 22 slice D (#134) — shorthand → CSS generic. The renderer substitutes
+ * these when emitting font-family so `fontFamily: "mono"` renders monospaced
+ * instead of falling through to the browser's default (serif). Compared
+ * lowercased. Upgrade a generic to a real face anytime via set_fonts (the
+ * family label you pass is the family that gets registered). */
+export const GENERIC_ALIASES: Readonly<Record<string, string>> = {
+  mono: 'monospace',
+  sans: 'sans-serif',
+};
+
+/** Substitute GENERIC_ALIASES entries in a font stack, leaving everything else
+ * verbatim: `"JetBrains Mono, mono"` → `"JetBrains Mono, monospace"`.
+ *
+ * `registered` (lowercased canvas.fonts family names) skips the substitution:
+ * a family explicitly registered under a reserved label (e.g.
+ * `set_fonts({ fonts: [{ family: "mono", url: <css2 URL> }] })`) must actually
+ * reach the @font-face rule declared under that label, or the registration
+ * would be silently dead. */
+export function aliasFamilyStack(stack: string, registered?: ReadonlySet<string>): string {
+  return stack
+    .split(',')
+    .map((raw) => {
+      const bare = raw.trim().replace(/^["']|["']$/g, '').trim();
+      const lower = bare.toLowerCase();
+      if (registered?.has(lower)) return raw.trim();
+      return GENERIC_ALIASES[lower] ?? raw.trim();
+    })
+    .join(', ');
+}
 
 // Family names are interpolated into CSS + URLs; same guard as the renderer's
 // isSafeFamily plus `$` (an unresolved token reference is not a family).
@@ -306,11 +340,21 @@ export async function resolveFamily(family: string, opts: ResolveOptions = {}): 
  * declares: fetch, extract, cache the binaries, return persistable FontFaces
  * (remote URLs). Used by set_fonts so agents can paste the css2 URL they
  * actually have instead of hunting gstatic binary URLs. Throws on failure —
- * an explicit registration that did nothing should error, unlike the backstop. */
-export async function resolveStylesheetUrl(url: string, opts: ResolveOptions = {}): Promise<FontFace[]> {
+ * an explicit registration that did nothing should error, unlike the backstop.
+ *
+ * Phase 22 slice D (#134): `label` (the caller's `family` field) wins — the
+ * extracted faces register under it, so `{ family: "mono", url: <css2 URL> }`
+ * makes `fontFamily: "mono"` hit those faces. `stylesheetFamilies` reports the
+ * stylesheet's own font-family names so the alias is visible. */
+export async function resolveStylesheetUrl(url: string, opts: ResolveOptions = {}, label?: string): Promise<{ faces: FontFace[]; stylesheetFamilies: string[] }> {
   const css = await fetchText(url, opts);
   const extracted = extractFontFaces(css);
   if (!extracted.length) throw new Error(`No usable @font-face declarations found at ${url}`);
+  const stylesheetFamilies = [...new Set(extracted.map((f) => f.family))];
+  if (label) {
+    const relabeled = extracted.map((f) => ({ ...f, family: label }));
+    return { faces: registryFacesToFontFaces(await cacheFaces(label, relabeled, opts)), stylesheetFamilies };
+  }
   const byFamily = new Map<string, ExtractedFace[]>();
   for (const face of extracted) {
     const key = face.family.toLowerCase();
@@ -320,7 +364,34 @@ export async function resolveStylesheetUrl(url: string, opts: ResolveOptions = {
   for (const faces of byFamily.values()) {
     out.push(...registryFacesToFontFaces(await cacheFaces(faces[0].family, faces, opts)));
   }
-  return out;
+  return { faces: out, stylesheetFamilies };
+}
+
+/** Cache-only check: is a family already resolvable without the network —
+ * present in the local registry? Used by the batch_design authoring-time
+ * warning (no network on the hot path). */
+export function hasCachedFamily(family: string): boolean {
+  return (readRegistry().families[family.toLowerCase()]?.faces.length ?? 0) > 0;
+}
+
+/** Phase 22 slice D (#134) — authoring-time font check for batch_design:
+ * scan an operations string for fontFamily literals and return the families
+ * that are neither declared on the canvas, cached locally, nor system/generic
+ * — i.e. the ones that will hit the network (or silently fall back) at render.
+ * Cache-only, no network. $token refs are skipped (they warm at token-write). */
+export function unverifiedFamiliesInOps(operations: string, declaredFamilies: string[]): string[] {
+  const declared = new Set(declaredFamilies.map((f) => f.toLowerCase()));
+  const out = new Map<string, string>();
+  for (const m of operations.matchAll(/fontFamily\s*:\s*(["'])((?:(?!\1).)*)\1/g)) {
+    const stack = m[2];
+    if (stack.startsWith('$')) continue;
+    const family = firstResolvableFamily(stack);
+    if (!family) continue; // system/generic — always renders
+    if (declared.has(family.toLowerCase())) continue;
+    if (hasCachedFamily(family)) continue;
+    out.set(family.toLowerCase(), family);
+  }
+  return [...out.values()];
 }
 
 /** True when a URL is a stylesheet to extract from, not a font binary. */

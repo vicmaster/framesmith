@@ -14,7 +14,7 @@ import { bindRepo, initWorkspace } from './bind.js';
 import { parseAndExecute } from './operations.js';
 import { resolveVariables, setVariables, getVariables, applyPresetTokens } from './variables.js';
 import { renderToHtml, type RenderOptions } from './renderer.js';
-import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl, collectReferencedFamilies } from './fonts.js';
+import { ensureFontsForRender, bodyFontFamilyFromTokens, resolveFamily, warmFamilies, resolveStylesheetUrl, isStylesheetUrl, collectReferencedFamilies, unverifiedFamiliesInOps } from './fonts.js';
 import { takeScreenshot, computeLayout, exportToFile, takeResponsiveScreenshots, computeDiff, shutdown } from './screenshot.js';
 import { listPresets, getPreset, registerPreset } from './presets.js';
 import { listStructures, applyStructure, computeDiversificationHint } from './structures.js';
@@ -50,7 +50,7 @@ Use the whole toolkit by default — a real UI uses these, so a good design must
 
 Icons & typography: two bundled icon sets render by name via the icon node type — Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", optional iconStyle outlined/rounded/sharp, "-fill" suffix for filled variants) — never fake icons with Unicode glyphs. Text nodes support letterSpacing / textTransform / fontVariationSettings — use textTransform: "uppercase" instead of baking casing into content. Input controls (toggle / checkbox / radio / select) are real node types ({ type: "toggle", checked: true }) styled from design tokens — never fake a control from frames + ellipses.
 
-Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Heed "Font warnings" in screenshot results — a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources.
+Fonts load by name: set fontFamily in a typography token (or on a node) and the renderer resolves it from Google Fonts automatically (cached in ~/.framesmith/fonts/ — offline after first use). typography.body.fontFamily becomes the document default. Generic shorthands "mono" / "sans" render as CSS monospace / sans-serif — no registration, no network. batch_design warns immediately when a call writes a fontFamily nothing can serve yet (not cached / not registered / not generic) — heed it, and heed "Font warnings" in screenshot results: a warned family is rendering in the fallback stack, not the face you named. set_fonts is only needed for non-Google sources; with a css2 stylesheet URL, the family label you pass is the family that gets registered.
 
 Structures come in two kinds (list_structures): page scaffolds (marquee-hero, bento-grid, stat-led, editorial-longform, split-workbench, catalogue, dashboard, auth, pricing, settings, onboarding) stamp once at the root — each is taste-vetted (> 95, zero cliché tells) so it's a non-slop starting point to ADAPT, not boilerplate; component scaffolds (data-table, form-field, toolbar, stat-card, toggle-row) stamp under any targetId, repeatably, returning an idMap — a data table is one apply_structure call, not 80 nodes.
 
@@ -95,7 +95,7 @@ const GOTCHAS = [
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
   'canvas_import_html: Tailwind classes map to intent directly (bg-surface → fill "$surface", gap-4 → 16, bg-red-500 → the bundled v4 palette hex) and literal colors snap to the design system — a bare snippet styles via the common utilities + palette; pass the compiled CSS via the css param for everything else. Always read the returned report (snapped/literals/layout/warnings); the import is honest about what it dropped.',
   'Imports reconstruct STRUCTURE: tables → proportional columns, grids → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry. Check report.layout — a "stack-fallback" entry names a container that needs hand-fixing; everything else arrived structurally correct, so do not rebuild it.',
-  'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. A "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts.',
+  'Fonts: a fontFamily named in a typography token loads automatically (Google Fonts, cached locally); typography.body.fontFamily sets the document default. "mono" / "sans" are generic shorthands (render as monospace / sans-serif, no registration). batch_design warns at write time when a family is not yet servable; a "Font warnings" item in a screenshot result means the named face is NOT rendering — fix the name or register it via set_fonts (with a css2 URL, YOUR family label is what gets registered).',
   'Row rules / accent bars: per-side borders — borderTop: { width: 1, color: "$border" } per table row, borderLeft: { width: 3, color: "$primary" } for accent edges; style "dashed"|"dotted" marks forecast/draft; strokeDasharray ("6 4") dashes SVG paths. Never fake hairlines with gap: 1 + fill bleed-through.',
   'Prefer structured gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too.',
   'import_design_md reliably imports spacing + component skeletons; set colors / typography / radius explicitly via set_variables.',
@@ -459,7 +459,7 @@ server.tool(
 
 Use "document" to reference the root node. Bind results to reuse IDs: header=I("document", {...})
 Concatenate bindings: U(header+"/childId", {...})
-Returns { ok, nodeIds, results }: nodeIds maps each bound variable to the node ID it created (e.g. { "header": "n_a1b2" }) — record it and use those IDs to target nodes in later calls (bindings only live within a single call). results lists each op's outcome in order.
+Returns { ok, nodeIds, results }: nodeIds maps each bound variable to the node ID it created (e.g. { "header": "n_a1b2" }) — record it and use those IDs to target nodes in later calls (bindings only live within a single call). results lists each op's outcome in order. If the call wrote a fontFamily nothing can serve yet (not cached, not registered, not system/generic), an extra "Font warnings" content item names it — cache-only check, no network, so it can't catch everything set_fonts/network resolution would.
 
 Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance, toggle, checkbox, radio, select
 Properties: fill, gradient, stroke, strokeWidth, strokeStyle, borderTop, borderRight, borderBottom, borderLeft, cornerRadius, width, height, minWidth, maxWidth, layout ("horizontal"|"vertical"), gap, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, textAlign, lineHeight, letterSpacing (px), textDecoration, textTransform ("uppercase" etc. — don't bake casing into content), fontVariationSettings (variable-font axes, e.g. '"wght" 650'), src, objectFit, opacity, shadow, shadows, blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, iconStyle, checked, disabled, value, d, viewBox, strokeLinecap, strokeLinejoin, strokeDasharray, animation, transition, componentId, overrides, responsive
@@ -494,10 +494,19 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
     // the right nodes in follow-up U/D/M ops without counting result positions.
     const nodeIds: Record<string, string> = {};
     for (const r of results) if (r.ok && r.binding && r.nodeId) nodeIds[r.binding] = r.nodeId;
+    // Phase 22 slice D (#134) — authoring-time font check (cache-only, no
+    // network): flag families this call wrote that nothing can serve yet, so a
+    // typo surfaces NOW instead of as a silent fallback three renders later.
+    const unverified = unverifiedFamiliesInOps(operations, (canvas.fonts ?? []).map((f) => f.family));
+    const fontNote = unverified.length
+      ? [{ type: 'text' as const, text: `Font warnings:\n${unverified.map((f) =>
+          `- "${f}" is not cached or registered yet — the next render will try Google Fonts and fall back silently if the name is wrong. Verify via screenshot (watch its Font warnings), or warm it now: set_fonts families: ["${f}"].`).join('\n')}` }]
+      : [];
     const viewerUrl = getViewerUrl();
     return {
       content: [
         { type: 'text', text: JSON.stringify({ ok: results.every((r) => r.ok), nodeIds, results }, null, 2) },
+        ...fontNote,
         ...(viewerUrl ? [{ type: 'text' as const, text: `View live: ${viewerUrl}/canvas/${canvasId}` }] : []),
       ],
     };
@@ -758,8 +767,8 @@ server.tool(
   `Register custom fonts on a canvas. Three ways, combinable:
   - families: ["Inter"] — EASIEST: resolve by name from Google Fonts (weights 400-700, cached locally). Merged into the existing declarations.
   - fonts: [{ family, url }] with a binary URL (.woff2/.woff/.ttf/.otf, https:// or data:) — replaces existing declarations wholesale. Pass [] to clear.
-  - fonts: [{ family, url }] with a Google Fonts CSS URL (fonts.googleapis.com/css2?...) — the faces are extracted from the stylesheet automatically.
-Fonts named in typography tokens load automatically at render time — you only need set_fonts for families outside the token system or from non-Google sources.`,
+  - fonts: [{ family, url }] with a Google Fonts CSS URL (fonts.googleapis.com/css2?...) — the faces are extracted from the stylesheet and registered under YOUR family label (the label wins: { family: "mono", url: <JetBrains Mono css2 URL> } makes fontFamily: "mono" render JetBrains Mono; the result's "aliased" field shows the mapping).
+Fonts named in typography tokens load automatically at render time — you only need set_fonts for families outside the token system or from non-Google sources. Shorthand generics need no registration at all: fontFamily "mono" / "sans" render as CSS monospace / sans-serif.`,
   {
     canvasId: z.string().describe('Canvas ID'),
     fonts: z.array(z.object({
@@ -783,11 +792,18 @@ Fonts named in typography tokens load automatically at render time — you only 
     // `fonts` keeps its replace-wholesale contract; `families` merges.
     let next: FontFace[] = fonts !== undefined ? [] : [...(canvas.fonts ?? [])];
     const failed: { family: string; error: string }[] = [];
+    const aliased: { family: string; stylesheetFamilies: string[] }[] = [];
 
     for (const f of fonts ?? []) {
       if (isStylesheetUrl(f.url)) {
         try {
-          next.push(...await resolveStylesheetUrl(f.url));
+          // The caller's family label wins (#134): faces extracted from the
+          // stylesheet register under it, so nodes referencing that label match.
+          const { faces, stylesheetFamilies } = await resolveStylesheetUrl(f.url, {}, f.family);
+          next.push(...faces);
+          if (stylesheetFamilies.some((s) => s.toLowerCase() !== f.family.toLowerCase())) {
+            aliased.push({ family: f.family, stylesheetFamilies });
+          }
         } catch (err) {
           return { content: [{ type: 'text', text: `Error: Could not extract fonts from stylesheet ${f.url}: ${err instanceof Error ? err.message : String(err)}` }], isError: true };
         }
@@ -809,7 +825,7 @@ Fonts named in typography tokens load automatically at render time — you only 
     canvas.fonts = next;
     touchCanvas(canvasId);
     return {
-      content: [{ type: 'text', text: JSON.stringify({ fonts: canvas.fonts, ...(failed.length ? { failed } : {}) }, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify({ fonts: canvas.fonts, ...(aliased.length ? { aliased } : {}), ...(failed.length ? { failed } : {}) }, null, 2) }],
       ...(failed.length && !next.length ? { isError: true as const } : {}),
     };
   }

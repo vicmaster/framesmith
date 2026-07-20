@@ -259,7 +259,7 @@ M("nodeId", "newParentId", 0)
 R("nodeId", { type: "text", content: "Replaced" })
 ```
 
-**Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order.
+**Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order. If the call wrote a `fontFamily` nothing can serve yet (not cached, registered, or system/generic), a `Font warnings` content item names it — a cache-only check with no network call, so it's a heads-up, not exhaustive.
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`
 
@@ -367,9 +367,9 @@ Same shape, but at the project layer between workspace and canvas. Use for sub-b
 
 ### `get_fonts` / `set_fonts`
 
-**Fonts load by name automatically** — naming a `fontFamily` in a typography token (or on a node) resolves it from Google Fonts at token-write time, with a render-time backstop catching anything else. Binaries are cached under `~/.framesmith/fonts/`, so renders are offline and deterministic after the first resolve; `typography.body.fontFamily` becomes the document default. An unresolvable family renders in the fallback stack **and** adds a `Font warnings` item to the screenshot/export result.
+**Fonts load by name automatically** — naming a `fontFamily` in a typography token (or on a node) resolves it from Google Fonts at token-write time, with a render-time backstop catching anything else. Binaries are cached under `~/.framesmith/fonts/`, so renders are offline and deterministic after the first resolve; `typography.body.fontFamily` becomes the document default. `"mono"` / `"sans"` are generic shorthands that render as CSS `monospace` / `sans-serif` — no registration, no network. An unresolvable family renders in the fallback stack **and** adds a `Font warnings` item to the screenshot/export result; `batch_design` additionally warns at write time when a call sets a `fontFamily` that nothing can serve yet.
 
-`set_fonts` covers explicit registration. Three forms, combinable:
+`set_fonts` covers explicit registration. Three forms, combinable — with a stylesheet URL, the faces register under **your** `family` label (so `{ "family": "mono", "url": "<css2 URL>" }` upgrades every `fontFamily: "mono"` node to the real face; the result's `aliased` field shows the mapping):
 
 ```json
 {

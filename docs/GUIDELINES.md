@@ -119,7 +119,9 @@ workspace_set_design_system({
 ```
 
 - **`typography.body.fontFamily` is the document default** (alias: `base`). Text nodes without an explicit `fontFamily` render in it — set it once at the workspace and the whole canvas follows.
-- **`set_fonts` is for everything else:** non-Google sources (direct `.woff2`/`.ttf` binary URLs, `data:` URIs), explicit registration by name (`families: ["Inter"]`), or pasting a Google Fonts stylesheet URL (`fonts.googleapis.com/css2?...` — faces are extracted automatically).
+- **`"mono"` and `"sans"` are generic shorthands.** They render as CSS `monospace` / `sans-serif` — no registration, no network, never warned. Upgrade one to a real face anytime: `set_fonts({ fonts: [{ family: "mono", url: "<JetBrains Mono css2 URL>" }] })` — the label you pass is what gets registered, so existing `fontFamily: "mono"` nodes pick up the real face with no edits.
+- **`set_fonts` is for everything else:** non-Google sources (direct `.woff2`/`.ttf` binary URLs, `data:` URIs), explicit registration by name (`families: ["Inter"]`), or pasting a Google Fonts stylesheet URL (`fonts.googleapis.com/css2?...` — faces are extracted automatically and registered under **your** `family` label; the result's `aliased` field shows the mapping).
+- **Typos surface at write time.** `batch_design` warns when a call writes a `fontFamily` that is neither cached, registered, nor a system/generic family — don't wait three renders to notice `"JetBrans Mono"`.
 - **`font-display: swap` is automatic.** Paint isn't blocked on slow fonts.
 - **System families never resolve** (`system-ui`, `Roboto`, `Arial`, …) — they're already on every render's fallback stack. Only the first non-system family of a stack is loaded.
 

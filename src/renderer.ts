@@ -1,5 +1,6 @@
 import type { Canvas, FontFace, SceneNode } from './types.js';
 import { getIconSvg } from './icons.js';
+import { aliasFamilyStack } from './fonts.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
  *
@@ -52,8 +53,18 @@ export interface RenderOptions {
   bodyFontFamily?: string;
 }
 
+// Registered canvas.fonts family names (lowercased) — a generic shorthand
+// ("mono"/"sans") explicitly registered under that label must reach its own
+// @font-face rule instead of being aliased away. undefined (not an empty set)
+// when canvas.fonts is empty, so aliasFamilyStack's `registered?.has` short-circuits.
+function registeredFamilies(canvas?: Canvas): ReadonlySet<string> | undefined {
+  const fonts = canvas?.fonts;
+  return fonts?.length ? new Set(fonts.map((f) => f.family.toLowerCase())) : undefined;
+}
+
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
-  const body = renderNode(root, canvas);
+  const registered = registeredFamilies(canvas);
+  const body = renderNode(root, canvas, registered);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Hoist the root's fill/gradient to <html> so wide viewports show the design
   // background instead of browser-default white on the sidebars.
@@ -62,7 +73,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
   // typography.body token becomes the document default; quote a bare multi-word
   // family, pass a full stack through as-is. Unsafe values fall back silently.
   let bodyFont = SYSTEM_FONT_STACK;
-  const tokenFamily = opts?.bodyFontFamily?.trim();
+  const tokenFamily = opts?.bodyFontFamily ? aliasFamilyStack(opts.bodyFontFamily, registered).trim() : undefined;
   if (tokenFamily && isSafeFamily(tokenFamily)) {
     const lead = tokenFamily.includes(',') ? tokenFamily : /\s/.test(tokenFamily) ? `"${tokenFamily}"` : tokenFamily;
     bodyFont = `${lead}, ${SYSTEM_FONT_STACK}`;
@@ -236,14 +247,14 @@ function rootBackgroundCss(root: SceneNode): string {
   return '';
 }
 
-function renderNode(node: SceneNode, canvas?: Canvas): string {
+function renderNode(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<string>): string {
   // Resolve instances: clone the component tree and apply overrides
   if (node.type === 'instance' && node.componentId && canvas) {
     const resolved = resolveInstance(node, canvas);
-    if (resolved) return renderNode(resolved, canvas);
+    if (resolved) return renderNode(resolved, canvas, registered);
   }
 
-  const styles = buildStyles(node);
+  const styles = buildStyles(node, registered);
   const styleAttr = styles ? ` style="${escapeStyleValue(styles)}"` : '';
   const dataAttr = ` data-node-id="${node.id}"`;
 
@@ -277,10 +288,10 @@ function renderNode(node: SceneNode, canvas?: Canvas): string {
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
-    return `<div${dataAttr} style="${escapeStyleValue(ellipseStyles)}">${renderChildren(node, canvas)}</div>`;
+    return `<div${dataAttr} style="${escapeStyleValue(ellipseStyles)}">${renderChildren(node, canvas, registered)}</div>`;
   }
 
-  return `<div${dataAttr}${styleAttr}>${renderChildren(node, canvas)}</div>`;
+  return `<div${dataAttr}${styleAttr}>${renderChildren(node, canvas, registered)}</div>`;
 }
 
 function resolveInstance(instance: SceneNode, canvas: Canvas): SceneNode | null {
@@ -318,12 +329,12 @@ function applyOverrides(node: SceneNode, overrides: Record<string, Partial<Scene
   }
 }
 
-function renderChildren(node: SceneNode, canvas?: Canvas): string {
+function renderChildren(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<string>): string {
   if (!node.children?.length) return '';
-  return node.children.map((child) => renderNode(child, canvas)).join('\n');
+  return node.children.map((child) => renderNode(child, canvas, registered)).join('\n');
 }
 
-function buildStyles(node: SceneNode): string {
+function buildStyles(node: SceneNode, registered?: ReadonlySet<string>): string {
   const s: string[] = [];
 
   // Dimensions
@@ -442,7 +453,7 @@ function buildStyles(node: SceneNode): string {
 
   // Text
   if (node.fontSize) s.push(`font-size: ${responsiveFontSize(node.fontSize)}`);
-  if (node.fontFamily) s.push(`font-family: ${node.fontFamily}`);
+  if (node.fontFamily) s.push(`font-family: ${aliasFamilyStack(node.fontFamily, registered)}`); // "mono"/"sans" → CSS generics unless registered under that label (#134)
   if (node.fontWeight) s.push(`font-weight: ${node.fontWeight}`);
   if (node.color) s.push(`color: ${node.color}`);
   if (node.textAlign) s.push(`text-align: ${node.textAlign}`);
