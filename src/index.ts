@@ -102,6 +102,7 @@ const GOTCHAS = [
   'Binding (canvas_bind, or init on first run) re-keys every project / canvas ID to repo-* form — use the IDs init returns, never cache pre-bind IDs.',
   'Point-and-tell feedback: the user clicks elements in the viewer (Comment mode) to leave node-anchored or whole-page comments, stored on the canvas at metadata.feedback. get_feedback returns them (with a node snapshot; orphaned: true = the node is gone but the concern likely still applies); open feedback blocks presenting, same as open inspector comments — address each item, then resolve_feedback with a one-line note of what changed (shown as your reply in the viewer\'s Feedback tab). canvas_list rows and canvas_evaluate results carry an openFeedback count (and the evaluate directive stays blocking) while comments are open.',
   'Cliché tells (canvas_evaluate "cliche" category): avoid default purple/indigo accents, gradient/glow overuse, fake window chrome, fabricated metrics, slop copy (filler verbs / scroll cues / "Jane Doe" / hype labels), an eyebrow above every section (keep to ~1 per 3 sections), mixed radius systems (one radius scale), pure black/white (use off-black/off-white), and competing accents (one accent hue + neutrals).',
+  'Genre calibration: declare the genre the screen actually IS — genre: "dashboard" (alias "data") on canvas_evaluate/canvas_autofix stops a data-dense screen\'s own realistic figures from flagging as fabricated; "material" allows purple + white surfaces. Matching an existing app\'s type scale? Declare the sizes as typography tokens — pinned sizes skip the adjacent-ratio check. Never use genre to dodge flags on a marketing page.',
 ];
 
 const GUIDELINES_PATH = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'GUIDELINES.md');
@@ -1388,7 +1389,9 @@ server.tool(
   - "fast": JSON-only, <100ms, deterministic heuristics only.
   - "detailed": adds Puppeteer-based pixel overlap detection in the consistency category.
   - "llm": fast-mode heuristics plus a vision-model critique against a FIXED rubric (provider picked from FRAMESMITH_LLM_PROVIDER env var, or whichever of ANTHROPIC_API_KEY / OPENAI_API_KEY is set). Adds an "llmCritique" field: { rubric: { hierarchy, execution, specificity, restraint, variety } each {score 1-5, rationale}, score (0-100 derived), summary, suggestions, needsRevision, failingAxes }. The verdict is stamped on the canvas (metadata.critique) + the per-project build log for auditability. Cost: one paid API call per invocation. To CLOSE the loop and auto-fix failing axes, use canvas_revise.
-Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset). The result includes a "directive" field — a present/keep-working verdict: resolve EVERY comment and clear > 95 before showing the design to the user; the directive tells you when it's safe to present. An "openFeedback" field (when > 0) counts the user's open point-and-tell comments — they block presenting even at a READY score; read them with get_feedback and close them with resolve_feedback.`,
+Designed for generator-evaluator loops: generate with batch_design, evaluate with canvas_evaluate, fix issues targeting the returned nodeIds (canvas_autofix handles the mechanical subset). The result includes a "directive" field — a present/keep-working verdict: resolve EVERY comment and clear > 95 before showing the design to the user; the directive tells you when it's safe to present. An "openFeedback" field (when > 0) counts the user's open point-and-tell comments — they block presenting even at a READY score; read them with get_feedback and close them with resolve_feedback.
+
+THE HEURISTIC DIRECTIVE IS THE PRESENTATION GATE. mode: "llm" adds optional depth (a vision-model rubric critique — composition, hierarchy, polish) on top; it requires an ANTHROPIC_API_KEY or OPENAI_API_KEY and fails gracefully without one — when unavailable, the heuristic directive alone decides. Data-dense screens: pass genre: "dashboard" so the design's own realistic figures aren't flagged as fabricated (see the genre param).`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
     mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model rubric critique'),
@@ -1396,7 +1399,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
       .optional()
       .describe('Specific categories to evaluate (default: all)'),
     genre: z.string().optional()
-      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple accents and white elevated surfaces). Defaults to the canvas provenance preset if stamped.'),
+      .describe('Genre/style that relaxes specific cliche gates — "material" allows purple accents and white elevated surfaces; "dashboard" (alias "data") allows realistic figures on data-dense product screens (relaxes honest-content). Defaults to the canvas provenance preset if stamped.'),
     floor: z.number().min(1).max(5).optional()
       .describe('llm mode only: per-axis rubric floor (1-5). Any axis below it sets needsRevision. Default 3 (or FRAMESMITH_CRITIQUE_FLOOR).'),
   },
@@ -1460,7 +1463,7 @@ server.tool(
       .optional()
       .describe('Restrict to fixes from these categories (default: all)'),
     genre: z.string().optional()
-      .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple accents and white elevated surfaces). Defaults to the canvas provenance preset if stamped.'),
+      .describe('Genre/style that relaxes specific cliche gates — "material" allows purple accents and white elevated surfaces; "dashboard" (alias "data") allows realistic figures on data-dense product screens (relaxes honest-content). Defaults to the canvas provenance preset if stamped.'),
     apply: z.boolean().optional()
       .describe('Write the fixes to the canvas in this call (default false: propose only, returning ops to run via batch_design).'),
   },

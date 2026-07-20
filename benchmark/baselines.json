@@ -61,8 +61,8 @@
       "spacing::doc::Design uses 8 unique spacing values. Consider consolidating to 4-6 values.",
       "structure::doc::No component instances found in 36 nodes. Consider extracting repeated patterns into components.",
       "structure::doc::Only 0% of container nodes have names. Naming improves maintainability.",
-      "typography::btxt::Font sizes 13px → 12px have ratio 1.08 (expected 1.15-1.75).",
-      "typography::hdr-l::Font sizes 14px → 13px have ratio 1.08 (expected 1.15-1.75)."
+      "typography::btxt::Font sizes 13px → 12px have ratio 1.08 (expected 1.1-2.0).",
+      "typography::hdr-l::Font sizes 14px → 13px have ratio 1.08 (expected 1.1-2.0)."
     ]
   },
   "minimal": {
