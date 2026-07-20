@@ -104,6 +104,19 @@ const CSS_IDENT = /^[a-zA-Z][a-zA-Z0-9-]*$/;
 // SVG/HTML markup.
 const SAFE_PATH_D = /^[a-zA-Z0-9\s.,\-+eE]+$/;
 const SAFE_VIEWBOX = /^[\d\s.\-]+$/;
+// SVG dash patterns: numbers separated by spaces/commas ("6 4", "2,3.5").
+const SAFE_DASHARRAY = /^[\d\s.,]+$/;
+
+/** Normalize a strokeDasharray value ("6 4" or [6, 4]) to a safe attribute
+ * string, or null when absent/unsafe (unsafe input is dropped, not escaped —
+ * same policy as SAFE_PATH_D). */
+export function dasharrayValue(v: string | number[] | undefined): string | null {
+  if (v === undefined) return null;
+  if (Array.isArray(v)) {
+    return v.length && v.every((n) => typeof n === 'number' && isFinite(n) && n >= 0) ? v.join(' ') : null;
+  }
+  return SAFE_DASHARRAY.test(v) ? v : null;
+}
 
 function renderPathSvg(node: SceneNode): string {
   if (!node.d || !SAFE_PATH_D.test(node.d)) return '<!-- invalid path d -->';
@@ -117,6 +130,8 @@ function renderPathSvg(node: SceneNode): string {
   if (node.strokeWidth !== undefined) pathAttrs.push(`stroke-width="${node.strokeWidth}"`);
   if (node.strokeLinecap) pathAttrs.push(`stroke-linecap="${node.strokeLinecap}"`);
   if (node.strokeLinejoin) pathAttrs.push(`stroke-linejoin="${node.strokeLinejoin}"`);
+  const dash = dasharrayValue(node.strokeDasharray);
+  if (dash) pathAttrs.push(`stroke-dasharray="${dash}"`);
 
   return `<svg width="100%" height="100%" viewBox="${viewBox}" xmlns="http://www.w3.org/2000/svg" style="display: block"><path ${pathAttrs.join(' ')} /></svg>`;
 }
@@ -371,7 +386,17 @@ function buildStyles(node: SceneNode): string {
   } else if (node.fill && !isPath) {
     s.push(`background-color: ${node.fill}`);
   }
-  if (node.stroke && !isPath) s.push(`border: ${node.strokeWidth ?? 1}px solid ${node.stroke}`);
+  if (node.stroke && !isPath) s.push(`border: ${node.strokeWidth ?? 1}px ${node.strokeStyle ?? 'solid'} ${node.stroke}`);
+  // Per-side borders after the shorthand so each side wins over `stroke` per
+  // CSS cascade order (row rules, accent bars — Phase 22 slice A).
+  if (!isPath) {
+    for (const side of ['Top', 'Right', 'Bottom', 'Left'] as const) {
+      const b = node[`border${side}`];
+      if (b && typeof b.width === 'number' && b.color) {
+        s.push(`border-${side.toLowerCase()}: ${b.width}px ${b.style ?? 'solid'} ${b.color}`);
+      }
+    }
+  }
   if (node.cornerRadius !== undefined) {
     if (typeof node.cornerRadius === 'number') {
       s.push(`border-radius: ${node.cornerRadius}px`);

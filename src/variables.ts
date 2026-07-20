@@ -4,6 +4,8 @@ export function resolveVariables(node: SceneNode, variables: DesignVariables): S
   return deepResolve(structuredClone(node), variables);
 }
 
+const NESTED_TOKEN_PROPS = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'] as const;
+
 function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
   for (const [key, value] of Object.entries(node)) {
     if (key === 'id' || key === 'type' || key === 'children') continue;
@@ -14,6 +16,17 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
       if (resolved !== undefined) {
         (node as unknown as Record<string, unknown>)[key] = resolved;
       }
+    }
+  }
+
+  // Phase 22 slice A — object-valued props hold colors the top-level walk
+  // above can't see. Resolve $refs one level in (extend this list when a new
+  // structured prop carries tokens, e.g. chart series in slice F).
+  for (const key of NESTED_TOKEN_PROPS) {
+    const obj = node[key];
+    if (obj && typeof obj === 'object' && typeof obj.color === 'string' && obj.color.startsWith('$')) {
+      const resolved = lookupToken(obj.color.slice(1), variables);
+      if (resolved !== undefined) obj.color = resolved as string;
     }
   }
 
