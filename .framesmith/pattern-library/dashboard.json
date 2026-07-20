@@ -2,7 +2,7 @@
   "components": {},
   "createdAt": "2026-06-26T16:47:09.652Z",
   "id": "Y5vNp2j8aB",
-  "lastModified": "2026-06-26T16:47:09.653Z",
+  "lastModified": "2026-07-20T01:15:45.217Z",
   "metadata": {
     "provenance": {
       "at": "2026-06-26T16:47:09.653Z",
@@ -357,25 +357,52 @@
                         "type": "text"
                       },
                       {
-                        "alignItems": "center",
-                        "children": [
-                          {
-                            "color": "$text-secondary",
-                            "content": "Chart — placeholder",
-                            "fontSize": 14,
-                            "id": "db-chart-label",
-                            "type": "text"
-                          }
-                        ],
-                        "cornerRadius": 8,
-                        "fill": "$bg-elevated",
+                        "curve": "smooth",
+                        "gridlines": 4,
                         "height": 224,
                         "id": "db-chart-area",
-                        "justifyContent": "center",
-                        "layout": "vertical",
+                        "kind": "line",
                         "name": "Chart area",
-                        "type": "frame",
-                        "width": "100%"
+                        "series": [
+                          {
+                            "area": true,
+                            "data": [
+                              12,
+                              18,
+                              15,
+                              24,
+                              22,
+                              30,
+                              34
+                            ],
+                            "stroke": "$accent",
+                            "strokeWidth": 2.5
+                          },
+                          {
+                            "data": [
+                              10,
+                              12,
+                              14,
+                              16,
+                              18,
+                              20,
+                              22
+                            ],
+                            "stroke": "$border",
+                            "strokeDasharray": "6 4"
+                          }
+                        ],
+                        "type": "chart",
+                        "width": 672,
+                        "xLabels": [
+                          "Label",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "",
+                          "Label"
+                        ]
                       }
                     ],
                     "cornerRadius": 16,
