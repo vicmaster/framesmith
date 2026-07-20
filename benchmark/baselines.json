@@ -57,7 +57,7 @@
       "consistency::s2::Frame \"s2\" has 3 children but no layout property.",
       "consistency::s3::Frame \"s3\" has 3 children but no layout property.",
       "spacing::badge::gap: 6px is not on the spacing scale.",
-      "spacing::badge::padding: 6px is not on the spacing scale.",
+      "spacing::badge::padding: [6, 12] has off-scale entries (6).",
       "spacing::doc::Design uses 8 unique spacing values. Consider consolidating to 4-6 values.",
       "structure::doc::No component instances found in 36 nodes. Consider extracting repeated patterns into components.",
       "structure::doc::Only 0% of container nodes have names. Naming improves maintainability.",

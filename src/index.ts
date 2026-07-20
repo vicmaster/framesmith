@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed } from './scene-graph.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
@@ -56,7 +56,7 @@ Structures come in two kinds (list_structures): page scaffolds (marquee-hero, be
 
 Import from implementation: canvas_import_html (snippet + optional CSS) and canvas_import_url (live page — viewport/selector/waitFor/auth) turn shipped UI into an editable, TOKEN-MAPPED canvas — flex→frames, text runs, imgs, recognized SVGs→icons, checkboxes/switches/selects→input primitives; Tailwind classes map to intent (bg-surface → fill "$surface") and literal colors snap to the design system. STRUCTURE reconstructs too: <table> → rows of proportional columns, CSS grid → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry — report.layout records how each container was handled (table|grid|centered|geometry|stack-fallback; a stack-fallback entry = hand-fix that one container, everything else arrived structurally correct). canvas_sync_from_url then keeps the contract honest: ephemeral re-import + pixel diff = "has the app drifted from the approved design?" as a changePercent. Lossy by design: READ the returned report (snapped/literals/layout/warnings) instead of assuming fidelity.
 
-Bulk edits: replace_matching_properties applies one property change to EVERY node matching a value predicate in a single call (scope subtree + node-type filters; dryRun previews the match set first) — reach for it instead of hand-writing one batch_design U() per node when the same change spans many nodes (table cells, repeated cards).
+Bulk edits & queries: replace_matching_properties applies one property change to EVERY node matching a value predicate in a single call (scope subtree + node-type filters; dryRun previews the match set first) — reach for it instead of hand-writing one batch_design U() per node when the same change spans many nodes (table cells, repeated cards). find_nodes is its read-only twin: locate nodes by property/text/name ("which node holds $1.52M?") and get ids + readable paths back — use it before targeted edits instead of guessing ids from read_nodes trees. canvas_autofix with apply: true writes every mechanical fix (spacing snaps incl. array padding, contrast, known-default accents) in one call.
 
 Point-and-tell feedback: the user toggles Comment mode in the viewer and clicks any element to leave a note anchored to that node (or to the whole page). Comments are stored on the canvas, git-diffable in bound repos, and reach the running server automatically. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed (your note shows up as a reply in the viewer's Feedback tab).
 
@@ -82,7 +82,7 @@ const WORKFLOW_CHEATSHEET = [
   'Read the framesmith://guidelines resource before drawing (esp. "Designing with taste": one focal point, real hierarchy, one type + spacing scale, restraint).',
   'Author at one target width; reference tokens with $name (e.g. fill: "$surface").',
   'screenshot → review the render → iterate.',
-  'canvas_evaluate → resolve EVERY comment (canvas_autofix mechanical / batch_design rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
+  'canvas_evaluate → resolve EVERY comment (canvas_autofix apply: true for the mechanical subset / batch_design for the rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
   'Picking up an existing canvas? get_feedback first — point-and-tell comments may be waiting (node-anchored or canvas-level). Address every open item, then resolve_feedback with a note saying what changed.',
 ];
@@ -91,7 +91,7 @@ const GOTCHAS = [
   'The bar: craft beautiful UI/UX a designer would sign off on, and polish to it YOURSELF — start from a pattern, use the whole toolkit (icons/fonts/controls/components), and run canvas_evaluate → resolve EVERY comment → re-evaluate until clean and > 95 BEFORE presenting. The evaluate result\'s "directive" field says when it\'s safe to present. Never show the user an unpolished design.',
   'Icons: Lucide ({ type: "icon", icon: "search" }) and Material Symbols (icon: "material:check", iconStyle outlined/rounded/sharp, "-fill" suffix for filled) render by name — never fake them with Unicode glyphs. Casing: use textTransform: "uppercase", not uppercased content.',
   'Controls: toggle / checkbox / radio / select are real node types with checked / disabled / value, token-styled — never assemble them from frames + ellipses.',
-  'Bulk edits: replace_matching_properties changes a property across every node matching a value predicate in one call (scope/type filters; dryRun previews the match set) — use it instead of one batch_design U() per node when the same change spans many nodes.',
+  'Bulk edits & queries: replace_matching_properties changes a property across every node matching a value predicate in one call (scope/type filters; dryRun previews the match set); find_nodes is the read-only twin — locate nodes by property/text/name and get ids + paths instead of guessing from read_nodes trees. canvas_autofix apply: true writes the whole mechanical fix set in one call.',
   'Component scaffolds: apply_structure with kind "component" structures (data-table, form-field, toolbar, stat-card, toggle-row) + targetId stamps reusable fragments with re-keyed IDs — build tables/forms from these, not node-by-node.',
   'canvas_import_html: Tailwind classes map to intent directly (bg-surface → fill "$surface", gap-4 → 16, bg-red-500 → the bundled v4 palette hex) and literal colors snap to the design system — a bare snippet styles via the common utilities + palette; pass the compiled CSS via the css param for everything else. Always read the returned report (snapped/literals/layout/warnings); the import is honest about what it dropped.',
   'Imports reconstruct STRUCTURE: tables → proportional columns, grids → rows from the computed template, centered/max-width content stays centered, other multi-column CSS clusters by geometry. Check report.layout — a "stack-fallback" entry names a container that needs hand-fixing; everything else arrived structurally correct, so do not rebuild it.',
@@ -503,6 +503,39 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
   }
 );
 
+// --- find_nodes (Phase 22 slice B, #136) ---
+server.tool(
+  'find_nodes',
+  `Find nodes by what they ARE instead of tracking ids by hand: a property/value predicate (same \`match\` semantics as replace_matching_properties — AND across keys, $token refs literal, structured values by shape), a \`text\` substring (case-insensitive, text content), and/or an exact \`name\`. All provided filters AND together; \`scope\` limits to a subtree, \`type\` to a node type.
+
+Returns { count, matches: [{ id, type, name?, path }] } in document order — \`path\` is the named ancestor chain ("Document / Table / Row 2 / text") so you can tell WHICH match you want before editing it. Read-only.
+
+Use it before targeted edits ("which node holds $1.52M?" → find_nodes({ text: "$1.52M" })) instead of guessing ids from read_nodes trees — editing a guessed id is how the wrong node gets restyled. Pairs with replace_matching_properties (same predicate, write-side) and batch_design U() (per-id edits).`,
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    match: z.record(z.any()).optional().describe('Property/value predicate — a node matches when EVERY entry equals its current value (e.g. { "fontSize": 30 } or { "fill": "$surface" }).'),
+    text: z.string().optional().describe('Case-insensitive substring match on text content (e.g. "$1.52M").'),
+    name: z.string().optional().describe('Exact match on the node name (e.g. "YearTable").'),
+    scope: z.string().optional().describe('Node ID — limit the search to this subtree (inclusive). Default: the whole document.'),
+    type: z.string().optional().describe('Only match nodes of this type (frame, text, icon, ...).'),
+  },
+  async ({ canvasId, match, text, name, scope, type }) => {
+    if (!match && text === undefined && name === undefined && !type) {
+      return { content: [{ type: 'text', text: 'Error: provide at least one of match / text / name / type — an unfiltered query is just read_nodes.' }], isError: true };
+    }
+    ensureFresh(canvasId); // viewer/hand edits may have landed since the last read
+    const canvas = getCanvas(canvasId);
+    if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    try {
+      const found = findNodesDetailed(canvas.root, { match, text, name, scopeId: scope, type: type as SceneNode['type'] | undefined });
+      const matches = found.map(({ node, path }) => ({ id: node.id, type: node.type, ...(node.name ? { name: node.name } : {}), path }));
+      return { content: [{ type: 'text', text: JSON.stringify({ count: matches.length, matches }, null, 2) }] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
 // --- replace_matching_properties (issue #127) ---
 server.tool(
   'replace_matching_properties',
@@ -616,7 +649,7 @@ server.tool(
 // --- read_nodes ---
 server.tool(
   'read_nodes',
-  'Read node data from the scene graph. Returns JSON representation of nodes.',
+  'Read node data from the scene graph. Returns JSON representation of nodes. Already know the id? Read it here. Don\'t know the id — hunting for "the node with $1.52M" or "the row named YearTable"? Use find_nodes instead of eyeballing this tree.',
   {
     canvasId: z.string().describe('Canvas ID'),
     nodeIds: z.array(z.string()).optional().describe('Specific node IDs to read (defaults to root)'),
@@ -1420,7 +1453,7 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 // --- canvas_autofix ---
 server.tool(
   'canvas_autofix',
-  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins; default-purple accent → swap to a neutral accent; fake-chrome strip → delete; pure-black ink → soften to off-black). Each fix carries a ready-to-paste \`batch_design\` op string and a one-line rationale. Taste-dependent cliche tells (gradient/glow overuse, the hanging header, fabricated content, eyebrow-rhythm overuse, slop copy, mixed radius systems, competing accents) carry a suggestion but no auto-fix — call canvas_evaluate to see those. Closes the generator-evaluator loop: generate with batch_design → autofix → re-evaluate.`,
+  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing — gap, scalar AND array-form padding (the fix writes the complete snapped array) — → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins; default-purple accent → swap to a neutral accent; fake-chrome strip → delete; pure-black ink → soften to off-black). By default this PROPOSES: each fix carries a ready-to-paste \`batch_design\` op string and a one-line rationale. Pass apply: true to also WRITE the fixes to the canvas in the same call — the result then reports applied/failed per op. Taste-dependent cliche tells (gradient/glow overuse, the hanging header, fabricated content, eyebrow-rhythm overuse, slop copy, mixed radius systems, competing accents) carry a suggestion but no auto-fix — call canvas_evaluate to see those. Closes the generator-evaluator loop: generate with batch_design → autofix (apply: true) → re-evaluate.`,
   {
     canvasId: z.string().describe('Canvas ID to autofix'),
     categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency', 'cliche']))
@@ -1428,8 +1461,11 @@ server.tool(
       .describe('Restrict to fixes from these categories (default: all)'),
     genre: z.string().optional()
       .describe('Genre/style that relaxes specific cliche gates (e.g. "material" allows purple accents and white elevated surfaces). Defaults to the canvas provenance preset if stamped.'),
+    apply: z.boolean().optional()
+      .describe('Write the fixes to the canvas in this call (default false: propose only, returning ops to run via batch_design).'),
   },
-  async ({ canvasId, categories, genre }) => {
+  async ({ canvasId, categories, genre, apply }) => {
+    if (apply) ensureFresh(canvasId); // mutating path — pick up external edits first
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
@@ -1444,11 +1480,34 @@ server.tool(
         message: issue.message,
       }));
 
+    if (!apply || fixes.length === 0) {
+      return {
+        content: [{ type: 'text', text: JSON.stringify({
+          totalIssues: result.issues.length,
+          fixableCount: fixes.length,
+          ...(apply ? { applied: 0, note: 'apply: true had nothing to write' } : {}),
+          fixes,
+        }, null, 2) }],
+      };
+    }
+
+    // parseAndExecute stops on the first failing line, so ops after a failure
+    // come back "not attempted" rather than silently skipped.
+    const opResults = parseAndExecute(canvas.root, fixes.map((f) => f.op).join('\n'), canvas);
+    if (opResults.some((r) => r.ok)) touchCanvas(canvasId);
+    const applied = fixes.filter((_, i) => opResults[i]?.ok).map((f) => ({ nodeId: f.nodeId, op: f.op, rationale: f.rationale }));
+    const failed = fixes
+      .map((f, i) => ({ f, r: opResults[i] }))
+      .filter(({ r }) => !r?.ok)
+      .map(({ f, r }) => ({ nodeId: f.nodeId, op: f.op, error: r ? r.error ?? 'failed' : 'not attempted (an earlier op failed)' }));
     return {
       content: [{ type: 'text', text: JSON.stringify({
         totalIssues: result.issues.length,
         fixableCount: fixes.length,
-        fixes,
+        appliedCount: applied.length,
+        applied,
+        ...(failed.length ? { failed } : {}),
+        note: 'Fixes written to the canvas — re-run canvas_evaluate to confirm.',
       }, null, 2) }],
     };
   }

@@ -269,6 +269,21 @@ Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `c
 
 Borders: `stroke` + `strokeWidth` draw all four sides (`strokeStyle: "dashed" | "dotted"` for forecast/placeholder outlines); per-side borders take an object — `borderTop: { width: 1, color: "$border", style? }` for table row rules, `borderLeft: { width: 3, color: "$primary" }` for accent edges. Paths dash via `strokeDasharray: "6 4"` (or `[6, 4]`).
 
+### `find_nodes`
+
+Find nodes by what they are — property values, text content, or name — instead of hand-tracking ids. Read-only; the query twin of `replace_matching_properties`.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas ID |
+| `match` | object? | Property/value predicate, AND across keys — e.g. `{ "fontSize": 30 }` (token refs match literally, structured values by shape) |
+| `text` | string? | Case-insensitive substring match on text content — e.g. `"$1.52M"` |
+| `name` | string? | Exact match on the node name — e.g. `"YearTable"` |
+| `scope` | string? | Node ID — limit the search to this subtree (inclusive) |
+| `type` | string? | Only match nodes of this type (`text`, `frame`, …) |
+
+All provided filters AND together (at least one is required). **Returns** `{ count, matches }` where each match is `{ id, type, name?, path }` — `path` is the named ancestor chain (`"Document / Table / Row 2 / text"`), so you can tell which match you want before editing it.
+
 ### `replace_matching_properties`
 
 Bulk property edit: find every node whose properties equal **all** the `match` entries and apply the `set` properties to each — one call instead of one `U()` op per node.
@@ -298,7 +313,7 @@ Render canvas to PNG (returned as base64 image).
 
 ### `read_nodes`
 
-Read node data from the scene graph.
+Read node data from the scene graph. Already know the id(s)? This is the tool. If you don't — you're hunting for a node by what's on it — use `find_nodes` instead of eyeballing this tree.
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -637,17 +652,18 @@ Issues that have a mechanical fix come back with an extra `fix: { op, rationale 
 
 ### `canvas_autofix`
 
-Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a mechanically derived fix — no judgement calls. Each fix carries a ready-to-paste `batch_design` Update op string. Closes the generator-evaluator loop without a second AI hop.
+Runs `canvas_evaluate` in fast mode and returns just the subset of issues with a mechanically derived fix — no judgement calls. By default it proposes: each fix carries a ready-to-paste `batch_design` Update op string. With `apply: true` it writes the fixes in the same call and reports applied/failed per op. Closes the generator-evaluator loop without a second AI hop.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas to autofix |
 | `categories` | string[]? | Restrict to fixes from these categories (default: all) |
 | `genre` | string? | Style that relaxes specific `cliche` gates (e.g. `"material"` allows purple and white elevated surfaces). Defaults to the canvas's provenance preset if stamped. |
+| `apply` | bool? | Write the fixes to the canvas in this call (default `false`: propose only) |
 
 **What gets auto-fixed**
 
-- **Spacing** — off-scale `gap` or scalar `padding` snaps to the nearest scale value. Array `padding` is skipped (ambiguous which index).
+- **Spacing** — off-scale `gap` or scalar `padding` snaps to the nearest scale value; array `padding` gets one fix per node that writes the complete snapped array (e.g. `[9, 0, 9, 18]` → `[8, 0, 8, 16]`).
 - **Consistency** — frames with multiple children but no `layout` get `layout: "vertical"`.
 - **Color** — recoverable WCAG contrast failures get `color: "#000000"` or `"#FFFFFF"`, whichever wins against the resolved background. Failures so bad that neither black nor white meets the threshold are not auto-fixed (the background also needs to change).
 - **Cliché** — a *known-default* purple/indigo accent (`#6366f1` and friends) written literally on a node swaps to a neutral accent; a dedicated fake-chrome strip (a row that is just traffic-light dots) gets a `D(...)` delete; pure-black ink (`#000000` text/icon/stroke) softens to off-black. Taste-dependent tells (gradient/glow overuse, the hanging header, fabricated copy, eyebrow rhythm, slop copy, mixed radius systems, competing accents) are reported by `canvas_evaluate` with a suggestion but carry **no** auto-fix op.

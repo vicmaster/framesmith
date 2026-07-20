@@ -1,7 +1,8 @@
 import './test-env.js';
 // Smoke for Phase 6c canvas_autofix. Asserts:
 //   1. Spacing off-scale values emit a fix op snapping to the nearest scale value.
-//   2. Padding given as an array does NOT emit a fix (ambiguous which index).
+//   2. Padding given as an array emits ONE combined issue per node whose fix
+//      writes the complete snapped array (Phase 22 slice B, #133).
 //   3. Missing layout on a multi-child frame emits `layout: "vertical"`.
 //   4. WCAG contrast failures emit `color: "#000000" | "#FFFFFF"` based on bg.
 //   5. End-to-end loop: bad-contrast canvas → evaluate → apply autofix ops via
@@ -47,16 +48,30 @@ function check(name: string, cond: boolean, extra?: string) {
   check('spacing: gap off-scale gets fix', !!gapIssue?.fix?.op.includes('gap: 12'));
 }
 
-// ---- 2. Padding as array → no fix --------------------------------------
+// ---- 2. Padding as array → one combined whole-array fix ----------------
 {
   const root: SceneNode = {
     id: 'doc', type: 'document', fill: '#1E293B',
-    padding: [18, 22], // both off-scale, but array → ambiguous
+    padding: [9, 0, 9, 18], // 9 → 8, 18 → 16; 0 stays untouched
     children: [{ id: 'c1', type: 'frame', fill: '#FFF', width: 100, height: 100 }],
   };
   const r = await evaluateCanvas(fakeCanvas(root), { mode: 'fast' });
   const padIssues = r.issues.filter((i) => i.message.startsWith('padding:'));
-  check('spacing: array padding emits issues but no fix', padIssues.length >= 1 && padIssues.every((i) => !i.fix));
+  check('spacing: array padding emits ONE combined issue', padIssues.length === 1, `got ${padIssues.length}`);
+  check('spacing: array fix writes the complete snapped array', !!padIssues[0]?.fix?.op.includes('padding: [8,0,8,16]'), padIssues[0]?.fix?.op);
+  check('spacing: array fix op round-trips through the executor', (() => {
+    const canvas = fakeCanvas(structuredClone(root));
+    const res = parseAndExecute(canvas.root, padIssues[0]!.fix!.op, canvas);
+    return res.every((x) => x.ok) && JSON.stringify(canvas.root.padding) === '[8,0,8,16]';
+  })());
+
+  const onScale: SceneNode = {
+    id: 'doc-ok', type: 'document', fill: '#1E293B',
+    padding: [8, 0, 8, 16],
+    children: [{ id: 'c1', type: 'frame', fill: '#FFF', width: 100, height: 100 }],
+  };
+  const rOk = await evaluateCanvas(fakeCanvas(onScale), { mode: 'fast' });
+  check('spacing: on-scale array padding is silent', !rOk.issues.some((i) => i.message.startsWith('padding:')));
 }
 
 // ---- 3. Missing layout on multi-child frame → fix sets vertical --------
