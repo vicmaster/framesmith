@@ -27,6 +27,7 @@ import { computeStructuralDrift, expandInstances } from './drift.js';
 import { applyPerturbation, compareLayouts, PERTURBATION_NAMES, type PerturbationName } from './stress.js';
 import { generateTypeScale, generateSpaceScale, resolveRatio, type RatioName } from './scales.js';
 import { generateColorSystem } from './color-system.js';
+import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from './design-language.js';
 import { evaluateProject } from './project-evaluate.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas, relaxedByGenre, knownGenres } from './evaluate.js';
@@ -55,7 +56,7 @@ Core loop: start from a taste-vetted pattern (list_structures → apply_structur
 
 A data screen isn't done at one static frame with ideal data. DESIGN EVERY STATE: tables need designed "empty" + "loading" variants, forms need "error" — the coverage category warns until they exist, and canvas_add_variant + the empty-state / skeleton-table / skeleton-card scaffolds make each one a clone plus a stamp. SURVIVE EVERY STRING: run canvas_stress before presenting a data screen — it renders the too-long name, the German label, the "999+" badge, and empty/tripled tables, and reports what clipped or overflowed by node id (fix with fluid widths / minWidth floors / wrapping, then re-run until CLEAN).
 
-DERIVE, DON'T HAND-PICK. The system-level craft decisions are generated, not eyeballed: generate_scale (a named ratio → the full text-xs…text-3xl type scale + paired space-3xs…space-3xl spacing, craft defaults baked in, fluid clamp() optional) and generate_color_system (one seed → OKLCH primary/neutral ramps, status colors, and the bg-surface/text-primary/accent semantic vocabulary the structures speak — every text/surface pair AA by construction, dark theme included as a sparse dark.colors layer). Then USE the system: theme: "dark" renders the dark theme and canvas_evaluate contrast-checks both automatically (APCA appears as info-only — WCAG 2.2 is the gate); the consistency category re-attaches literals that drifted from tokens; motion timing lives in $motion tokens, not scattered ms values. Generate first, adjust individual tokens after — never eyeball ten hexes.
+DERIVE, DON'T HAND-PICK. Start every new project's look with generate_design_system: one seed color + one PERSONALITY (technical / editorial / soft / data-dense) → the complete design language — color system, curated font pairing, typography ROLES ($display/$heading/$body/$label), radius + density stances, $elevation.* depth tokens (dark-aware), $motion defaults. Deterministic, no API key; a different personality on the same seed is a visibly different product — pick the stance deliberately. The single-purpose generators stay for targeted regeneration: generate_scale (a named ratio → the full text-xs…text-3xl type scale + paired space-3xs…space-3xl spacing, craft defaults baked in, fluid clamp() optional) and generate_color_system (one seed → OKLCH primary/neutral ramps, status colors, and the bg-surface/text-primary/accent semantic vocabulary the structures speak — every text/surface pair AA by construction, dark theme included as a sparse dark.colors layer). Then USE the system: theme: "dark" renders the dark theme and canvas_evaluate contrast-checks both automatically (APCA appears as info-only — WCAG 2.2 is the gate); the consistency category re-attaches literals that drifted from tokens; motion timing lives in $motion tokens, not scattered ms values. Generate first, adjust individual tokens after — never eyeball ten hexes.
 
 FINISH THE MODULE AS A SET. Products are sets of screens, and two things only exist at the set level: composition and coherence. Compose with real grid (layout: "grid" + gridColumns + span placement — bento/editorial tiles are grid children, never nested-flex approximations). When a multi-screen module feels done, project_evaluate rolls it up: per-screen scores plus the cross-screen findings no single canvas can see — radius-drift, accent-drift, token-adoption, copied-chrome (with the create_component + copy_nodes fix named), state-coverage. It is ADVISORY — only the per-canvas directives gate presenting. mode: "llm" adds the flow critique: up to 8 screens judged together for navigation/terminology/state-visibility/hierarchy consistency (keyless users get the full roll-up with a note).
 
@@ -104,7 +105,7 @@ const WORKFLOW_CHEATSHEET = [
   'canvas_evaluate → resolve EVERY comment (canvas_autofix apply: true for the mechanical subset / batch_design for the rest) → re-evaluate → repeat until the inspector is CLEAN and the score is > 95. Only then present.',
   'One canvas per screen / state; let the per-project build log nudge you to vary structure.',
   'Data screens: design every state — canvas_add_variant for "empty" / "loading" ("error" for forms) + the empty-state / skeleton-table scaffolds (coverage warns until they exist) — and run canvas_stress before presenting (fix clips/overflows with fluid widths, then re-run until CLEAN).',
-  'Derive the system before drawing: generate_scale (ratio → type + space tokens) and generate_color_system (seed → ramps + semantic tokens + dark theme, AA by construction) — then reference $tokens everywhere and let the lint re-attach any literal that drifts.',
+  'Derive the system before drawing: generate_design_system (seed + personality → the full design language: colors, font pairing, type roles, radii, $elevation depth, $motion) is the headline call; generate_scale / generate_color_system regenerate just the scale or just the palette — then reference $tokens everywhere and let the lint re-attach any literal that drifts.',
   'Multi-screen module? Finish as a SET: project_evaluate rolls up per-screen scores + cross-screen drift (radius / accent / token adoption / copied chrome / states) — advisory, the per-canvas directives still gate; mode "llm" adds the flow critique. Compose bento/editorial layouts with real grid (layout "grid" + spans), never nested flex.',
   'Picking up an existing canvas? get_feedback first — point-and-tell comments may be waiting (node-anchored or canvas-level). Address every open item, then resolve_feedback with a note saying what changed.',
   'If the canvas describes a SHIPPED view, canvas_check_drift against the live route before designing on it — a drifted canvas means faithfully restyling a fiction. Reconcile findings deliberately (update the canvas / flag the implementation / ask), never silently annotate.',
@@ -129,7 +130,7 @@ const GOTCHAS = [
   'Cliché tells (canvas_evaluate "cliche" category): avoid default purple/indigo accents, gradient/glow overuse, fake window chrome, fabricated metrics, slop copy (filler verbs / scroll cues / "Jane Doe" / hype labels), an eyebrow above every section (keep to ~1 per 3 sections), mixed radius systems (one radius scale), pure black/white (use off-black/off-white), and competing accents (one accent hue + neutrals).',
   'Genre calibration: declare the genre the screen actually IS — stamp it durably with canvas_set_genre (no token churn; null clears), or pass genre: "dashboard" (alias "data") per call on canvas_evaluate/canvas_autofix. "dashboard" stops a data-dense screen\'s own realistic figures from flagging as fabricated; "material" allows purple + white surfaces. Genre follows what the screen is FOR, not what it contains: read screens with published figures → "dashboard"; editors/admin forms → "material". The evaluate result\'s genre field audits the choice ({ active, source, relaxed, notRelaxed }) — a score pinned by tells in notRelaxed means the genre is probably wrong. Matching an existing app\'s type scale? Declare the sizes as typography tokens — pinned sizes skip the adjacent-ratio check. Never use genre to dodge flags on a marketing page.',
   'Every state, every string: a data screen is not done at one static frame with ideal data. Tables demand designed "empty" + "loading" state variants, forms demand "error" (the coverage category warns until they exist — each is one canvas_add_variant + one scaffold stamp: empty-state / skeleton-table / skeleton-card); skeleton blocks pulse only in the live viewer, never in screenshots. Then canvas_stress before presenting: it renders hostile-but-realistic content (long-text / i18n / big-numbers / empty / many) and reports clips and overflows by node id — fix with fluid widths / minWidth floors / wrapping, or textOverflow: "ellipsis" on a label that must stay single-line (that downgrades its clip to info instead of warning), and re-run until CLEAN.',
-  'Derive, don\'t hand-pick: generate_scale gives a modular type + space scale from a ratio (craft defaults baked in; fluid clamp() optional); generate_color_system gives OKLCH ramps + a matched neutral + status colors + the semantic tokens the structures use, AA by construction, WITH a dark theme (sparse dark.colors layer). Render dark via theme: "dark" on screenshot/screenshot_responsive/export; canvas_evaluate contrast-checks both themes automatically (dark failures point at the dark layer — never write a literal fix; APCA Lc is info-only, WCAG 2.2 gates). Literals that equal a token get re-attached by autofix; timing belongs in $motion tokens.',
+  'Derive, don\'t hand-pick: generate_design_system (seed + REQUIRED personality: technical/editorial/soft/data-dense) writes the whole design language in one call — including $display/$heading/$body/$label typography roles, $elevation.* shadow tokens (reference as shadow: "$elevation.raised"; the dark layer re-states depth), and $motion defaults. For targeted regeneration only: generate_scale gives a modular type + space scale from a ratio (craft defaults baked in; fluid clamp() optional); generate_color_system gives OKLCH ramps + a matched neutral + status colors + the semantic tokens the structures use, AA by construction, WITH a dark theme (sparse dark.colors layer). Render dark via theme: "dark" on screenshot/screenshot_responsive/export; canvas_evaluate contrast-checks both themes automatically (dark failures point at the dark layer — never write a literal fix; APCA Lc is info-only, WCAG 2.2 gates). Literals that equal a token get re-attached by autofix; timing belongs in $motion tokens.',
   'Beyond one canvas: bento/editorial compositions are REAL grid — layout: "grid" + gridColumns (count / fr-weight array / template string) + gridColumn/gridRow spans (a number means span N); responsive: "stack" collapses to one column on mobile. Never approximate tiles with nested flex. When a multi-screen module feels done, project_evaluate reviews the SET — radius-drift / accent-drift / token-adoption / copied-chrome / state-coverage findings, each naming its canvases — and mode "llm" judges up to 8 screens together for flow consistency (flowSkipped lists anything past the cap; keyless → full roll-up + a note). ADVISORY: only the per-canvas directives gate presenting.',
   'Gate integrity: a canvas describing a SHIPPED view is a contract — run canvas_check_drift against the live route BEFORE designing on it (findings: missing-in-page / missing-in-canvas / control-mismatch / table-mismatch), and reconcile deliberately: update the canvas, flag the implementation, or ask — never silently annotate a difference. canvas_sync_from_url answers "how much does it LOOK different" (pixel %); canvas_version makes approvals falsifiable — record { canvasId, versionHash } at approval time and check with expectedHash later (metadata/feedback never moves the hash). CI can demand both: npx framesmith check-drift / verify exit 1 on failure.',
 ];
@@ -776,7 +777,7 @@ server.tool(
     width: z.number().optional().describe('Viewport width in pixels (default 1440)'),
     height: z.number().optional().describe('Viewport height in pixels (default 900)'),
     scale: z.number().optional().describe('Device scale factor (default 2 for retina)'),
-    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors overrides); default light. No-op when no dark layer exists.'),
+    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors/dark.elevation overrides); default light. No-op when no dark layer exists.'),
   },
   async ({ canvasId, nodeId, width, height, scale, theme }) => {
     const canvas = getCanvas(canvasId);
@@ -883,8 +884,16 @@ server.tool(
         lineHeight: z.union([z.number(), z.string()]).optional(),
         letterSpacing: z.number().optional().describe('px — applied through $refs like the rest of the token spec'),
       })).optional(),
+      elevation: z.record(z.array(z.object({
+        x: z.number(), y: z.number(), blur: z.number(), spread: z.number().optional(),
+        color: z.string(), inset: z.boolean().optional(),
+      }))).optional().describe('Elevation (shadow) tokens, keyed by name (e.g. flat/raised/floating/overlay) — reference from a node as shadow: "$elevation.<name>". Each value is a layered box-shadow array (the same shape as a node\'s "shadows" property).'),
       dark: z.object({
         colors: z.record(z.string()).optional(),
+        elevation: z.record(z.array(z.object({
+          x: z.number(), y: z.number(), blur: z.number(), spread: z.number().optional(),
+          color: z.string(), inset: z.boolean().optional(),
+        }))).optional().describe('Dark-theme elevation override, SPARSE by token name — light-tuned shadows read wrong on dark surfaces, so re-state depth here rather than inheriting it.'),
       }).optional().describe('Dark-theme override layer, SPARSE by token name — anything not overridden inherits the light value. Read by theme: "dark" renders and the dual-theme contrast check.'),
       motion: z.record(z.object({
         duration: z.number().describe('ms'),
@@ -1047,6 +1056,84 @@ The DARK theme ships in the same call (the Radix pattern: a reversed walk of the
   }
 );
 
+// --- generate_design_system (Phase 27 slice A) ---
+server.tool(
+  'generate_design_system',
+  `THE way to start a new project's look: one seed color + one PERSONALITY → the complete design language, deterministically, no API key. Composes the color engine (OKLCH ramps + semantic tokens + dark theme, AA by construction — everything generate_color_system does) and the scale engine (modular type + space ladder, craft defaults baked in), then adds what neither engine has an opinion about: a curated font pairing loaded through the font pipeline (real faces from the first screenshot), per-role tracking/leading, a radius stance, a density stance, $elevation.* shadow tokens WITH a dark-theme treatment, and $motion defaults.
+
+Personalities (required — pick a stance, don't default into sameness):
+- "technical" — crisp, engineered, product-tool energy (Space Grotesk + Inter, tight display tracking, 6/10/14 radii, quick motion). For developer tools, admin panels, B2B products.
+- "editorial" — confident serif voice, generous air (Fraunces + Source Sans 3, larger scale contrast, near-sharp radii). For marketing pages, content products, brand sites.
+- "soft" — warm, rounded, human (Plus Jakarta Sans + Inter, 12/16/20 radii, springy motion). For consumer apps, onboarding, anything friendly.
+- "data-dense" — instrument-panel density (Inter + a JetBrains Mono "figures" role, 13px pivot, minimal radii, near-flat depth). For dashboards, tables, monitoring.
+
+The typography layer ships ROLE tokens the structures speak — $display / $heading / $body / $label / $caption (+ $figures when a mono face exists) — alongside the text-xs…text-3xl steps. Depth: reference elevation from any node as shadow: "$elevation.flat|raised|floating|overlay" — the dark layer re-states each depth so it reads on dark surfaces. Writes to exactly ONE of canvasId / projectId / workspaceId; canvas scope preserves inherited design-system tokens (reported, same contract as generate_color_system). The two single-purpose generators stay available for targeted regeneration (just the palette, just the scale).`,
+  {
+    seed: z.string().describe('The brand color to derive everything from (#RRGGBB)'),
+    personality: z.enum(['technical', 'editorial', 'soft', 'data-dense']).describe('The design stance — required. Genre guide: dashboards → data-dense or technical; marketing/content → editorial; consumer → soft.'),
+    baseSize: z.number().optional().describe('Override the personality\'s type pivot (10–24px)'),
+    ratio: z.union([z.enum(['minor-second', 'major-second', 'minor-third', 'major-third', 'perfect-fourth', 'golden']), z.number()]).optional().describe('Override the personality\'s scale ratio'),
+    canvasId: z.string().optional().describe('Write to this canvas\'s variables'),
+    projectId: z.string().optional().describe('Write to this project\'s design system'),
+    workspaceId: z.string().optional().describe('Write to this workspace\'s design system'),
+  },
+  async ({ seed, personality, baseSize, ratio, canvasId, projectId, workspaceId }) => {
+    const targets = [canvasId, projectId, workspaceId].filter(Boolean);
+    if (targets.length !== 1) {
+      return { content: [{ type: 'text', text: 'Error: pass exactly ONE of canvasId / projectId / workspaceId — the layer the system is written to.' }], isError: true };
+    }
+    try {
+      const system = generateDesignSystem(seed, personality as PersonalityName, { baseSize, ratio });
+      const vars = system.variables;
+
+      let preserved: Array<{ category: string; key: string; kept: string; preset: string }> = [];
+      let wroteTo: Record<string, string>;
+      if (canvasId) {
+        ensureFresh(canvasId);
+        const canvas = getCanvas(canvasId);
+        if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+        const merge = applyPresetTokens(canvas, { colors: vars.colors, spacing: vars.spacing, radius: vars.radius, typography: vars.typography }, getInheritedTokens(canvas));
+        preserved = merge.preserved;
+        setVariables(canvas, { elevation: vars.elevation, motion: vars.motion, dark: vars.dark });
+        touchCanvas(canvasId);
+        wroteTo = { layer: 'canvas', id: canvasId };
+      } else if (projectId) {
+        if (setProjectDesignSystem(projectId, vars) === undefined) {
+          return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
+        }
+        wroteTo = { layer: 'project', id: projectId };
+      } else {
+        if (setWorkspaceDesignSystem(workspaceId!, vars) === undefined) {
+          return { content: [{ type: 'text', text: `Error: Workspace "${workspaceId}" not found` }], isError: true };
+        }
+        wroteTo = { layer: 'workspace', id: workspaceId! };
+      }
+
+      const fontsContent = await warmFontsContent({ typography: vars.typography });
+
+      return { content: [
+        { type: 'text', text: JSON.stringify({
+          wroteTo,
+          personality: system.personality,
+          intent: system.intent,
+          fonts: system.fonts,
+          seed: system.colorSystem.seed,
+          semantics: system.colorSystem.light,
+          typographyRoles: { display: vars.typography!['display'], heading: vars.typography!['heading'], body: vars.typography!['body'], label: vars.typography!['label'] },
+          radius: vars.radius,
+          elevation: Object.keys(vars.elevation ?? {}),
+          motion: Object.keys(vars.motion ?? {}),
+          ...(preserved.length ? { preservedFromDesignSystem: preserved } : {}),
+          note: 'Full design language written: reference $display/$heading/$body/$label typography roles, $bg-surface/$accent/… colors, shadow: "$elevation.raised" for depth, transition: "$motion.base" for timing. Render dark with theme: "dark" — colors AND elevation re-state themselves. Same seed with a different personality gives a visibly different product.',
+        }, null, 2) },
+        ...fontsContent,
+      ] };
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Error: ${(err as Error).message}` }], isError: true };
+    }
+  }
+);
+
 // --- get_fonts ---
 server.tool(
   'get_fonts',
@@ -1141,7 +1228,7 @@ server.tool(
     width: z.number().optional().describe('Viewport width in pixels (default 1440)'),
     height: z.number().optional().describe('Viewport height in pixels (default 900)'),
     scale: z.number().optional().describe('Device scale factor (default 2 for retina)'),
-    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors overrides); default light. No-op when no dark layer exists.'),
+    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors/dark.elevation overrides); default light. No-op when no dark layer exists.'),
   },
   async ({ canvasId, format, outputPath, nodeIds, width, height, scale, theme }) => {
     const canvas = getCanvas(canvasId);
@@ -1182,7 +1269,7 @@ server.tool(
       height: z.number().describe('Viewport height in pixels'),
     })).optional().describe('Breakpoints to render. Defaults to mobile/tablet/desktop.'),
     scale: z.number().optional().describe('Device scale factor (default 2)'),
-    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors overrides); default light. No-op when no dark layer exists.'),
+    theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors/dark.elevation overrides); default light. No-op when no dark layer exists.'),
   },
   async ({ canvasId, breakpoints, scale, theme }) => {
     const canvas = getCanvas(canvasId);

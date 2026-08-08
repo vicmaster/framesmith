@@ -1,12 +1,16 @@
-import type { Canvas, DesignVariables, SceneNode } from './types.js';
+import type { Canvas, DesignVariables, SceneNode, ShadowSpec } from './types.js';
 
 export function resolveVariables(node: SceneNode, variables: DesignVariables, opts?: { theme?: 'light' | 'dark' }): SceneNode {
   // Phase 25 slice D — dark is a sparse override layer: merge it over colors
   // and resolve exactly as light does. Theme is a pure RENDER/EVALUATE
   // parameter, never canvas state (versionHash and drift baselines must not
   // fork on it).
-  const effective = opts?.theme === 'dark' && variables.dark?.colors
-    ? { ...variables, colors: { ...variables.colors, ...variables.dark.colors } }
+  const effective = opts?.theme === 'dark' && (variables.dark?.colors || variables.dark?.elevation)
+    ? {
+        ...variables,
+        colors: { ...variables.colors, ...variables.dark?.colors },
+        elevation: { ...variables.elevation, ...variables.dark?.elevation },
+      }
     : variables;
   return deepResolve(structuredClone(node), effective);
 }
@@ -35,6 +39,13 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
       }
       const resolved = lookupToken(tokenName, variables);
       if (resolved !== undefined) {
+        // Phase 27 — an elevation ref on `shadow` resolves to the structured
+        // shadows array (the renderer's plural path); explicit `shadows` wins.
+        if (key === 'shadow' && Array.isArray(resolved)) {
+          if (node.shadows === undefined) node.shadows = resolved as ShadowSpec[];
+          delete node.shadow;
+          continue;
+        }
         (node as unknown as Record<string, unknown>)[key] = resolved;
       }
     }
@@ -140,8 +151,14 @@ export function setVariables(canvas: Canvas, vars: Partial<DesignVariables>): De
   if (vars.spacing) canvas.variables.spacing = { ...canvas.variables.spacing, ...vars.spacing };
   if (vars.radius) canvas.variables.radius = { ...canvas.variables.radius, ...vars.radius };
   if (vars.typography) canvas.variables.typography = { ...canvas.variables.typography, ...vars.typography };
-  if (vars.dark?.colors) canvas.variables.dark = { colors: { ...canvas.variables.dark?.colors, ...vars.dark.colors } };
+  if (vars.dark?.colors || vars.dark?.elevation) {
+    canvas.variables.dark = {
+      ...(canvas.variables.dark?.colors || vars.dark?.colors ? { colors: { ...canvas.variables.dark?.colors, ...vars.dark?.colors } } : {}),
+      ...(canvas.variables.dark?.elevation || vars.dark?.elevation ? { elevation: { ...canvas.variables.dark?.elevation, ...vars.dark?.elevation } } : {}),
+    };
+  }
   if (vars.motion) canvas.variables.motion = { ...canvas.variables.motion, ...vars.motion };
+  if (vars.elevation) canvas.variables.elevation = { ...canvas.variables.elevation, ...vars.elevation };
   return canvas.variables;
 }
 
@@ -214,8 +231,14 @@ export function mergeDesignTokens(...layers: Array<DesignVariables | undefined>)
     if (layer.spacing) out.spacing = { ...(out.spacing ?? {}), ...layer.spacing };
     if (layer.radius) out.radius = { ...(out.radius ?? {}), ...layer.radius };
     if (layer.typography) out.typography = { ...(out.typography ?? {}), ...layer.typography };
-    if (layer.dark?.colors) out.dark = { colors: { ...(out.dark?.colors ?? {}), ...layer.dark.colors } };
+    if (layer.dark?.colors || layer.dark?.elevation) {
+      out.dark = {
+        ...(out.dark?.colors || layer.dark?.colors ? { colors: { ...(out.dark?.colors ?? {}), ...layer.dark?.colors } } : {}),
+        ...(out.dark?.elevation || layer.dark?.elevation ? { elevation: { ...(out.dark?.elevation ?? {}), ...layer.dark?.elevation } } : {}),
+      };
+    }
     if (layer.motion) out.motion = { ...(out.motion ?? {}), ...layer.motion };
+    if (layer.elevation) out.elevation = { ...(out.elevation ?? {}), ...layer.elevation };
   }
   return out;
 }

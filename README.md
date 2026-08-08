@@ -36,7 +36,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 | **Rendering** | Scene graph → HTML/CSS → Puppeteer PNG · responsive breakpoints · real CSS grid (`layout: "grid"` + spans) for bento/editorial compositions · gradients, shadows, blur, glassmorphism · SVG paths · animations · data-driven charts (line/bar, multi-series) |
 | **Pattern library** | 11 vetted page archetypes + 5 component scaffolds, all scoring > 95 with zero cliché tells; taxonomy axes + a diversification signal so successive screens vary |
 | **Quality & taste** | `canvas_evaluate` (7 categories incl. cliché tells + state coverage) with a `READY`/`NOT READY` directive · `canvas_autofix` (mechanical fixes) · optional vision-model rubric critique + `canvas_revise` · `canvas_add_variant` clones a screen into a linked empty/loading/error state · `canvas_stress` content-perturbation testing (long text, i18n, big numbers, empty/many rows) · `project_evaluate` rolls up a project's screens for cross-screen consistency (radius/accent drift, token adoption, hand-copied chrome, state coverage) plus an optional multi-screen flow critique — advisory, never a gate |
-| **Design systems** | Layered `$token`s (workspace ▸ project ▸ canvas), incl. `motion` tokens · style presets · `DESIGN.md` import · `generate_scale` derives a modular type + spacing scale from a named ratio (optional fluid `clamp()` sizes) · `generate_color_system` turns one seed color into OKLCH ramps + AA-checked semantic tokens, dark theme included · dual-theme rendering + evaluation (`theme: "dark"` on screenshot/export, both-theme contrast in `canvas_evaluate` with APCA advisory) · token-detachment lint re-attaches literals that drift from a token |
+| **Design systems** | `generate_design_system`: one seed + one personality (`technical` / `editorial` / `soft` / `data-dense`) → the complete design language — colors, curated font pairing, typography roles, radius/density stances, `$elevation` depth tokens (dark-aware), `$motion` defaults · layered `$token`s (workspace ▸ project ▸ canvas) · style presets · `DESIGN.md` import · `generate_scale` derives a modular type + spacing scale from a named ratio (optional fluid `clamp()` sizes) · `generate_color_system` turns one seed color into OKLCH ramps + AA-checked semantic tokens, dark theme included · dual-theme rendering + evaluation (`theme: "dark"` on screenshot/export, both-theme contrast in `canvas_evaluate` with APCA advisory) · token-detachment lint re-attaches literals that drift from a token |
 | **Primitives** | Lucide + Material Symbols icons · Google Fonts by name · real form controls · components with instance overrides — `create_component` promotes existing work, `copy_nodes` carries subtrees (and their component defs) across canvases |
 | **Import from code** | `canvas_import_html` / `canvas_import_url` — token-mapped, structure-reconstructed · `canvas_sync_from_url` pixel drift · `canvas_check_drift` structural drift · `framesmith verify` / `check-drift` CLI for CI/pre-commit gates, no MCP client needed |
 | **Viewer** | Browser gallery + detail view · quality inspector (score, issues, click-to-highlight) · design-system token panel · point-and-tell feedback (Comment mode + Feedback tab) |
@@ -274,7 +274,7 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out)
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow`, `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`
 
 Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
@@ -362,7 +362,7 @@ Render canvas to PNG (returned as base64 image).
 | `width` | number? | Viewport width (default 1440) |
 | `height` | number? | Viewport height (default 900) |
 | `scale` | number? | Device scale (default 2) |
-| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors` overrides); default light — a no-op without a dark layer |
+| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
 
 ### `read_nodes`
 
@@ -400,6 +400,25 @@ Derive, don't hand-pick: a named ratio + a base size → a full modular **type s
 
 Returns the generated tokens plus `overwrote` (existing names replaced). Reference results as `fontSize: "$text-lg"` (the full token spec applies through the ref) and `gap: "$space-md"`. Fluid `clamp()` sizes render as-is and are exempt from the numeric scale checks.
 
+### `generate_design_system`
+
+The headline call for a new project's look: **one seed color + one personality → the complete design language**, deterministic, no API key. It composes `generate_color_system` and `generate_scale`, then adds everything those engines have no opinion about:
+
+- **A curated font pairing**, loaded through the font pipeline so the first screenshot renders real faces — `technical` = Space Grotesk + Inter, `editorial` = Fraunces + Source Sans 3, `soft` = Plus Jakarta Sans + Inter, `data-dense` = Inter + a JetBrains Mono `figures` role.
+- **Typography roles** the structures speak — `$display`, `$heading`, `$body`, `$label`, `$caption` (+ `$figures` with a mono face) — with per-role weight and tracking, alongside the `text-xs`…`text-3xl` steps.
+- **A radius stance** (`radius-sm/md/lg` — e.g. 6/10/14 for `technical`, 12/16/20 for `soft`) and a **density stance** (the space scale pivots on the personality).
+- **`$elevation.flat` / `raised` / `floating` / `overlay`** — layered soft shadow tokens referenced from any node as `shadow: "$elevation.raised"`. The dark layer **re-states** each depth (stronger black ink) so elevation reads on dark surfaces instead of vanishing.
+- **`$motion` defaults** (`fast` / `base` / `slow`) tuned to the personality's temperament.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `seed` | string | The brand color everything derives from (`#RRGGBB`) |
+| `personality` | string | **Required** — `technical`, `editorial`, `soft`, or `data-dense`. Dashboards → `data-dense`/`technical`, marketing/content → `editorial`, consumer → `soft` |
+| `baseSize` / `ratio` | number? | Override the personality's type pivot / scale ratio |
+| `canvasId` / `projectId` / `workspaceId` | string? | Exactly one — the token layer written to |
+
+Same seed, different personality = a visibly different product. The two single-purpose generators below stay for targeted regeneration (just the palette, just the scale).
+
 ### `generate_color_system`
 
 One seed color → a full perceptual color system, written to the workspace / project / canvas token layer of your choice:
@@ -418,16 +437,19 @@ The **dark theme ships in the same call**: the semantic dark mapping (Radix patt
 
 ### `get_variables` / `set_variables`
 
-Read and write design tokens (colors, spacing, radius, typography — plus a `dark` override layer and `motion` tokens: `{ duration, easing }` pairs referenced from nodes as `transition: "$motion.<name>"`). Use `$tokenName` in node properties to reference variables. The `dark` layer is SPARSE, keyed by token name: anything not overridden inherits the light value; it drives `theme: "dark"` renders and the dual-theme contrast check.
+Read and write design tokens (colors, spacing, radius, typography — plus `elevation` shadow tokens, a `dark` override layer, and `motion` tokens: `{ duration, easing }` pairs referenced from nodes as `transition: "$motion.<name>"`). Use `$tokenName` in node properties to reference variables. The `dark` layer is SPARSE, keyed by token name: anything not overridden inherits the light value — colors AND elevation can both carry a dark override; it drives `theme: "dark"` renders and the dual-theme contrast check.
 
 ```json
 {
   "colors": { "primary": "#e94560", "bg": "#1a1a2e" },
   "spacing": { "sm": 8, "md": 16, "lg": 24 },
   "radius": { "sm": 4, "md": 8 },
+  "elevation": { "raised": [{ "x": 0, "y": 2, "blur": 4, "spread": -1, "color": "rgba(16,24,40,0.08)" }] },
   "motion": { "fast": { "duration": 150, "easing": "ease-out" } }
 }
 ```
+
+Reference an elevation token from a node as `shadow: "$elevation.raised"` (resolves to the layered `shadows` array; an explicit `shadows` on the node wins).
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm", transition: "$motion.fast" }`
 
@@ -486,7 +508,7 @@ Export a canvas or specific nodes to files on disk.
 | `width` | number? | Viewport width (default 1440) |
 | `height` | number? | Viewport height (default 900) |
 | `scale` | number? | Device scale (default 2) |
-| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors` overrides); default light — a no-op without a dark layer |
+| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
 
 Returns `{ exported: string[], versionHash }` — the exported file paths plus the canvas's design-content hash at export time (see `canvas_version`), so an exported artifact can be tied back to the exact design that produced it.
 
@@ -671,7 +693,7 @@ The renderer emits `clamp()` for paddings ≥ 32px and font sizes ≥ 24px, so h
 | `canvasId` | string | Canvas ID |
 | `breakpoints` | array? | `[{label, width, height}]` — custom breakpoints |
 | `scale` | number? | Device scale (default 2) |
-| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors` overrides); default light — a no-op without a dark layer |
+| `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
 
 ### `canvas_diff`
 
@@ -1149,7 +1171,7 @@ The loop framesmith is built around — start from taste, adapt, and polish to t
 
 1. Start the standalone viewer in a terminal tab: `npx -p framesmith framesmith-viewer`, and open its URL for live preview.
 2. `canvas_create` → get a canvas ID (share the viewer URL).
-3. Set the design system once — `workspace_set_design_system` / `apply_preset` / `set_variables` (colors, spacing, radius, typography as `$token`s).
+3. Set the design system once — `generate_design_system` (seed + personality → the whole language: colors, fonts, type roles, radius/density, elevation, motion) is the fastest start; `workspace_set_design_system` / `apply_preset` / `set_variables` hand-author or adjust individual `$token`s.
 4. **`apply_structure`** → stamp a vetted page pattern, then adapt it with `batch_design` (real icons, controls, and components — not faked from frames). This is the starting point; a blank canvas is the slow, sloppy path.
 5. Watch the viewer auto-refresh as you design; `screenshot` to check the render.
 6. **`canvas_evaluate`** → read the `directive`. Resolve every warning and cliché tell (`canvas_autofix` for the mechanical subset, `batch_design` for the rest), then re-evaluate. Repeat until it says `READY` — only then present the design.

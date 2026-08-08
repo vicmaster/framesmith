@@ -34,6 +34,13 @@ export interface BorderSide {
   style?: 'solid' | 'dashed' | 'dotted';
 }
 
+/** One layer of a box shadow — used on nodes (`shadows`) and as the value
+ * shape of `$elevation.*` tokens (Phase 27). */
+export interface ShadowSpec {
+  x: number; y: number; blur: number; spread?: number;
+  color: string; inset?: boolean;
+}
+
 export interface SceneNode {
   id: string;
   type: NodeType;
@@ -103,10 +110,7 @@ export interface SceneNode {
    * survive hostile-length content. */
   textOverflow?: 'ellipsis';
   shadow?: string;
-  shadows?: Array<{
-    x: number; y: number; blur: number; spread?: number;
-    color: string; inset?: boolean;
-  }>;
+  shadows?: ShadowSpec[];
   blur?: number;
   backdropBlur?: number;
   /** Composable backdrop filter functions. Each field is numeric:
@@ -224,11 +228,21 @@ export interface DesignVariables {
    * token NAME: anything not overridden inherits the light value. Rendering
    * and evaluation merge it over `colors` when theme = "dark"; storage stays
    * one flat, diffable object per layer. */
-  dark?: { colors?: Record<string, string> };
+  dark?: {
+    colors?: Record<string, string>;
+    /** Phase 27 — dark-theme elevation overrides (sparse, keyed by token
+     * name): light-tuned shadows read wrong on dark surfaces, so the dark
+     * layer re-states depth instead of inheriting it. */
+    elevation?: Record<string, ShadowSpec[]>;
+  };
   /** Phase 25 slice E — motion tokens (the Carbon/Atlassian pattern):
    * duration + easing packaged under a name, referenced from `transition`
    * as the string "$motion.<name>". */
   motion?: Record<string, { duration: number; easing: string }>;
+  /** Phase 27 — elevation (shadow) tokens, referenced from a node as
+   * `shadow: "$elevation.<name>"` (the `$motion` dotted pattern). Semantic
+   * names by convention: flat / raised / floating / overlay. */
+  elevation?: Record<string, ShadowSpec[]>;
 }
 
 /** Custom font face declaration. Renderer emits a single `@font-face` rule

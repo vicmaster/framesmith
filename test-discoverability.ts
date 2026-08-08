@@ -245,6 +245,26 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   }
 }
 
+// ── Phase 27 slice A: personalities + elevation vocabulary ───────────────────
+{
+  const { PERSONALITY_NAMES } = await import('./src/design-language.js');
+  expect('four personalities exported', PERSONALITY_NAMES.length === 4, PERSONALITY_NAMES.join(', '));
+  for (const surface of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
+    const missing = PERSONALITY_NAMES.filter((p: string) => !surface[1].includes(p));
+    expect(`every personality named in ${surface[0]}`, missing.length === 0, missing.join(', '));
+  }
+  const ELEVATION_NAMES = ['flat', 'raised', 'floating', 'overlay'];
+  for (const surface of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
+    const missing = ELEVATION_NAMES.filter((e) => !surface[1].includes(`$elevation`) || !surface[1].includes(e));
+    expect(`elevation vocabulary in ${surface[0]}`, missing.length === 0, missing.join(', '));
+  }
+  const ROLES = ['$display', '$heading', '$body', '$label'];
+  for (const surface of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines]] as const) {
+    const missing = ROLES.filter((r) => !surface[1].includes(r));
+    expect(`typography roles in ${surface[0]}`, missing.length === 0, missing.join(', '));
+  }
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;
