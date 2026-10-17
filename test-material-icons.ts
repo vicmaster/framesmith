@@ -51,7 +51,16 @@ const expect = (name: string, ok: boolean, detail?: string) => checks.push({ nam
   expect('styles differ (distinct glyph data)', rounded !== outlined || sharp !== outlined);
 
   expect('material unknown name → null', getIconSvg('material:not-a-real-symbol') === null);
+  // Issue #214 — multi-word Material Symbols names use underscores.
+  expect('underscored name resolves', getIconSvg('material:chevron_right') !== null);
+  expect('underscored -fill variant resolves', getIconSvg('material:chevron_right-fill') !== null);
+  expect('underscored -fill is the filled glyph', (() => {
+    const filled = getIconSvg('material:account_circle-fill');
+    return filled !== null && filled !== getIconSvg('material:account_circle');
+  })());
   expect('path traversal rejected', getIconSvg('material:../../package') === null);
+  expect('dot-relative path rejected', getIconSvg('material:../x') === null);
+  expect('slash path rejected', getIconSvg('material:a/b') === null);
   expect('unsafe color dropped, icon still renders', (() => {
     const s = getIconSvg('material:check', 24, '"><script>');
     return s !== null && !s.includes('script');

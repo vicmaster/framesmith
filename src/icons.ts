@@ -94,7 +94,10 @@ function getMaterialRoot(): string | null {
 }
 
 function materialSvg(name: string, size: number, color?: string, style: MaterialStyle = 'outlined'): string | null {
-  if (!name || !/^[a-z0-9-]+$/i.test(name)) return null; // names are file paths — reject anything path-like
+  // Names are file paths — allow only what Material Symbols file names use
+  // (letters, digits, `_` for multi-word names like chevron_right, `-` for the
+  // -fill suffix) and reject anything path-like (`.`, `/`).
+  if (!name || !/^[a-z0-9_-]+$/i.test(name)) return null;
   const resolvedStyle = MATERIAL_STYLES.includes(style) ? style : 'outlined';
   const key = `${resolvedStyle}/${name}`;
 
