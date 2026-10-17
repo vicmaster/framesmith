@@ -4,6 +4,7 @@ import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
+import { getIconSvg, parseIconRef } from './icons.js';
 
 // --- Types ---
 
@@ -720,6 +721,13 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
     }
   }
 
+  // Unknown icons — an icon name that resolves in neither set renders an
+  // empty slot (the renderer emits only an HTML comment), invisible in
+  // screenshots. Warning severity: a blank icon is a shipped defect.
+  const iconFindings = checkUnknownIcons(canvas);
+  score -= 10 * iconFindings.length;
+  issues.push(...iconFindings);
+
   // Component reuse
   if (totalNodes > 10 && instanceNodes === 0) {
     issues.push({
@@ -732,6 +740,89 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
   }
 
   return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
+}
+
+/** Spellings worth trying for an icon name that didn't resolve: Material
+ * Symbols names multi-word icons with `_` (chevron_right), Lucide with `-`
+ * (chevron-right), and Material needs the `material:` prefix. Each candidate
+ * is checked against the bundled sets — only names that actually render. */
+function iconCandidates(ref: string, style: SceneNode['iconStyle']): string[] {
+  const { set, name } = parseIconRef(ref);
+  const lower = name.toLowerCase();
+  const out = new Set<string>();
+  if (set === 'lucide') {
+    const hyphenated = lower.replace(/_/g, '-');
+    if (hyphenated !== name && getIconSvg(hyphenated)) out.add(hyphenated);
+    if (getIconSvg(`material:${lower}`, 24, undefined, style)) out.add(`material:${lower}`);
+  } else {
+    // Keep the -fill suffix; the base name is what takes underscores.
+    const [, base, fill = ''] = lower.match(/^(.*?)(-fill)?$/)!;
+    const underscored = `${base.replace(/-/g, '_')}${fill}`;
+    if (underscored !== name && getIconSvg(`material:${underscored}`, 24, undefined, style)) out.add(`material:${underscored}`);
+  }
+  return [...out];
+}
+
+function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
+  // Instance-expanded so icons inside stamped components are checked too;
+  // ids that aren't in the canvas tree itself live in a component definition.
+  const expanded = expandInstances(canvas.root, canvas);
+  const ownIds = new Set<string>();
+  (function walk(n: SceneNode) { ownIds.add(n.id); n.children?.forEach(walk); })(canvas.root);
+
+  const icons: SceneNode[] = [];
+  (function walk(n: SceneNode) { if (n.type === 'icon') icons.push(n); n.children?.forEach(walk); })(expanded);
+
+  // Tie-break between candidates by the icon set the rest of the canvas uses:
+  // mixing stroke (Lucide) and fill (Material) glyphs is its own inconsistency.
+  const resolvedSets = new Set(icons
+    .filter((n) => n.icon && getIconSvg(n.icon, 24, undefined, n.iconStyle))
+    .map((n) => parseIconRef(n.icon!).set));
+  const canvasSet = resolvedSets.size === 1 ? [...resolvedSets][0] : null;
+
+  const issues: EvaluationIssue[] = [];
+  const seen = new Set<string>();
+  for (const node of icons) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    const ref = (node.icon ?? '').trim();
+    if (ref && getIconSvg(ref, 24, undefined, node.iconStyle)) continue;
+
+    const where = ownIds.has(node.id) ? '' : ' (inside a component — fix it in the component definition)';
+    if (!ref) {
+      issues.push({
+        category: 'structure',
+        severity: 'warning',
+        nodeId: node.id,
+        nodeName: node.name,
+        message: `Icon node has no icon name${where} — it renders as an empty slot.`,
+        suggestion: 'Set icon to a Lucide name ("chevron-right") or a Material Symbols name with the material: prefix ("material:chevron_right"), or delete the node.',
+      });
+      continue;
+    }
+
+    const candidates = iconCandidates(ref, node.iconStyle);
+    const preferred = canvasSet ? candidates.filter((c) => parseIconRef(c).set === canvasSet) : [];
+    const pick = candidates.length === 1 ? candidates[0] : preferred.length === 1 ? preferred[0] : null;
+    const issue: EvaluationIssue = {
+      category: 'structure',
+      severity: 'warning',
+      nodeId: node.id,
+      nodeName: node.name,
+      message: `Unknown icon "${ref}"${where} — it matches no bundled icon and renders as an empty slot.`,
+      suggestion: candidates.length > 0
+        ? `Did you mean ${candidates.map((c) => `"${c}"`).join(' or ')}? Lucide names use hyphens (chevron-right); Material Symbols names use underscores and need the material: prefix (material:chevron_right).`
+        : 'Lucide names use hyphens (chevron-right); Material Symbols names use underscores and need the material: prefix (material:chevron_right). Check the spelling against lucide.dev or fonts.google.com/icons.',
+    };
+    if (pick && ownIds.has(node.id)) {
+      issue.fix = {
+        op: formatUpdateOp(node.id, { icon: pick }),
+        rationale: `"${ref}" doesn't exist; "${pick}" is the spelling that resolves${candidates.length > 1 ? ' in the icon set this canvas already uses' : ''}.`,
+      };
+    }
+    issues.push(issue);
+  }
+  return issues;
 }
 
 /** Phase 25 slice E — raw entries + merged tokens power the token-detachment
