@@ -66,6 +66,7 @@ function editWorkspaceFile(mutate: (wf: { designSystem?: { colors?: Record<strin
 const recorded = JSON.parse((await verify('sha256r:0000000000000000', true)).stdout).versionHash as string;
 check('recorded hash is the sha256r: format', /^sha256r:[0-9a-f]{16}$/.test(recorded), recorded);
 const legacy = legacyCanvasVersionHash(c);
+check('in-process hash matches the CLI before any edit', canvasVersionHash(c) === recorded, `${canvasVersionHash(c)} vs ${recorded}`);
 
 {
   const r = await verify(recorded);
@@ -97,14 +98,17 @@ editWorkspaceFile((wf) => {
   const p = wf.projects.find((x) => x.name === 'UI')!;
   p.designSystem = { ...p.designSystem, colors: { ...p.designSystem?.colors, primary: '#16A34A' } };
 });
+let afterProject: string;
 {
   const r = await verify(afterWorkspace, true);
-  check('project token edit → STALE, exit 1', r.code === 1 && JSON.parse(r.stdout).matches === false, `code=${r.code} ${r.stdout}`);
+  const out = JSON.parse(r.stdout);
+  afterProject = out.versionHash;
+  check('project token edit → STALE, exit 1', r.code === 1 && out.matches === false, `code=${r.code} ${r.stdout}`);
 }
 
-// The in-process hash agrees with the CLI's (same algorithm, same inputs)
-// once this process sees the same tokens.
-check('in-process hash matched the CLI before any edit', canvasVersionHash(c) === recorded, `${canvasVersionHash(c)} vs ${recorded}`);
+// This process never restarted, but it reloads workspace.json when it changes
+// on disk, so its hash agrees with the CLI's fresh read of the edited file.
+check('in-process hash follows the hand edits without a restart', canvasVersionHash(c) === afterProject, `${canvasVersionHash(c)} vs ${afterProject}`);
 
 rmSync(globalHome, { recursive: true, force: true });
 rmSync(repoRoot, { recursive: true, force: true });

@@ -191,6 +191,32 @@ function migrateWorkspaceFile(wf: RepoWorkspaceFile): RepoWorkspaceFile {
 export function writeWorkspaceFile(dir: string, file: RepoWorkspaceFile): void {
   mkdirSync(dir, { recursive: true });
   writeAtomic(join(dir, WORKSPACE_FILE), stableStringify(file));
+  recordWorkspaceFileMtime(dir);
+}
+
+// workspace.json's mtime per `.framesmith/` dir, as of our last read or write —
+// the workspace.json twin of `mtimeById`, so a bound server can tell its own
+// write apart from an external one (git pull, branch switch, hand edit).
+const workspaceMtimeByDir = new Map<string, number>();
+
+export function recordWorkspaceFileMtime(dir: string): void {
+  const m = fileMtime(join(dir, WORKSPACE_FILE));
+  if (m === null) workspaceMtimeByDir.delete(dir);
+  else workspaceMtimeByDir.set(dir, m);
+}
+
+/** True when workspace.json changed on disk since we last read or wrote it.
+ * A missing file is not a change (the in-memory copy is kept and the next
+ * write recreates it); with no recorded mtime yet, this baselines instead. */
+export function workspaceFileModified(dir: string): boolean {
+  const current = fileMtime(join(dir, WORKSPACE_FILE));
+  if (current === null) return false;
+  const recorded = workspaceMtimeByDir.get(dir);
+  if (recorded === undefined) {
+    workspaceMtimeByDir.set(dir, current);
+    return false;
+  }
+  return current !== recorded;
 }
 
 // --- canvas IO (rootDir = the `.framesmith/` dir) ---
