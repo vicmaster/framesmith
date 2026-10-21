@@ -462,7 +462,7 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-22-SPEC.md`](docs/specs/PHASE-
 
 Downstream teams use canvases as a design gate, and two incidents from one session (#148, #149) show the gate can't keep its own promise: canvases silently drift from the shipped view (a radiogroup that was never built; a STATUS column that no longer exists), and approvals reference canvases by name — a point-in-time judgment recorded as a permanent, unversioned fact. Give the gate something falsifiable: a stable content hash per canvas, a structural drift report against the live view, and a CLI so CI fails loudly instead of waiting for a human to notice.
 
-- [x] Slice A — version hash: `canvasVersionHash` (canonical SHA-256 over design content), `canvas_version` tool with `expectedHash` check, surfaced on `canvas_list`/`export` (#149)
+- [x] Slice A — version hash: `canvasVersionHash` (canonical SHA-256 over design content), `canvas_version` tool with `expectedHash` check, surfaced on `canvas_list`/`export` (#149); #217 follow-up: the hash covers the RESOLVED tokens (workspace → project → canvas), so an inherited design-system edit moves every inheriting canvas's hash — new `sha256r:` format, legacy `sha256:` approvals still verify with a warning, `verify` without `--hash` is exit 2 (never a skip)
 - [x] Slice B — structural drift: pure `computeStructuralDrift` engine (missing-in-page / missing-in-canvas / control-mismatch / table-mismatch) + ephemeral `canvas_check_drift` tool (#148)
 - [x] Slice C — CLI: `framesmith check-drift` / `framesmith verify` subcommands with CI-friendly exit codes (#148, #149)
 - [x] Slice D — agent surfaces: drift-check-before-designing workflow in INSTRUCTIONS/GOTCHAS/GUIDELINES/README + discoverability guards

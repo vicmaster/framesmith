@@ -222,11 +222,13 @@ A canvas that describes a shipped screen is a **contract**, and contracts rot si
 
 Never silently annotate the difference away — that's how a select shipped against an approved radio group and the approval stayed green.
 
-**Approvals bind to a hash, not a name.** Record `{ canvasId, versionHash }` (from `canvas_version` or any `canvas_list` row) wherever your approval records live — a YAML file, a PR comment; the workflow is yours. The hash covers design content only (tree + tokens + components + fonts), so feedback arriving, critique stamps, and provenance changes never invalidate an approval — only an actual design change does. Check later with `expectedHash`, or headlessly from a hook:
+**Approvals bind to a hash, not a name.** Record `{ canvasId, versionHash }` (from `canvas_version` or any `canvas_list` row) wherever your approval records live — a YAML file, a PR comment; the workflow is yours. The hash covers design content only (tree + **resolved** tokens — workspace → project → canvas — + components + fonts), so feedback arriving, critique stamps, and provenance changes never invalidate an approval; an actual design change does, including an edit to an inherited workspace/project design system (unless the canvas overrides that token itself). Check later with `expectedHash`, or headlessly from a hook:
 
 ```bash
-npx framesmith verify kpi-revenue-driver-control --hash sha256:8014d416f924378b --project-dir .
+npx framesmith verify kpi-revenue-driver-control --hash sha256r:3f9a1c7e5b2d8046 --project-dir .
 ```
+
+**A gate must treat a missing hash — `verify` exits 2 without `--hash` — as a failure, never a skip:** "never approved" is not "approved and unchanged". A legacy `sha256:` hash still checks but carries a `warning` (it covered only the canvas's own tokens, so it can't see inherited design-system edits) — re-record it as the current `sha256r:` `versionHash`.
 
 **Make CI demand the comparison** — drift that waits for a human to notice is drift that ships. A post-deploy job per route ↔ canvas pair:
 

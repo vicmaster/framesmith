@@ -69,7 +69,7 @@ function run(args: string[], opts: { stdin?: string; killAfterMs?: number } = {}
   check('verify resolves by name', r.code === 0, `code=${r.code} ${r.stderr}`);
 }
 {
-  const r = await run(['verify', canvas.id, '--hash', 'sha256:0000000000000000', '--json']);
+  const r = await run(['verify', canvas.id, '--hash', 'sha256r:0000000000000000', '--json']);
   check('verify mismatch → exit 1', r.code === 1, `code=${r.code}`);
   const out = JSON.parse(r.stdout);
   check('verify --json shape', out.matches === false && out.versionHash === goodHash && out.canvasId === canvas.id, r.stdout);
