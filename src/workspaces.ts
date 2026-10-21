@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
 import { mergeDesignTokens } from './variables.js';
-import { isRepoBound, repoDir, writeWorkspaceFile, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
+import { isRepoBound, repoDir, writeWorkspaceFile, readWorkspaceFile, recordWorkspaceFileMtime, workspaceFileModified, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
@@ -90,6 +90,30 @@ export function loadRepoWorkspace(wf: RepoWorkspaceFile): void {
     });
     registerProjectDir(p.id, p.dir);
   }
+  if (isRepoBound()) recordWorkspaceFileMtime(repoDir());
+}
+
+/**
+ * Reload the bound repo's workspace.json when it changed on disk under this
+ * process (git pull, branch switch, hand edit) — the workspace.json twin of
+ * scene-graph's `ensureFresh`. Without it the server kept rendering with the
+ * old design system, and its next workspace/project write put the old copy
+ * back over the pulled change. Workspace/project mutations persist
+ * immediately, so memory never holds unsaved state a reload could drop.
+ * Called first by every function that reads or writes workspace/project state.
+ */
+function ensureWorkspaceFresh(): void {
+  if (!isRepoBound() || !repoWorkspaceFile) return;
+  const dir = repoDir();
+  if (!workspaceFileModified(dir)) return;
+  const wf = readWorkspaceFile(dir);
+  recordWorkspaceFileMtime(dir); // don't re-read an unreadable file on every call
+  if (!wf) {
+    process.stderr.write(`Warning: workspace.json changed on disk but could not be read; keeping the in-memory copy\n`);
+    return;
+  }
+  loadRepoWorkspace(wf);
+  process.stderr.write(`workspace.json reloaded from disk (external change detected)\n`);
 }
 
 /**
@@ -190,6 +214,7 @@ export function ensureDefaultWorkspaceAndProject(): { workspaceId: string; proje
 // ---- Workspaces ----
 
 export function createWorkspace(name: string): Workspace {
+  ensureWorkspaceFresh();
   const ws: Workspace = { id: nanoid(10), name, createdAt: new Date().toISOString() };
   workspaces.set(ws.id, ws);
   persistWorkspaces();
@@ -197,14 +222,17 @@ export function createWorkspace(name: string): Workspace {
 }
 
 export function getWorkspace(id: string): Workspace | undefined {
+  ensureWorkspaceFresh();
   return workspaces.get(id);
 }
 
 export function listWorkspaces(): Workspace[] {
+  ensureWorkspaceFresh();
   return [...workspaces.values()];
 }
 
 export function renameWorkspace(id: string, name: string): Workspace | undefined {
+  ensureWorkspaceFresh();
   const ws = workspaces.get(id);
   if (!ws) return undefined;
   ws.name = name;
@@ -213,6 +241,7 @@ export function renameWorkspace(id: string, name: string): Workspace | undefined
 }
 
 export function deleteWorkspace(id: string): boolean {
+  ensureWorkspaceFresh();
   if (id === DEFAULT_WORKSPACE_ID) return false; // protect the default
   const had = workspaces.delete(id);
   if (had) persistWorkspaces();
@@ -222,6 +251,7 @@ export function deleteWorkspace(id: string): boolean {
 // ---- Projects ----
 
 export function createProject(workspaceId: string, name: string): Project | undefined {
+  ensureWorkspaceFresh();
   if (!workspaces.has(workspaceId)) return undefined;
   const p: Project = { id: nanoid(10), workspaceId, name, createdAt: new Date().toISOString() };
   projects.set(p.id, p);
@@ -233,15 +263,18 @@ export function createProject(workspaceId: string, name: string): Project | unde
 }
 
 export function getProject(id: string): Project | undefined {
+  ensureWorkspaceFresh();
   return projects.get(id);
 }
 
 export function listProjects(workspaceId?: string): Project[] {
+  ensureWorkspaceFresh();
   const all = [...projects.values()];
   return workspaceId ? all.filter((p) => p.workspaceId === workspaceId) : all;
 }
 
 export function renameProject(id: string, name: string): Project | undefined {
+  ensureWorkspaceFresh();
   const p = projects.get(id);
   if (!p) return undefined;
   p.name = name;
@@ -250,6 +283,7 @@ export function renameProject(id: string, name: string): Project | undefined {
 }
 
 export function deleteProject(id: string): boolean {
+  ensureWorkspaceFresh();
   if (id === DEFAULT_PROJECT_ID) return false; // protect the default
   const had = projects.delete(id);
   if (had) persistProjects();
@@ -262,6 +296,7 @@ export function deleteProject(id: string): boolean {
  * the existing designSystem so the caller can supply a partial — e.g. update
  * `colors` without resetting `spacing`. */
 export function setWorkspaceDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
+  ensureWorkspaceFresh();
   const ws = workspaces.get(id);
   if (!ws) return undefined;
   ws.designSystem = mergeDesignSystem(ws.designSystem, vars);
@@ -270,10 +305,12 @@ export function setWorkspaceDesignSystem(id: string, vars: Partial<DesignVariabl
 }
 
 export function getWorkspaceDesignSystem(id: string): DesignVariables | undefined {
+  ensureWorkspaceFresh();
   return workspaces.get(id)?.designSystem;
 }
 
 export function setProjectDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
+  ensureWorkspaceFresh();
   const p = projects.get(id);
   if (!p) return undefined;
   p.designSystem = mergeDesignSystem(p.designSystem, vars);
@@ -282,6 +319,7 @@ export function setProjectDesignSystem(id: string, vars: Partial<DesignVariables
 }
 
 export function getProjectDesignSystem(id: string): DesignVariables | undefined {
+  ensureWorkspaceFresh();
   return projects.get(id)?.designSystem;
 }
 
@@ -309,6 +347,7 @@ function mergeDesignSystem(base: DesignVariables | undefined, patch: Partial<Des
  * `node.cornerRadius.map is not a function`.
  */
 export function getCanvasTokens(canvas: Canvas): DesignVariables {
+  ensureWorkspaceFresh();
   const project = projects.get(canvas.projectId);
   const workspace = project ? workspaces.get(project.workspaceId) : undefined;
   return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
@@ -318,6 +357,7 @@ export function getCanvasTokens(canvas: Canvas): DesignVariables {
  * its own variables. Used by apply_preset to detect (and preserve) design-system
  * values a preset would otherwise silently override at the canvas layer. */
 export function getInheritedTokens(canvas: Canvas): DesignVariables {
+  ensureWorkspaceFresh();
   const project = projects.get(canvas.projectId);
   const workspace = project ? workspaces.get(project.workspaceId) : undefined;
   return mergeDesignTokens(workspace?.designSystem, project?.designSystem);
