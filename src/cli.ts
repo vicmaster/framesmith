@@ -3,7 +3,7 @@
 // gate checks must be runnable where they fail loudly: a pre-commit hook or a
 // CI job, no MCP client involved.
 //
-//   framesmith verify <canvasIdOrName> --hash <sha256:...>   exit 0 match / 1 mismatch / 2 error
+//   framesmith verify <canvasIdOrName> --hash <sha256r:...>  exit 0 match / 1 mismatch / 2 error
 //   framesmith check-drift <canvasIdOrName> --url <url>      exit 0 in-sync / 1 drift / 2 error
 //
 // Shared flags: --project-dir <dir> (where the .framesmith/ walk starts,
@@ -19,7 +19,7 @@
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, migrateLegacyHome } from './repo-store.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, loadRepoWorkspace } from './workspaces.js';
 import { loadPersistedCanvases, listCanvases, getCanvas } from './scene-graph.js';
-import { canvasVersionHash } from './version.js';
+import { canvasVersionHash, checkVersionHash } from './version.js';
 import { computeStructuralDrift, expandInstances } from './drift.js';
 import type { Canvas } from './types.js';
 
@@ -35,9 +35,12 @@ interface CliFlags {
 
 const USAGE = `framesmith gate checks (design gate integrity — Phase 23):
 
-  framesmith verify <canvasIdOrName> --hash <sha256:...>
+  framesmith verify <canvasIdOrName> --hash <sha256r:...>
       Exit 0 when the recorded hash still matches the canvas, 1 when the
       design changed since it was recorded, 2 on error. Chrome-free.
+      A missing --hash is an error (exit 2), never a skip. Legacy sha256:
+      hashes still verify, with a warning: they don't cover inherited
+      workspace/project tokens.
 
   framesmith check-drift <canvasIdOrName> --url <http(s)://...>
       Structural drift between the canvas and the live page.
@@ -142,12 +145,12 @@ export async function runCli(argv: string[]): Promise<number> {
   const { canvas } = resolved;
 
   if (command === 'verify') {
-    if (!flags.hash) { process.stderr.write(`verify requires --hash <sha256:...>\n`); return 2; }
-    const versionHash = canvasVersionHash(canvas);
-    const matches = versionHash === flags.hash;
+    if (!flags.hash) { process.stderr.write(`verify requires --hash <sha256r:...>\n`); return 2; }
+    const { versionHash, matches, warning } = checkVersionHash(canvas, flags.hash);
     if (flags.json) {
-      process.stdout.write(JSON.stringify({ canvasId: canvas.id, name: canvas.name, versionHash, expectedHash: flags.hash, matches, bound }, null, 2) + '\n');
+      process.stdout.write(JSON.stringify({ canvasId: canvas.id, name: canvas.name, versionHash, expectedHash: flags.hash, matches, bound, ...(warning ? { warning } : {}) }, null, 2) + '\n');
     } else {
+      if (warning) process.stderr.write(`WARNING — ${warning}\n`);
       process.stdout.write(matches
         ? `OK — "${canvas.name}" still matches ${flags.hash}\n`
         : `STALE — "${canvas.name}" is now ${versionHash}; the recorded approval (${flags.hash}) no longer describes the current design.\n`);

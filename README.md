@@ -687,14 +687,14 @@ Run it when picking up a canvas that describes a shipped view — designing on a
 The same two gate checks, runnable where they fail loudly — CI or a pre-commit hook, no MCP client involved:
 
 ```bash
-npx framesmith verify kpi-revenue-driver-control --hash sha256:8014d416f924378b
+npx framesmith verify kpi-revenue-driver-control --hash sha256r:3f9a1c7e5b2d8046
 ```
 
 ```bash
 npx framesmith check-drift admin-stream-types --url https://staging.example.com/admin/stream_types
 ```
 
-- **`verify <canvasIdOrName> --hash <sha256:…>`** — exit `0` when the recorded hash still matches, `1` when the design changed since it was recorded, `2` on error. Chrome-free and fast enough for a pre-commit hook.
+- **`verify <canvasIdOrName> --hash <sha256r:…>`** — exit `0` when the recorded hash still matches, `1` when the design changed since it was recorded, `2` on error. A missing `--hash` is exit `2` (an error, never a skip) — a gate must treat "never approved" as a failure, not as "approved and unchanged". A legacy `sha256:` hash is still checked (with the legacy algorithm) but prints `WARNING — …` to stderr (`--json` gains a `warning` field): it can't see inherited-token edits, so re-record it with the current `sha256r:` hash. Chrome-free and fast enough for a pre-commit hook.
 - **`check-drift <canvasIdOrName> --url <url>`** — structural drift against the live page; exit `0` in sync / `1` drifted / `2` error. Needs Chrome. Extra flags: `--viewport WxH`, `--selector <css>`, `--wait-for <selector|ms>`.
 - Shared: `--project-dir <dir>` (where the `.framesmith/` discovery walk starts, default cwd — in CI, point it at the checkout) and `--json` for machine-readable output. Canvases resolve by id or exact name; an ambiguous name is an error — a gate must never check the wrong canvas.
 - Gated pages (auth headers/cookies) are the MCP tool's job — credentials don't belong in shell history.
@@ -703,14 +703,14 @@ npx framesmith check-drift admin-stream-types --url https://staging.example.com/
 
 ### `canvas_version`
 
-The falsifiable half of a design-approval gate: a stable **content hash** of the design itself (`sha256:<16 hex>` over the node tree, canvas tokens, components, and fonts). Metadata never moves it — feedback arriving or being resolved, critique stamps, and provenance changes all leave the hash unchanged — so an approval recorded against a hash survives everything except an actual design change. The hash is process- and machine-independent: the same checked-in repo canvas hashes identically everywhere.
+The falsifiable half of a design-approval gate: a stable **content hash** of the design itself (`sha256r:<16 hex>` over the node tree, the **resolved** tokens the canvas renders with — workspace → project → canvas — components, and fonts). Editing a workspace or project design system (including by hand in a bound repo's `.framesmith/workspace.json`) therefore moves the hash of every canvas that inherits the edited token; a canvas-level override of the same token shadows the inherited edit, so that canvas's hash stays put. Metadata never moves it — feedback arriving or being resolved, critique stamps, and provenance changes all leave the hash unchanged — so an approval recorded against a hash survives everything except an actual design change. The hash is process- and machine-independent: the same checked-in repo canvas hashes identically everywhere.
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas to hash |
 | `expectedHash` | string? | A previously recorded `versionHash` — the result gains `matches: true/false` |
 
-Returns `{ canvasId, name, versionHash, lastModified, matches? }`. Record `{ canvasId, versionHash }` wherever your approvals live (a YAML file, a PR comment — the workflow is yours); check it later with `expectedHash`. `canvas_list` rows and `export` results carry the same `versionHash`.
+Returns `{ canvasId, name, versionHash, lastModified, matches?, warning? }`. A recorded hash with the older `sha256:` prefix (which covered only the canvas's own tokens) is still checked with the legacy algorithm, and the result carries a `warning` that it can't see inherited-token edits — re-record it with the current `versionHash`. Record `{ canvasId, versionHash }` wherever your approvals live (a YAML file, a PR comment — the workflow is yours); check it later with `expectedHash`. `canvas_list` rows and `export` results carry the same `versionHash`.
 
 ### `import_design_md`
 
