@@ -9,8 +9,12 @@
 //
 // #217 — the original `sha256:` hash covered only the canvas's OWN tokens, so
 // a workspace/project design-system edit restyled every inheriting canvas
-// without moving its hash. The current `sha256r:` hash covers the RESOLVED
-// tokens (workspace → project → canvas, what actually renders). The prefix is
+// without moving its hash. The current `sha256r:` hash covers the WHOLE
+// resolved token set (workspace → project → canvas), not just the tokens the
+// canvas names (#221): some are read implicitly (body font, control-colour
+// fallback, the dark layer), so a referenced-only hash could miss a real
+// change. The cost is that any inherited edit, even to an unused token, moves
+// every inheriting canvas's hash — the safe direction for a gate. The prefix is
 // the algorithm version: legacy `sha256:` approvals are still checked with the
 // legacy algorithm (and warned about) instead of all flipping to STALE on
 // upgrade.

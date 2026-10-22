@@ -5,9 +5,13 @@
 // (even an unrelated one, like creating a project) put the old copy back over
 // the pulled change.
 //
+// #222: a read that fails (a half-written file, or git merge-conflict markers)
+// must not be taken as "seen": the next call retries, and no workspace/project
+// write may overwrite a file that can't be read.
+//
 // Usage: npx tsx test-repo-workspace-external-change.ts
 
-import { mkdtempSync, readFileSync, writeFileSync, utimesSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, utimesSync, unlinkSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -91,12 +95,71 @@ ws.setWorkspaceDesignSystem(wsId(), { colors: { primary: '#0891B2' } });
 check('our own write reads back', ws.getCanvasTokens(canvas()).colors?.primary === '#0891B2');
 check('our own write is on disk', readWs().designSystem?.colors?.primary === '#0891B2');
 
+// ---- G (#222): a half-written read, then the finished file keeps the same mtime
+{
+  const full = readWs();
+  full.designSystem = { ...full.designSystem, colors: { ...full.designSystem?.colors, primary: '#DC2626' } };
+  const complete = JSON.stringify(full, null, 2);
+  const t = new Date(Date.now() + 5000 * ++bumpCount);
+  writeFileSync(file, complete.slice(0, 40));   // the server reads mid-write…
+  utimesSync(file, t, t);
+  ws.getCanvasTokens(canvas());
+  writeFileSync(file, complete);                // …then the write finishes with the same mtime
+  utimesSync(file, t, t);
+  ws.createProject(wsId(), 'Docs');
+  check('finished write with the same mtime as a failed read is still picked up', readWs().designSystem?.colors?.primary === '#DC2626',
+    `primary on disk = ${readWs().designSystem?.colors?.primary}`);
+  check('…and the unrelated write landed too', readWs().projects.some((p) => p.name === 'Docs'));
+}
+
+// ---- H (#222): same mtime, different content (coarse-timestamp filesystems)
+{
+  // Pin the mtime to a whole second (exactly representable) and let the server
+  // see it, so "same mtime" below is really the same mtime.
+  const before = new Date(Math.floor(Date.now() / 1000) * 1000 + 5000 * ++bumpCount);
+  utimesSync(file, before, before);
+  ws.getCanvasTokens(canvas());
+  check('pinned mtime is exact', statSync(file).mtimeMs === before.getTime());
+  const wf = readWs();
+  wf.designSystem = { ...wf.designSystem, colors: { ...wf.designSystem?.colors, primary: '#EA580C' } };
+  writeFileSync(file, JSON.stringify(wf, null, 4)); // different size, same mtime as our last write
+  utimesSync(file, before, before);
+  check('an external write that keeps our mtime but changes the size is picked up', ws.getCanvasTokens(canvas()).colors?.primary === '#EA580C',
+    `got ${ws.getCanvasTokens(canvas()).colors?.primary}`);
+}
+
+// ---- I (#222): unreadable workspace.json (a git merge conflict) is never overwritten
+{
+  const text = readFileSync(file, 'utf-8');
+  const conflicted = `<<<<<<< HEAD\n${text}=======\n${text.replace('#EA580C', '#16A34A')}>>>>>>> feature\n`;
+  writeFileSync(file, conflicted);
+  const t = new Date(Date.now() + 5000 * ++bumpCount);
+  utimesSync(file, t, t);
+  check('reads keep the in-memory tokens while the file is unreadable', ws.getCanvasTokens(canvas()).colors?.primary === '#EA580C');
+  let error = '';
+  try { ws.renameProject(uiId, 'During conflict'); } catch (e) { error = (e as Error).message; }
+  check('a workspace/project write is refused while the file is unreadable', error.includes('workspace.json') && error.toLowerCase().includes('conflict'), error || '(no error thrown)');
+  check('…and the conflicted file is left untouched', readFileSync(file, 'utf-8') === conflicted);
+  check('…and the in-memory state did not change', ws.getProject(uiId)?.name === 'UI Kit');
+  try { ws.setWorkspaceDesignSystem(wsId(), { colors: { primary: '#000000' } }); error = ''; } catch (e) { error = (e as Error).message; }
+  check('design-system writes are refused too', error.includes('workspace.json'), error || '(no error thrown)');
+
+  // Resolving the conflict (keeping "theirs") is picked up and writes work again.
+  const theirs = JSON.parse(text.replace('#EA580C', '#16A34A'));
+  writeFileSync(file, JSON.stringify(theirs, null, 2));
+  const t2 = new Date(Date.now() + 5000 * ++bumpCount);
+  utimesSync(file, t2, t2);
+  ws.renameProject(uiId, 'After conflict');
+  check('after the conflict is resolved, the resolution is loaded and writes work', readWs().designSystem?.colors?.primary === '#16A34A'
+    && readWs().projects.find((p) => p.id === uiId)?.name === 'After conflict');
+}
+
 // ---- F: workspace.json deleted or unreadable — keep the in-memory copy ---
 writeFileSync(file, '{ not json');
-utimesSync(file, new Date(Date.now() + 60_000), new Date(Date.now() + 60_000));
-check('unreadable workspace.json → in-memory tokens kept, no crash', ws.getCanvasTokens(canvas()).colors?.primary === '#0891B2');
+utimesSync(file, new Date(Date.now() + 600_000), new Date(Date.now() + 600_000));
+check('unreadable workspace.json → in-memory tokens kept, no crash', ws.getCanvasTokens(canvas()).colors?.primary === '#16A34A');
 unlinkSync(file);
-check('deleted workspace.json → in-memory tokens kept, no crash', ws.getCanvasTokens(canvas()).colors?.primary === '#0891B2');
+check('deleted workspace.json → in-memory tokens kept, no crash', ws.getCanvasTokens(canvas()).colors?.primary === '#16A34A');
 
 console.log(allPass ? '\nAll workspace external-change tests passed.' : '\nSOME TESTS FAILED');
 process.exit(allPass ? 0 : 1);
