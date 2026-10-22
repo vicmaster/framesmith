@@ -14,7 +14,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
 import { mergeDesignTokens } from './variables.js';
-import { isRepoBound, repoDir, writeWorkspaceFile, readWorkspaceFile, recordWorkspaceFileMtime, workspaceFileModified, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
+import { isRepoBound, repoDir, writeWorkspaceFile, readWorkspaceFile, recordWorkspaceFileState, workspaceFileModified, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
 
 const workspaces = new Map<string, Workspace>();
 const projects = new Map<string, Project>();
@@ -90,7 +90,7 @@ export function loadRepoWorkspace(wf: RepoWorkspaceFile): void {
     });
     registerProjectDir(p.id, p.dir);
   }
-  if (isRepoBound()) recordWorkspaceFileMtime(repoDir());
+  if (isRepoBound()) recordWorkspaceFileState(repoDir());
 }
 
 /**
@@ -101,18 +101,32 @@ export function loadRepoWorkspace(wf: RepoWorkspaceFile): void {
  * back over the pulled change. Workspace/project mutations persist
  * immediately, so memory never holds unsaved state a reload could drop.
  * Called first by every function that reads or writes workspace/project state.
+ *
+ * #222: a file that exists but can't be parsed (half-written mid-pull, or git
+ * merge-conflict markers) is never recorded as seen, so every call retries
+ * until it parses. Reads keep the in-memory copy meanwhile; writes are REFUSED,
+ * since writing the in-memory copy would silently throw away whatever the
+ * file now holds (both sides of a conflict).
  */
-function ensureWorkspaceFresh(): void {
+let unreadableWarned: string | null = null;
+function ensureWorkspaceFresh(intent: 'read' | 'write' = 'read'): void {
   if (!isRepoBound() || !repoWorkspaceFile) return;
   const dir = repoDir();
   if (!workspaceFileModified(dir)) return;
   const wf = readWorkspaceFile(dir);
-  recordWorkspaceFileMtime(dir); // don't re-read an unreadable file on every call
   if (!wf) {
-    process.stderr.write(`Warning: workspace.json changed on disk but could not be read; keeping the in-memory copy\n`);
+    const path = join(dir, 'workspace.json');
+    if (unreadableWarned !== path) {
+      process.stderr.write(`Warning: ${path} changed on disk but can't be read; keeping the in-memory copy and refusing workspace/project writes until it parses\n`);
+      unreadableWarned = path;
+    }
+    if (intent === 'write') {
+      throw new Error(`Can't save: ${path} can't be read — is there an unresolved git merge conflict, or is a write still in progress? framesmith won't overwrite it with its in-memory copy. Resolve the conflict (or wait for the write to finish) so the file is valid JSON, then retry. If you're an agent, tell the user rather than choosing a side of the conflict yourself.`);
+    }
     return;
   }
-  loadRepoWorkspace(wf);
+  unreadableWarned = null;
+  loadRepoWorkspace(wf); // records the file as seen
   process.stderr.write(`workspace.json reloaded from disk (external change detected)\n`);
 }
 
@@ -214,7 +228,7 @@ export function ensureDefaultWorkspaceAndProject(): { workspaceId: string; proje
 // ---- Workspaces ----
 
 export function createWorkspace(name: string): Workspace {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   const ws: Workspace = { id: nanoid(10), name, createdAt: new Date().toISOString() };
   workspaces.set(ws.id, ws);
   persistWorkspaces();
@@ -232,7 +246,7 @@ export function listWorkspaces(): Workspace[] {
 }
 
 export function renameWorkspace(id: string, name: string): Workspace | undefined {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   const ws = workspaces.get(id);
   if (!ws) return undefined;
   ws.name = name;
@@ -241,7 +255,7 @@ export function renameWorkspace(id: string, name: string): Workspace | undefined
 }
 
 export function deleteWorkspace(id: string): boolean {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   if (id === DEFAULT_WORKSPACE_ID) return false; // protect the default
   const had = workspaces.delete(id);
   if (had) persistWorkspaces();
@@ -251,7 +265,7 @@ export function deleteWorkspace(id: string): boolean {
 // ---- Projects ----
 
 export function createProject(workspaceId: string, name: string): Project | undefined {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   if (!workspaces.has(workspaceId)) return undefined;
   const p: Project = { id: nanoid(10), workspaceId, name, createdAt: new Date().toISOString() };
   projects.set(p.id, p);
@@ -274,7 +288,7 @@ export function listProjects(workspaceId?: string): Project[] {
 }
 
 export function renameProject(id: string, name: string): Project | undefined {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   const p = projects.get(id);
   if (!p) return undefined;
   p.name = name;
@@ -283,7 +297,7 @@ export function renameProject(id: string, name: string): Project | undefined {
 }
 
 export function deleteProject(id: string): boolean {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   if (id === DEFAULT_PROJECT_ID) return false; // protect the default
   const had = projects.delete(id);
   if (had) persistProjects();
@@ -296,7 +310,7 @@ export function deleteProject(id: string): boolean {
  * the existing designSystem so the caller can supply a partial — e.g. update
  * `colors` without resetting `spacing`. */
 export function setWorkspaceDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   const ws = workspaces.get(id);
   if (!ws) return undefined;
   ws.designSystem = mergeDesignSystem(ws.designSystem, vars);
@@ -310,7 +324,7 @@ export function getWorkspaceDesignSystem(id: string): DesignVariables | undefine
 }
 
 export function setProjectDesignSystem(id: string, vars: Partial<DesignVariables>): DesignVariables | undefined {
-  ensureWorkspaceFresh();
+  ensureWorkspaceFresh('write');
   const p = projects.get(id);
   if (!p) return undefined;
   p.designSystem = mergeDesignSystem(p.designSystem, vars);
