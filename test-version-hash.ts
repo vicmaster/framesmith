@@ -11,7 +11,7 @@ import './test-env.js';
 import { createCanvas } from './src/scene-graph.js';
 import { parseAndExecute } from './src/operations.js';
 import { canonicalSerialize, canvasVersionHash, legacyCanvasVersionHash, checkVersionHash } from './src/version.js';
-import { createWorkspace, createProject, ensureDefaultWorkspaceAndProject, setWorkspaceDesignSystem, setProjectDesignSystem } from './src/workspaces.js';
+import { createWorkspace, createProject, ensureDefaultWorkspaceAndProject, setWorkspaceDesignSystem, setProjectDesignSystem, getWorkspace } from './src/workspaces.js';
 
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
@@ -151,6 +151,56 @@ check('…but the same legacy hash', legacyCanvasVersionHash(a) === legacyCanvas
   setProjectDesignSystem(proj.id, { colors: { primary: '#0891B2' } }); // the project layer wins over the workspace here
   check('after an inherited edit: current hash goes stale', !checkVersionHash(c, cur).matches);
   check('after an inherited edit: legacy hash still matches (warned)', checkVersionHash(c, leg).matches && checkVersionHash(c, leg).warning !== undefined);
+}
+
+// ── #221: the WHOLE inherited token set is hashed, not just referenced tokens ─
+// Deliberate: some tokens are read without being named on the canvas (body
+// font, control-colour fallback, dark layer), so a referenced-only hash could
+// miss a real change. These checks pin that choice so it can't drift silently.
+{
+  const ws2 = createWorkspace('Whole Set WS');
+  const p2 = createProject(ws2.id, 'Whole Set Project')!;
+  setWorkspaceDesignSystem(ws2.id, { colors: { primary: '#2563EB' } });
+  const c = createCanvas('Uses only $primary', p2.id);
+  parseAndExecute(c.root, `b=I("document", { type: "frame", fill: "$primary", padding: 16 })`, c);
+  let prev = canvasVersionHash(c);
+  const moved = (label: string) => {
+    const next = canvasVersionHash(c);
+    check(`inherited ${label} edit → new hash (whole set is hashed)`, next !== prev, `${prev} → ${next}`);
+    prev = next;
+  };
+  setWorkspaceDesignSystem(ws2.id, { colors: { 'unused-color': '#123456' } }); moved('UNUSED colour token');
+  setWorkspaceDesignSystem(ws2.id, { typography: { caption: { fontSize: 12 } } }); moved('typography');
+  setWorkspaceDesignSystem(ws2.id, { spacing: { xl: 32 } }); moved('spacing');
+  setWorkspaceDesignSystem(ws2.id, { radius: { lg: 12 } }); moved('radius');
+  setWorkspaceDesignSystem(ws2.id, { motion: { fast: { duration: 120, easing: 'ease-out' } } }); moved('motion');
+  setWorkspaceDesignSystem(ws2.id, { dark: { colors: { primary: '#60A5FA' } } }); moved('dark-layer colour');
+  setProjectDesignSystem(p2.id, { spacing: { xs: 4 } }); moved('project-layer');
+  // Elevation is set on the layer directly here: the design-system merge used
+  // by set*DesignSystem doesn't carry elevation (a separate bug), and this
+  // check is about the hash, not the merge.
+  const wsObj = getWorkspace(ws2.id)!;
+  wsObj.designSystem = { ...wsObj.designSystem, elevation: { raised: [{ x: 0, y: 1, blur: 2, color: '#00000022' }] } as never };
+  moved('elevation');
+}
+
+// ── Pinned values: the algorithms must never change silently ────────────────
+// A change to either digest would flip every recorded approval of that format
+// to STALE. The legacy value was computed by the PUBLISHED 2.2.1 package's own
+// canvasVersionHash; the sha256r value by the PUBLISHED 2.2.2 package. The
+// fixture inherits nothing (its project doesn't exist), which is also why the
+// two hex parts agree.
+{
+  const fixture = {
+    id: 'pin', name: 'Pin', projectId: 'no-such-project', createdAt: 'x', lastModified: 'x',
+    root: { id: 'document', type: 'frame', width: 400, children: [
+      { id: 'card', type: 'frame', layout: 'vertical', padding: 16, fill: '$surface', children: [
+        { id: 'title', type: 'text', content: 'Revenue', fontSize: 20, fill: '$text-primary' } ] } ] },
+    variables: { colors: { surface: '#FFFFFF', 'text-primary': '#111827' }, spacing: { md: 16 } },
+    components: {},
+  } as unknown as Parameters<typeof canvasVersionHash>[0];
+  check('legacy sha256: algorithm is pinned (matches published 2.2.1)', legacyCanvasVersionHash(fixture) === 'sha256:78be1613751f6465', legacyCanvasVersionHash(fixture));
+  check('sha256r: algorithm is pinned (matches published 2.2.2)', canvasVersionHash(fixture) === 'sha256r:78be1613751f6465', canvasVersionHash(fixture));
 }
 
 console.log(allPass ? '\nAll version-hash tests passed.' : '\nSOME TESTS FAILED');
