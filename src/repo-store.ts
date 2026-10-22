@@ -191,29 +191,43 @@ function migrateWorkspaceFile(wf: RepoWorkspaceFile): RepoWorkspaceFile {
 export function writeWorkspaceFile(dir: string, file: RepoWorkspaceFile): void {
   mkdirSync(dir, { recursive: true });
   writeAtomic(join(dir, WORKSPACE_FILE), stableStringify(file));
-  recordWorkspaceFileMtime(dir);
+  recordWorkspaceFileState(dir);
 }
 
-// workspace.json's mtime per `.framesmith/` dir, as of our last read or write —
-// the workspace.json twin of `mtimeById`, so a bound server can tell its own
-// write apart from an external one (git pull, branch switch, hand edit).
-const workspaceMtimeByDir = new Map<string, number>();
+// workspace.json's mtime + size per `.framesmith/` dir, as of our last
+// SUCCESSFUL read or our last write — the workspace.json twin of `mtimeById`,
+// so a bound server can tell its own write apart from an external one (git
+// pull, branch switch, hand edit). Size rides along because two writes can
+// share an mtime on coarse-timestamp filesystems (#222).
+const workspaceStateByDir = new Map<string, string>();
 
-export function recordWorkspaceFileMtime(dir: string): void {
-  const m = fileMtime(join(dir, WORKSPACE_FILE));
-  if (m === null) workspaceMtimeByDir.delete(dir);
-  else workspaceMtimeByDir.set(dir, m);
+function workspaceFileState(dir: string): string | null {
+  try {
+    const st = statSync(join(dir, WORKSPACE_FILE));
+    return `${st.mtimeMs}:${st.size}`;
+  } catch {
+    return null;
+  }
 }
 
-/** True when workspace.json changed on disk since we last read or wrote it.
- * A missing file is not a change (the in-memory copy is kept and the next
- * write recreates it); with no recorded mtime yet, this baselines instead. */
+/** Record the file as seen. Only call after a successful read or our own
+ * write — never after a failed read, or a later complete write that keeps the
+ * same mtime would be taken as already seen (#222). */
+export function recordWorkspaceFileState(dir: string): void {
+  const st = workspaceFileState(dir);
+  if (st === null) workspaceStateByDir.delete(dir);
+  else workspaceStateByDir.set(dir, st);
+}
+
+/** True when workspace.json changed on disk since we last successfully read or
+ * wrote it. A missing file is not a change (the in-memory copy is kept and the
+ * next write recreates it); with nothing recorded yet, this baselines instead. */
 export function workspaceFileModified(dir: string): boolean {
-  const current = fileMtime(join(dir, WORKSPACE_FILE));
+  const current = workspaceFileState(dir);
   if (current === null) return false;
-  const recorded = workspaceMtimeByDir.get(dir);
+  const recorded = workspaceStateByDir.get(dir);
   if (recorded === undefined) {
-    workspaceMtimeByDir.set(dir, current);
+    workspaceStateByDir.set(dir, current);
     return false;
   }
   return current !== recorded;
