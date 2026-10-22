@@ -11,7 +11,7 @@ import './test-env.js';
 import { createCanvas } from './src/scene-graph.js';
 import { parseAndExecute } from './src/operations.js';
 import { canonicalSerialize, canvasVersionHash, legacyCanvasVersionHash, checkVersionHash } from './src/version.js';
-import { createWorkspace, createProject, ensureDefaultWorkspaceAndProject, setWorkspaceDesignSystem, setProjectDesignSystem, getWorkspace } from './src/workspaces.js';
+import { createWorkspace, createProject, ensureDefaultWorkspaceAndProject, setWorkspaceDesignSystem, setProjectDesignSystem } from './src/workspaces.js';
 
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
@@ -176,12 +176,8 @@ check('…but the same legacy hash', legacyCanvasVersionHash(a) === legacyCanvas
   setWorkspaceDesignSystem(ws2.id, { motion: { fast: { duration: 120, easing: 'ease-out' } } }); moved('motion');
   setWorkspaceDesignSystem(ws2.id, { dark: { colors: { primary: '#60A5FA' } } }); moved('dark-layer colour');
   setProjectDesignSystem(p2.id, { spacing: { xs: 4 } }); moved('project-layer');
-  // Elevation is set on the layer directly here: the design-system merge used
-  // by set*DesignSystem doesn't carry elevation (a separate bug), and this
-  // check is about the hash, not the merge.
-  const wsObj = getWorkspace(ws2.id)!;
-  wsObj.designSystem = { ...wsObj.designSystem, elevation: { raised: [{ x: 0, y: 1, blur: 2, color: '#00000022' }] } as never };
-  moved('elevation');
+  setWorkspaceDesignSystem(ws2.id, { elevation: { raised: [{ x: 0, y: 1, blur: 2, color: '#00000022' }] } }); moved('elevation');
+  setWorkspaceDesignSystem(ws2.id, { dark: { elevation: { raised: [{ x: 0, y: 1, blur: 2, color: '#00000066' }] } } }); moved('dark-layer elevation');
 }
 
 // ── Pinned values: the algorithms must never change silently ────────────────
