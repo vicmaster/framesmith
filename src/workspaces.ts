@@ -338,14 +338,11 @@ export function getProjectDesignSystem(id: string): DesignVariables | undefined 
 }
 
 function mergeDesignSystem(base: DesignVariables | undefined, patch: Partial<DesignVariables>): DesignVariables {
-  const out: DesignVariables = { ...(base ?? {}) };
-  if (patch.colors) out.colors = { ...(out.colors ?? {}), ...patch.colors };
-  if (patch.spacing) out.spacing = { ...(out.spacing ?? {}), ...patch.spacing };
-  if (patch.radius) out.radius = { ...(out.radius ?? {}), ...patch.radius };
-  if (patch.typography) out.typography = { ...(out.typography ?? {}), ...patch.typography };
-  if (patch.dark?.colors) out.dark = { colors: { ...(out.dark?.colors ?? {}), ...patch.dark.colors } };
-  if (patch.motion) out.motion = { ...(out.motion ?? {}), ...patch.motion };
-  return out;
+  // Per-category merge for every token category, via the same merge the
+  // inheritance chain uses — a hand-kept list here dropped `elevation` and
+  // `dark.elevation`, and a dark-colour edit replaced the whole dark layer.
+  // Spreading `base` first keeps any field the merge doesn't know about.
+  return { ...(base ?? {}), ...mergeDesignTokens(base, patch) };
 }
 
 /**
