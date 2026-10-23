@@ -29,8 +29,55 @@ export function ignoredShadowWarning(node: SceneNode, props: Record<string, unkn
   return '`shadow` was ignored: this node also has `shadows`, which always wins at render time. Put the value in `shadows` (array or CSS string), or clear `shadows` first.';
 }
 
+/** Split an operations string into logical ops (issue #228). A newline ends an
+ * op only at bracket depth 0, so one op may span lines (its inner newlines
+ * become spaces, keeping executeLine's single-line regexes valid). At depth 0
+ * a line starting with `#` is a comment; outside a string, `//` comments out the
+ * rest of its physical line. Brackets and comment markers are only honoured
+ * outside quoted strings, so `#RRGGBB` fills, `https://` URLs and parens in
+ * `content` survive. Unbalanced input is returned as-is for executeLine to
+ * reject with its usual `Unmatched parentheses` error. */
+export function splitOperations(operationsStr: string): string[] {
+  const ops: string[] = [];
+  let current = '';
+  let depth = 0;
+  let quote: string | null = null;
+  const s = operationsStr;
+  const flush = () => {
+    const op = current.trim();
+    if (op) ops.push(op);
+    current = '';
+  };
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      current += ch;
+      if (ch === '\\' && i + 1 < s.length) current += s[++i];
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+    } else if (ch === '#' && depth <= 0 && current.trim() === '') {
+      while (i + 1 < s.length && s[i + 1] !== '\n') i++;
+    } else if (ch === '/' && s[i + 1] === '/') {
+      while (i + 1 < s.length && s[i + 1] !== '\n') i++;
+    } else if (ch === '\n') {
+      if (depth <= 0) flush();
+      else current += ' ';
+    } else {
+      if (ch === '(' || ch === '{' || ch === '[') depth++;
+      else if (ch === ')' || ch === '}' || ch === ']') depth--;
+      current += ch;
+    }
+  }
+  flush();
+  return ops;
+}
+
 export function parseAndExecute(root: SceneNode, operationsStr: string, canvas?: Canvas): OperationResult[] {
-  const lines = operationsStr.split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
+  const lines = splitOperations(operationsStr);
   const bindings = new Map<string, string>();
   bindings.set('document', root.id);
 
@@ -71,12 +118,25 @@ function resolveId(ref: string, bindings: Map<string, string>): string {
   return resolved;
 }
 
+/** Index of the quote closing the string opened at `i`, honouring backslash
+ * escapes — so bracket matchers can skip a parenthesis inside `content`. */
+function skipString(s: string, i: number): number {
+  const quote = s[i];
+  for (let j = i + 1; j < s.length; j++) {
+    if (s[j] === '\\') j++;
+    else if (s[j] === quote) return j;
+  }
+  return s.length;
+}
+
 function extractArgs(line: string, startIdx: number): string {
   // Extract everything inside the outer parentheses
   let depth = 0;
   let start = -1;
   for (let i = startIdx; i < line.length; i++) {
-    if (line[i] === '(') {
+    if (depth > 0 && (line[i] === '"' || line[i] === "'")) {
+      i = skipString(line, i);
+    } else if (line[i] === '(') {
       if (depth === 0) start = i + 1;
       depth++;
     } else if (line[i] === ')') {
@@ -92,7 +152,9 @@ function parseJsonArg(str: string): Record<string, unknown> {
   let braceStart = -1;
   let depth = 0;
   for (let i = 0; i < str.length; i++) {
-    if (str[i] === '{') {
+    if (str[i] === '"' || str[i] === "'") {
+      i = skipString(str, i);
+    } else if (str[i] === '{') {
       if (depth === 0) braceStart = i;
       depth++;
     } else if (str[i] === '}') {

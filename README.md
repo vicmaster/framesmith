@@ -275,7 +275,7 @@ The bind also records the repo in `~/.framesmith/registry.json`, so the standalo
 | `canvasId` | string | Canvas to edit. |
 | `operations` | string | The op script described below. |
 
-Execute operations on the scene graph. Operations are line-separated strings:
+Execute operations on the scene graph. Write one op per line. An op may span several lines while its `(`, `{` or `[` brackets are still open, which is how the chart examples below are written. A line starting with `#` between ops is a comment (inside an open bracket use `//` instead), and `//` comments out the rest of a line. Neither marker counts inside a quoted string, so `"#RRGGBB"` fills and `https://` URLs are safe:
 
 ```
 # Insert a frame into the document root

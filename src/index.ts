@@ -84,7 +84,8 @@ Point-and-tell feedback: the user toggles Comment mode in the viewer and clicks 
 Gotchas (current sharp edges):
 - Row rules and accent bars are per-side borders — borderTop: { width: 1, color: "$border" } on each table row, borderLeft: { width: 3, color: "$primary" } for an accent edge (style "dashed"|"dotted" for forecast/draft outlines; strokeDasharray dashes SVG paths). Never fake hairlines with gap: 1 + background bleed-through.
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too. The plural \`shadows\` always beats the singular \`shadow\` — writing \`shadow\` on a node that has \`shadows\` is a no-op (batch_design warns when this happens).
-- import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.`;
+- import_design_md reliably imports spacing + component skeletons; colors / typography / radius parsing is lossy — set those explicitly via set_variables.
+- batch_design ops are one per line, but an op may span lines while its brackets are open; # starts a full-line comment between ops, // a trailing one anywhere (both ignored inside quoted strings, so "#RRGGBB" and URLs are safe).`;
 
 const server = new McpServer({
   name: 'framesmith',
@@ -523,7 +524,7 @@ server.tool(
 // --- batch_design ---
 server.tool(
   'batch_design',
-  `Execute design operations on a canvas scene graph. Operations are line-separated strings:
+  `Execute design operations on a canvas scene graph. One op per line — an op may span several lines while its ( { [ brackets are open, a line starting with # between ops is a comment (inside an open bracket use // instead), and // comments out the rest of a line (neither counts inside a quoted string, so "#RRGGBB" fills and https:// URLs are safe):
   - Insert: varName=I("parentId", { type: "frame", fill: "#FF0000", width: 200, height: 100 })
   - Update: U("nodeId", { fill: "#00FF00" })
   - Delete: D("nodeId")
@@ -561,7 +562,7 @@ A container with NO responsive hint already never reflows — both hints are opt
 Read the framesmith://guidelines resource for common patterns (pricing tiers, two-column hero, tag list, toolbar), anti-patterns, and width-strategy guidance.`,
   {
     canvasId: z.string().describe('Canvas ID'),
-    operations: z.string().describe('Operations to execute, one per line'),
+    operations: z.string().describe('Operations to execute, one per line (an op may span lines while its brackets are open; # and // comments allowed)'),
   },
   async ({ canvasId, operations }) => {
     ensureFresh(canvasId); // reload if the file changed on disk (git pull / hand-edit) before we mutate
