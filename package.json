@@ -1,6 +1,6 @@
 {
   "name": "framesmith",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "description": "Open-source MCP server that turns your AI coding agent into a UI designer: a visual canvas, vetted design patterns, and a quality gate every design must pass before you see it. HTML/CSS, open JSON, any MCP client.",
   "type": "module",
   "bin": {

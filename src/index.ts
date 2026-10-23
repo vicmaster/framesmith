@@ -89,7 +89,7 @@ Gotchas (current sharp edges):
 
 const server = new McpServer({
   name: 'framesmith',
-  version: '2.2.3',
+  version: '2.3.0',
 }, {
   instructions: INSTRUCTIONS,
 });
