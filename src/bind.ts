@@ -24,8 +24,15 @@ import {
 import { listCanvases, getCanvas, purgeGlobalCanvas, loadPersistedCanvases } from './scene-graph.js';
 import { DEFAULT_WORKSPACE_ID } from './types.js';
 
+/** Old → new IDs for what a bind re-keys: the workspace and its projects.
+ * Canvas IDs survive a bind unchanged (only their projectId is retargeted). */
+export interface BindIdMap {
+  workspace: Record<string, string>;
+  projects: Record<string, string>;
+}
+
 export type BindResult =
-  | { ok: true; root: string; dir: string; workspace: string; projects: number; migrated: number }
+  | { ok: true; root: string; dir: string; workspace: string; projects: number; migrated: number; idMap: BindIdMap }
   | { ok: false; error: string };
 
 /** Create a `.framesmith/` binding for a workspace: migrate all of its projects +
@@ -97,7 +104,10 @@ export function bindRepo(opts: { workspaceId?: string; dir?: string }): BindResu
   loadPersistedCanvases();
   registerRepo(dir); // so the viewer can mirror this repo
 
-  return { ok: true, root, dir, workspace: wf.workspaceName, projects: projectEntries.length, migrated: toMigrate.length };
+  return {
+    ok: true, root, dir, workspace: wf.workspaceName, projects: projectEntries.length, migrated: toMigrate.length,
+    idMap: { workspace: { [srcWsId]: wf.workspaceId }, projects: Object.fromEntries(idMap) },
+  };
 }
 
 /** Turn a directory basename into a readable workspace name ("md-toolkit" →
