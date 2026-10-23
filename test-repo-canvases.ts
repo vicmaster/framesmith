@@ -20,7 +20,7 @@ process.env.FRAMESMITH_HOME = globalHome;
 
 // Import AFTER setting the env var so first reads see it.
 const { createCanvas, getCanvas, listCanvases, loadPersistedCanvases } = await import('./src/scene-graph.js');
-const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, createProject, setWorkspaceDesignSystem, setProjectDesignSystem, listProjects, getCanvasTokens, loadRepoWorkspace } = await import('./src/workspaces.js');
+const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, createProject, setWorkspaceDesignSystem, setProjectDesignSystem, listProjects, listWorkspaces, getCanvasTokens, loadRepoWorkspace } = await import('./src/workspaces.js');
 const { bindRepo } = await import('./src/bind.js');
 const { isRepoBound, detectBinding, readWorkspaceFile, setRepoBackend, resetRepoState, WORKSPACE_FILE } = await import('./src/repo-store.js');
 const { setVariables } = await import('./src/variables.js');
@@ -59,6 +59,19 @@ check('bind succeeded', result.ok, result.ok ? '' : result.error);
 check('bind reports 2 projects, 3 canvases migrated', result.ok && result.projects === 2 && result.migrated === 3,
   result.ok ? `projects=${result.projects} migrated=${result.migrated}` : '');
 check('isRepoBound() is true after bind', isRepoBound());
+
+// idMap: old → new for what the bind re-keys (workspace + projects); canvas IDs survive.
+const liveProjectIds = new Set(listProjects().map((p) => p.id));
+const projMap = result.ok ? result.idMap.projects : {};
+check('idMap maps both pre-bind projects to live repo-proj ids',
+  [dsProject.id, uiProject.id].every((id) => projMap[id]?.startsWith('repo-proj-') && liveProjectIds.has(projMap[id])),
+  JSON.stringify(projMap));
+const wsMap = result.ok ? result.idMap.workspace : {};
+check('idMap maps the pre-bind workspace to the live repo-ws id',
+  wsMap[ws.id]?.startsWith('repo-ws-') && listWorkspaces().some((w) => w.id === wsMap[ws.id]),
+  JSON.stringify(wsMap));
+check('canvas ids survive the bind, retargeted to the mapped project',
+  getCanvas(login.id)?.projectId === projMap[uiProject.id] && getCanvas(tokens.id)?.projectId === projMap[dsProject.id]);
 
 // workspace.json: schemaVersion + workspace design system + project entries
 check('.framesmith/workspace.json exists', existsSync(join(canvasDir, WORKSPACE_FILE)));

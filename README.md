@@ -38,7 +38,7 @@ MCP Client → stdio → framesmith server
 
 Left to itself, an AI agent tends to produce UI that *looks* AI-generated — generic spacing, no icons, a purple gradient by default, placeholder text that reads like placeholder text. framesmith closes that gap by moving design **before** code and holding it to a bar:
 
-1. **Start from taste, not a blank canvas.** The agent stamps one of **11 vetted page patterns** (dashboard, auth, pricing, settings, onboarding, and more) — each regression-tested to score **> 95 with zero cliché tells** across every theme, and every structure (page and component alike) built entirely from type-role tokens so it re-voices under a generated design system instead of injecting stray pixel sizes, and hardened to survive hostile-length content (`canvas_stress` CLEAN) — then adapts it. A blank canvas is where slop comes from; a pattern is a non-slop starting point. *(`list_structures` / `apply_structure`)*
+1. **Start from taste, not a blank canvas.** The agent stamps one of **11 vetted page patterns** (dashboard, auth, pricing, settings, onboarding, and more) — each regression-tested to score **> 95 with zero cliché tells** under the neutral default theme and all four presets, and every structure (page and component alike) built entirely from type-role tokens so it re-voices under a generated design system instead of injecting stray pixel sizes, and hardened to survive hostile-length content (`canvas_stress` CLEAN) — then adapts it. A blank canvas is where slop comes from; a pattern is a non-slop starting point. *(`list_structures` / `apply_structure`)*
 2. **Use the whole toolkit — like a real UI does.** Real icons (Lucide + Material Symbols), fonts resolved by name, real input controls (`toggle` / `checkbox` / `radio` / `select`), data-driven charts (line/bar/donut/sparkline, multi-series, bar emphasis), reusable components, and layered design tokens — never faked with Unicode glyphs, stray ellipses, or hand-drawn SVG paths standing in for a chart.
 3. **Evaluate, then self-correct.** `canvas_evaluate` scores the design across five craft categories plus a **cliché-tell** detector, a **state-coverage** check (a data screen without designed empty/loading states isn't done), and a **usability** layer (hit-target floor, label association, honest action copy), and returns a **`READY` / `NOT READY` directive**. The agent resolves every warning and tell and only presents once it's `READY` — polishing to the bar is the agent's job, not yours.
 4. **Review in the browser, own the output.** You browse canvases like design files, with a live **quality inspector** and **design-system panel**. Designs persist as **open JSON checked into your repo** — no proprietary format, no lock-in — and can be re-imported from shipped HTML to keep the design honest.
@@ -58,7 +58,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 
 ## Viewer
 
-Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (default port 3001). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
+Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (it takes the first free port from 3001 up; pass a port to pin one). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete.
 
 ![framesmith canvas detail view — the dashboard pattern rendered (grouped sidebar navigation with an account row, KPI cards with sparklines and delta pills, a real multi-series line chart with an area fill and a dashed reference line beside a recent-activity feed) with the Quality inspector open on the right: a 99/100 "Excellent" score, per-category bars (spacing, color, typography, structure, consistency, usability, coverage, cliche), and honest APCA advisories in the issue list. The toolbar shows the canvas's designed states (default / loading / empty), theme and viewport toggles, and a Comment toggle.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png?v=2.0)
 
@@ -74,7 +74,7 @@ Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer
 
 **Design-system panel.** A second inspector tab shows the canvas's effective design tokens — color swatches, type scale, spacing, and radius — resolved through the full workspace ▸ project ▸ canvas inheritance chain. Each section notes its dominant source layer, and any token resolving from a *different* layer is tagged (`canvas` / `project` / `workspace`) so you can see at a glance what a given canvas customized versus inherited.
 
-Designs are authored through MCP tool calls from your AI assistant — in the viewer you review, comment, and manage lifecycle; you don't edit nodes. Files persist to `~/.framesmith/canvases/` so the viewer keeps showing them across sessions.
+Designs are authored through MCP tool calls from your AI assistant — in the viewer you review, comment, and manage lifecycle; you don't edit nodes. Unbound canvases persist to `~/.framesmith/canvases/` (canvases in a [bound repo](#canvas_bind) live in its `.framesmith/` instead) so the viewer keeps showing them across sessions.
 
 ## Installation
 
@@ -169,7 +169,7 @@ One-call onboarding — **the recommended first call each session**, and safe to
 | `workspaceName` | string? | Name for the workspace when binding fresh. Defaults to the repo folder name. |
 | `projects` | string[]? | Projects to ensure exist (default: `["Foundations", "UI"]`). Existing projects are never removed, so it's safe for adding feature/area projects like `Onboarding`. |
 
-Returns the bound workspace + project IDs (binding **re-keys** IDs to `repo-*` — use the ones `init` returns), the on-disk layout, the workspace-layer token count, a workflow cheatsheet, the current gotchas, the `framesmith://guidelines` URI, and the viewer URL. If any canvas in the workspace has open point-and-tell comments, the result also carries `openFeedback: { total, note }` — a nudge to run `get_feedback` before doing anything else. It does **not** seed design tokens — set those at the workspace layer with `workspace_set_design_system`. The default `Foundations` project is just a canvas that visualizes the workspace tokens (which is where the design system actually lives).
+Returns the bound workspace + project IDs (binding **re-keys** workspace and project IDs to `repo-*` — use the ones `init` returns; canvas IDs are kept), the on-disk layout, the workspace-layer token count, a workflow cheatsheet, the current gotchas, the `framesmith://guidelines` URI, and the viewer URL. If any canvas in the workspace has open point-and-tell comments, the result also carries `openFeedback: { total, note }` — a nudge to run `get_feedback` before doing anything else. It does **not** seed design tokens — set those at the workspace layer with `workspace_set_design_system`. The default `Foundations` project is just a canvas that visualizes the workspace tokens (which is where the design system actually lives).
 
 ### `canvas_create`
 
@@ -253,11 +253,27 @@ It creates `.framesmith/workspace.json` (the binding plus the design system, so 
     login-form.json
 ```
 
-It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. Afterwards the server auto-detects `.framesmith/` on startup (walking up from its working directory). **Commit `.framesmith/`** so designs travel with the code and diff cleanly in review.
+It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both.
+
+**Binding re-keys the workspace and project IDs.** Both become `repo-*` IDs (`repo-ws-…`, `repo-proj-…`), and the old ones stop resolving. Canvas IDs are kept, and each canvas's `projectId` is updated to its new project. The result carries the mapping, so you can retarget without re-listing:
+
+```json
+{ "bound": true, "repoRoot": "…", "canvasDir": "…/.framesmith", "workspace": "Acme",
+  "projectsMigrated": 2, "canvasesMigrated": 3,
+  "idMap": { "workspace": { "a1B2c3D4e5": "repo-ws-Xy7…" },
+             "projects":  { "Qr5Tu7Vw9x": "repo-proj-K3m…" } } }
+```
+
+Starting fresh? Prefer [`init`](#init): it binds and returns the whole project list with live IDs. Afterwards the server auto-detects `.framesmith/` on startup (walking up from its working directory). **Commit `.framesmith/`** so designs travel with the code and diff cleanly in review.
 
 The bind also records the repo in `~/.framesmith/registry.json`, so the standalone viewer shows bound repos alongside your global workspaces in one gallery (it rebuilds that read-only mirror on launch and whenever the registry changes).
 
 ### `batch_design`
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas to edit. |
+| `operations` | string | The op script described below. |
 
 Execute operations on the scene graph. Write one op per line. An op may span several lines while its `(`, `{` or `[` brackets are still open, which is how the chart examples below are written. A line starting with `#` between ops is a comment (inside an open bracket use `//` instead), and `//` comments out the rest of a line. Neither marker counts inside a quoted string, so `"#RRGGBB"` fills and `https://` URLs are safe:
 
@@ -277,7 +293,7 @@ D("nodeId")
 # Copy a node to a new parent
 copy=C("sourceId", "parentId", { fill: "#0f3460" })
 
-# Move a node
+# Move a node (the third argument is its index among the new parent's children)
 M("nodeId", "newParentId", 0)
 
 # Replace a node entirely
@@ -288,7 +304,9 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out)
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `segments`, `innerRatio`, `centerValue`, `centerLabel`, `sparkKind`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `segments`, `innerRatio`, `centerValue`, `centerLabel`, `sparkKind`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`, `name` (a readable label — `find_nodes` and component overrides match on it), `pulse` (skeleton only), `responsive` (`"stack"` | `"wrap"`)
+
+Chart `series` entries take their own keys: `data`, `stroke`, `strokeWidth`, `strokeDasharray`, `area`, `points`, `highlight`, `barGradient`.
 
 Use `textTransform: "uppercase"` for uppercase labels (don't bake casing into `content`), `letterSpacing` for tracking, and `fontVariationSettings` (e.g. `'"wght" 650'`) for variable-font axes.
 
@@ -305,7 +323,7 @@ I(panel, { type: "chart", kind: "line", width: 600, height: 220, curve: "smooth"
   xLabels: ["Jan", "", "", "", "", "", "", "", "", "", "", "Dec"] })
 ```
 
-Phase 28 adds the dashboard kinds. A **donut** is data-bound segments plus a center figure — the legend stays your composition:
+The dashboard kinds: a **donut** is data-bound segments plus a center figure — the legend stays your composition:
 
 ```
 I(panel, { type: "chart", kind: "donut", width: 176, height: 176, centerValue: "1,204", centerLabel: "forms",
@@ -322,7 +340,7 @@ Multi-series in one node; x positions are data indexes (a shorter series stops e
 
 Borders: `stroke` + `strokeWidth` draw all four sides (`strokeStyle: "dashed" | "dotted"` for forecast/placeholder outlines); per-side borders take an object — `borderTop: { width: 1, color: "$border", style? }` for table row rules, `borderLeft: { width: 3, color: "$primary" }` for accent edges. Paths dash via `strokeDasharray: "6 4"` (or `[6, 4]`).
 
-Grid: `layout: "grid"` + `gridColumns` (a count → equal columns; an array of fr weights / CSS lengths like `[2, 1, "240px"]`; or a raw template string) gives real CSS grid for bento/editorial compositions that flex can only approximate. Children place with `gridColumn` / `gridRow` — a number means "span N", strings accept `"span 2"` or `"1 / 3"`. `gap` covers both axes, `rowGap` overrides the row axis; `responsive: "stack"` collapses the grid to one column on mobile with spans reset. Tracks render as `minmax(0, Nfr)` so long content can't blow a column past its share. Unsafe `gridColumns`/`gridColumn`/`gridRow` values never reach the DOM — they fall back to equal columns / are dropped.
+Grid: `layout: "grid"` + `gridColumns` (a count → equal columns; an array of fr weights / CSS lengths like `[2, 1, "240px"]`; or a raw template string) gives real CSS grid for bento/editorial compositions that flex can only approximate. Children place with `gridColumn` / `gridRow` — a number means "span N", strings accept `"span 2"` or `"1 / 3"`. `gap` covers both axes, `rowGap` overrides the row axis; `responsive: "stack"` collapses the grid to one column on mobile with spans reset. Tracks render as `minmax(0, Nfr)` so long content can't blow a column past its share. Values outside the supported forms never reach the DOM. A `gridColumns` that isn't a count, an array of numbers / CSS lengths (`px`, `fr`, `%`, `em`, `rem`, `auto`, `min-content`, `max-content`, `minmax(…)`) or a plain template string falls back to equal columns. A `gridColumn` / `gridRow` that isn't a number, `"span N"` or `"A / B"` is dropped.
 
 ### `find_nodes`
 
@@ -579,8 +597,8 @@ List available layout structures — named scaffolds you stamp onto a canvas and
 
 Two kinds:
 
-- **`page`** — whole-page scaffolds stamped once at the canvas root: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`, `dashboard`, `auth`, `pricing`, `settings`, `onboarding`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout. Every page scaffold is regression-tested to score **> 95 with zero cliché tells** across all five presets (the pattern library's taste bar) and to pass `canvas_stress` CLEAN under long-text and i18n content, so it's a non-slop starting point you adapt, not boilerplate.
-- **`component`** — reusable fragments stamped under **any** node via `targetId`, repeatably: `data-table` (header + 3 rows with avatar/name/email, role chip, status dot, right-aligned numeric cell, actions, and a pagination footer), `form-field`, `toolbar`, `stat-card` (the original name for the KPI-card anatomy below, kept as an alias), `toggle-row`, plus the state scaffolds `empty-state` (icon + title + hint + CTA — an empty screen is a first-run experience, not a void), `skeleton-table` (real header + skeleton rows matching `data-table` geometry, so the loaded table lands without layout shift), `skeleton-card`, and `skeleton-stat-card` (so a loading dashboard skeletons every data surface — the coverage check warns when a loading variant leaves a live region beside skeletoned ones). Phase 28 adds the dashboard micro-patterns: `kpi-card` (tinted icon tile + uppercase metric label + big tabular value + live sparkline + tinted delta pill — the dashboard structure stamps these), `status-chip` (the tint pair: `$success-tint` fill + `$success` ink), `segmented-control`, `breadcrumb`, and `initials-avatar`. A high-fidelity table costs one stamp instead of ~90 hand-placed nodes; a reference-grade KPI card costs one.
+- **`page`** — whole-page scaffolds stamped once at the canvas root: `marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`, `dashboard`, `auth`, `pricing`, `settings`, `onboarding`. Each is tagged on four independent axes — `heroTreatment`, `density`, `rhythm`, `alignment` — so you can deliberately vary page shape instead of defaulting to the same layout. Every page scaffold is regression-tested to score **> 95 with zero cliché tells** under the neutral default theme and all four presets (the pattern library's taste bar) and to pass `canvas_stress` CLEAN under long-text and i18n content, so it's a non-slop starting point you adapt, not boilerplate.
+- **`component`** — reusable fragments stamped under **any** node via `targetId`, repeatably: `data-table` (header + 3 rows with avatar/name/email, role chip, status dot, right-aligned numeric cell, actions, and a pagination footer), `form-field`, `toolbar`, `stat-card` (the original name for the KPI-card anatomy below, kept as an alias), `toggle-row`, plus the state scaffolds `empty-state` (icon + title + hint + CTA — an empty screen is a first-run experience, not a void), `skeleton-table` (real header + skeleton rows matching `data-table` geometry, so the loaded table lands without layout shift), `skeleton-card`, and `skeleton-stat-card` (so a loading dashboard skeletons every data surface — the coverage check warns when a loading variant leaves a live region beside skeletoned ones). The dashboard micro-patterns: `kpi-card` (tinted icon tile + uppercase metric label + big tabular value + live sparkline + tinted delta pill — the dashboard structure stamps these), `status-chip` (the tint pair: `$success-tint` fill + `$success` ink), `segmented-control`, `breadcrumb`, and `initials-avatar`. A high-fidelity table costs one stamp instead of ~90 hand-placed nodes; a reference-grade KPI card costs one.
 
 ### `apply_structure`
 
@@ -805,9 +823,11 @@ Whenever the `coverage` category runs on a **base** canvas, the result also carr
 | `typography` | 20 | Type-scale ratios (1.1–2.0; adjacent sizes both declared as typography tokens are pinned and skip the check), font-family count, weight variation — plus score-neutral craft advisories: measure (prose past ~75 characters per line; warning past 90), tracking (display text ≥28px without negative letter-spacing, autofixable), and tabular numerals (numeric table columns without `tabularNums`, autofixable) |
 | `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse, unknown icon names (an icon that resolves in neither set renders an empty slot: a directive-blocking warning, −10 structure score each; autofixable when one spelling resolves) |
 | `consistency` | 20 | Frames missing `layout`, sibling overlap (detailed mode) — plus score-neutral advisories: **token detachment** (a literal `fill`/`stroke`/`color`/`cornerRadius` that exactly equals a token's value flags with a mechanical `$ref` autofix; ambiguous matches list candidates and never guess) and **ad-hoc motion** (3+ distinct duration/easing combos with no motion tokens declared) |
-| `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos, eyebrow rhythm (an eyebrow above nearly every section), slop copy (stock AI phrasing — filler verbs, scroll cues, placeholder names, hype labels), radius consistency (too many distinct corner radii), pure black/white (`#000000` ink / `#ffffff` page vs off-black/off-white), accent consistency (multiple competing accent hues — the `$success`/`$warning`/`$danger` status vocabulary is exempt when referenced as tokens, since those are semantics rather than a second accent; the same hues as literals still count). Each issue carries a `tell` discriminator; all advisory (warning/info). Relaxable per `genre`. The tells know dashboard vocabulary: a violet reached only through a `$chart-*` or `$*-tint` token doesn't count as the default-purple tell (a literal violet, or one through any other token, still does), a gradient reached through a `$token` doesn't count toward gradient overuse, thin rounded sparkline bars aren't mistaken for traffic-light dots (fake-chrome now requires a near-square shape), and an uppercase label sitting beside a large tabular figure reads as a KPI-card metric, not an eyebrow. It also knows retail copy: a numeral bound to a unit noun by a tight hyphen (`"30-day returns"`, `"2-year warranty"`, `"24/7 support"`) is a compound modifier, not a numbered section eyebrow. |
+| `cliche` | 15 | Machine-made tells: default purple/indigo accent, gradient/glow overuse, fake browser/OS chrome (traffic-light dots), the hanging eyebrow-beside-heading header, fabricated metrics/testimonials/logos, eyebrow rhythm (an eyebrow above nearly every section), slop copy (stock AI phrasing — filler verbs, scroll cues, placeholder names, hype labels), radius consistency (too many distinct corner radii), pure black/white (`#000000` ink / `#ffffff` page vs off-black/off-white), accent consistency (multiple competing accent hues — the `$success`/`$warning`/`$danger` status vocabulary is exempt when referenced as tokens, since those are semantics rather than a second accent; the same hues as literals still count). Each issue carries a `tell` discriminator. Tells are warning or info severity, but **every tell blocks the directive**, whatever its severity (see the `directive` above). Relaxable per `genre`. The tells know dashboard vocabulary: a violet reached only through a `$chart-*` or `$*-tint` token doesn't count as the default-purple tell (a literal violet, or one through any other token, still does), a gradient reached through a `$token` doesn't count toward gradient overuse, thin rounded sparkline bars aren't mistaken for traffic-light dots (fake-chrome now requires a near-square shape), and an uppercase label sitting beside a large tabular figure reads as a KPI-card metric, not an eyebrow. It also knows retail copy: a numeral bound to a unit noun by a tight hyphen (`"30-day returns"`, `"2-year warranty"`, `"24/7 support"`) is a compound modifier, not a numbered section eyebrow. |
 | `coverage` | 10 | State coverage on **base** canvases with data-bearing content: a detected table demands designed `empty` + `loading` variants, a form (3+ input controls) demands `error` — each missing state is a directive-blocking warning whose suggestion names the `canvas_add_variant` + scaffold path. Variant canvases and non-data screens get no findings. Table detection needs three matching horizontal rows to read as data (two stacked rows are treated as a layout, e.g. a topbar over a greeting); an import-named `Table` frame keeps the looser two-row shape. On a **`loading`** variant itself, a warning fires per data surface (a detected table, or a frame with 2+ large tabular/numeric texts) that still shows live values while a sibling region is skeletoned — "Loading state is half-designed" — naming the region and suggesting the matching skeleton scaffold. The result's `coverage` field reports `{ dataBearing, states, missing }`. |
 | `usability` | 20 | The mechanical UX floors beyond contrast. A control below the **24px hit-target floor** is an **error** (WCAG 2.5.8) — the effective target counts a lone control's padded row, so a well-padded settings row passes while two small controls sharing a row are measured bare; phone-width artboards additionally get a 44px touch-first info. A control with **no text label** in its row or group is a warning (selects carry their own value text). **Vague action copy** — "Click here", "Learn more", "Read more", or "Submit" as the exact label — is an info: name the action. Controls also render with accent-derived `:focus-visible` rings in the live viewer; screenshots stay byte-identical (nothing is focused in a static capture). |
+
+The weights are relative, not points out of 100. Each category scores 0–100, and `overallScore` is their weighted mean: the sum of score × weight over the categories that ran, divided by the sum of their weights.
 
 **Return shape**
 
@@ -833,7 +853,9 @@ Whenever the `coverage` category runs on a **base** canvas, the result also carr
 }
 ```
 
-**With `mode: "llm"`** (Phase 13), the vision model scores a **fixed rubric** — five axes, each 1–5 with a rationale — instead of one opaque number. The verdict is stamped on the canvas (`metadata.critique`) and the per-project build log so quality is auditable over time. Add `floor` (1–5, default 3, or `FRAMESMITH_CRITIQUE_FLOOR`) to set the per-axis threshold that trips `needsRevision`. **Without an `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, the call doesn't fail** — the full heuristic result still returns with an `llmNote` explaining the critique was skipped, and the heuristic directive alone decides whether the design is ready.
+**With `mode: "llm"`**, the vision model scores a **fixed rubric** — five axes, each 1–5 with a rationale — instead of one opaque number. The verdict is stamped on the canvas (`metadata.critique`) and the per-project build log so quality is auditable over time. Add `floor` (1–5, default 3, or `FRAMESMITH_CRITIQUE_FLOOR`) to set the per-axis threshold that trips `needsRevision`. **Without an `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, the call doesn't fail** — the full heuristic result still returns with an `llmNote` explaining the critique was skipped, and the heuristic directive alone decides whether the design is ready.
+
+**The critique never gates presenting, with or without a key.** The heuristic `directive` is the only presentation gate. With a key, the critique loop is the standard last step: judge, run `canvas_revise` on the failing axes, and re-judge. If `canvas_revise` stops (`max-iterations` or `no-improvement`) and `needsRevision` is still `true`, present the design anyway and tell the user which axes still fail. A judge the agent can't satisfy by improving the design would strand it, and a model verdict varies from run to run.
 
 ```json
 {
@@ -958,7 +980,7 @@ Returns `{ canvases: [{ canvasId, name, score, blocking, states, missingStates, 
 
 ### `canvas_revise`
 
-Closes the critique loop (Phase 13). Judges the canvas against the rubric; if any axis is below the floor, asks an LLM for targeted `batch_design` ops that raise the failing axes, applies them, re-renders, and re-judges — up to `maxIterations` passes. **Mutates the canvas.** Opt-in and bounded; it never runs implicitly.
+Closes the critique loop. Judges the canvas against the rubric; if any axis is below the floor, asks an LLM for targeted `batch_design` ops that raise the failing axes, applies them, re-renders, and re-judges — up to `maxIterations` passes. **Mutates the canvas.** Opt-in and bounded; it never runs implicitly.
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -972,6 +994,7 @@ Closes the critique loop (Phase 13). Judges the canvas against the rubric; if an
 - Each pass: render → judge → if `needsRevision`, revise the failing axes → apply (validated through `batch_design`) → re-render → re-judge.
 - **Stops** when the canvas passes (`passed`), at the cap (`max-iterations`), when a pass doesn't improve the overall (`no-improvement` — the regressing edit is **reverted**), when the reviser returns nothing (`no-ops`), or when an op fails to apply (`apply-error` — the partial edit is reverted).
 - Every **accepted** pass re-stamps `metadata.critique` + the build log. Costs ≥2 paid API calls per pass (one judge + one revise) and renders between passes (Chrome required).
+- **It never gates presenting.** The heuristic `directive` does. If the loop stops (`max-iterations`, `no-improvement`) with `needsRevision` still `true`, present the design and name the failing axes (see [`canvas_evaluate`](#canvas_evaluate)).
 
 **Return shape**
 
@@ -1151,7 +1174,7 @@ The `auth` pattern already scores > 95 — a centered card with real form fields
 **2. Adapt it — set the brand accent and the copy**
 
 ```
-project_set_design_system({ projectId: "default-project", variables: { colors: { accent: "#2563EB" } } })
+project_set_design_system({ projectId: "<the projectId from canvas_list / init>", variables: { colors: { accent: "#2563EB" } } })
 
 batch_design({
   canvasId: "abc123",
@@ -1201,7 +1224,7 @@ The standalone viewer:
 
 - **Persists across sessions** — URLs keep working after Claude / Cursor / Windsurf finishes
 - **Shared across projects** — multiple MCP sessions (from different projects) all use the same viewer
-- **Auto-detects new canvases** — watches `~/.framesmith/canvases/` for changes and picks them up immediately
+- **Auto-detects new canvases** — watches `~/.framesmith/canvases/` and every registered repo's `.framesmith/` for changes and picks them up immediately
 - **Auto-detected by MCP** — when the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
 
 ### Routes & API
@@ -1214,7 +1237,7 @@ The standalone viewer:
 - **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
 - **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
 
-All canvases persist to `~/.framesmith/canvases/` as JSON files and survive process restarts. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
+Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and the viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 
 ## Workflow
 
@@ -1226,7 +1249,7 @@ The loop framesmith is built around — start from taste, adapt, and polish to t
 4. **`apply_structure`** → stamp a vetted page pattern, then adapt it with `batch_design` (real icons, controls, and components — not faked from frames). This is the starting point; a blank canvas is the slow, sloppy path.
 5. Watch the viewer auto-refresh as you design; `screenshot` to check the render.
 6. **`canvas_evaluate`** → read the `directive`. Resolve every warning and cliché tell (`canvas_autofix` for the mechanical subset, `batch_design` for the rest), then re-evaluate. Repeat until it says `READY` — only then present the design.
-7. **Final polish, when an LLM API key is configured:** `canvas_evaluate({ mode: "llm" })` scores the render on the fixed five-axis rubric, `canvas_revise` addresses the failing axes, re-judge until it passes. The heuristic gate is the floor; the critique loop is the ceiling — treat it as the standard last step, not an optional extra. No key on hand? The heuristic directive alone decides readiness and the result says so.
+7. **Final polish, when an LLM API key is configured:** `canvas_evaluate({ mode: "llm" })` scores the render on the fixed five-axis rubric, `canvas_revise` addresses the failing axes, re-judge until it passes or `canvas_revise` stops. The heuristic gate is the floor; the critique loop is the ceiling. Treat it as the standard last step, not an optional extra. It never blocks presenting: if axes still fail when `canvas_revise` stops, present the design and name the failing axes. No key on hand? The heuristic directive decides readiness either way, and the result says the critique was skipped.
 8. `screenshot_responsive` → confirm it holds at mobile / tablet / desktop.
 9. `canvas_diff` / `canvas_sync_from_url` / `canvas_check_drift` → compare versions, or check the shipped app hasn't drifted from the approved design — pixel-level or structural.
 10. `export` → save final designs to PNG/PDF.
