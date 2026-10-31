@@ -183,7 +183,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
     if (hit && hit.offset < inset) {
       issues.push(issue('usability', rule, 'warning', hit.node,
         `"${hit.node.name ?? hit.node.id}" sits about ${Math.round(hit.offset)}px from the ${edge} of the screen — inside the ${inset}px ${edge === 'top' ? 'status-bar' : 'home-indicator'} inset.`,
-        `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)} (the renderer adds them to the root's padding). For a deliberate full-bleed screen, pad the ${edge} so content clears ${inset}px — padding of 32px or more scales down on a phone, so use a spacer frame of that height.`));
+        `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)} (the renderer adds them to the root's padding). For a deliberate full-bleed screen, put a ${inset}px spacer frame at the ${edge} of your content frame (padding of 32px or more scales down on a phone, and a spacer directly under the fixed-height root shrinks on a long screen).`));
     }
   }
 
@@ -226,7 +226,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
       if (hit && hit.offset < inset) {
         issues.push(issue('usability', rule, 'warning', hit.node,
           `"${hit.node.name ?? hit.node.id}" inside positioned "${n.name ?? n.id}" sits about ${Math.round(hit.offset)}px from the ${edge} of the screen — inside the ${inset}px ${edge === 'top' ? 'status-bar' : 'home-indicator'} inset.`,
-          `Pad "${n.name ?? n.id}" so its content clears ${inset}px from the ${edge} (a spacer frame keeps its size; padding of 32px or more scales down on a phone).`));
+          `Pad "${n.name ?? n.id}" so its content clears ${inset}px from the ${edge} (a spacer frame of that height is exact; padding of 32px or more scales down on a phone).`));
       }
     }
   };
@@ -268,7 +268,7 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
           issues.push(issue('usability', 'mobile-safe-area', 'warning', n,
             `"${n.name ?? n.id}" renders in ${where} — under the ${where.startsWith('the top') ? 'status bar' : 'home indicator'}.`,
             insets.topReserved && insets.bottomReserved
-              ? 'Keep positioned content inside the safe area, and end long screens with bottom padding or a spacer of the inset height.'
+              ? 'Keep positioned content inside the safe area. On a screen taller than its artboard, end the frame that holds the content with a spacer frame of the inset height (not a spacer directly under the root, which shrinks).'
               : `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)}.`));
         }
       }
