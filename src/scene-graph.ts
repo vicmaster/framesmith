@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile } from './repo-store.js';
 import { canvasVersionHash } from './version.js';
+import { migrateProvenance } from './genre.js';
 
 const store = new Map<string, Canvas>();
 
@@ -169,23 +170,22 @@ export function getCanvas(id: string): Canvas | undefined {
 }
 
 /** Issue #162 — stamp (or clear) the evaluation genre durably: writes
- * metadata.provenance.preset WITHOUT touching tokens/components the way
+ * metadata.provenance.genre WITHOUT touching tokens/components the way
  * apply_preset does. `null` clears the stamp; other provenance facts
- * (structure, importedFrom, …) are preserved either way. Returns the prior
- * stamp, or undefined when the canvas doesn't exist. */
+ * (preset, structure, importedFrom, …) are preserved either way. Phase 30:
+ * migrates a legacy genre out of `preset` first, so `previous` reports it and
+ * a clear removes it. Returns the prior stored genre (raw, not alias-folded),
+ * or undefined when the canvas doesn't exist. */
 export function setCanvasGenre(canvasId: string, genre: string | null): { previous: string | null } | undefined {
   ensureFresh(canvasId); // stamp on top of what's on disk, not a stale copy
   const canvas = store.get(canvasId);
   if (!canvas) return undefined;
   const prov: Partial<import('./types.js').Provenance> = { ...canvas.metadata?.provenance };
-  const previous = typeof prov.preset === 'string' ? prov.preset : null;
-  if (genre === null) {
-    if (previous === null) return { previous }; // nothing to clear — don't dirty the file
-    delete prov.preset;
-  } else {
-    prov.preset = genre;
-    prov.at = new Date().toISOString();
-  }
+  migrateProvenance(prov);
+  const previous = typeof prov.genre === 'string' ? prov.genre : null;
+  if (genre === null && previous === null) return { previous }; // nothing to clear — don't dirty the file
+  prov.genre = genre;
+  if (genre !== null) prov.at = new Date().toISOString();
   canvas.metadata = { ...canvas.metadata, provenance: prov as import('./types.js').Provenance };
   touchCanvas(canvasId);
   return { previous };

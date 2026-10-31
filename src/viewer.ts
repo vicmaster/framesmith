@@ -5,7 +5,8 @@ import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDesignSystem, getWorkspaceDesignSystem } from './workspaces.js';
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
-import { evaluateCanvas, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
+import { evaluateCanvas, resolveGenre, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
+import { isPresetName } from './genre.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
 
 let runningPort: number | null = null;
@@ -826,7 +827,7 @@ ${FAVICON_HTML}
  * Read-only: computed for display, never written back to the scene graph. */
 
 // Cache fast-eval by a content hash of everything the evaluation actually
-// reads — the node tree, the merged tokens, the genre (provenance preset),
+// reads — the node tree, the merged tokens, the genre and preset,
 // and the component registry. NOT lastModified: metadata edits and hand-edits
 // of a repo-bound file don't reliably bump it (issue #150), and a stale score
 // that survives a legitimate fix makes the fix look broken. Bounded — drop
@@ -846,7 +847,9 @@ function designedStatesFor(canvasId: string, listing?: CanvasSummary[]): string[
 }
 
 export function evalCacheKey(canvas: Canvas, states?: string[]): string {
-  const genre = (canvas.metadata?.provenance as { preset?: string } | undefined)?.preset ?? '';
+  // Phase 30: genre and preset are separate axes, and both change the score.
+  const prov = canvas.metadata?.provenance;
+  const genre = `${resolveGenre(canvas).genre ?? ''}/${prov?.preset ?? ''}`;
   let tokens = '';
   try { tokens = JSON.stringify(getCanvasTokens(canvas)); } catch { /* mirrored canvas with no live project — tree + genre still key it */ }
   // Phase 24 slice C — the coverage check reads the canvas's designed state
@@ -861,16 +864,15 @@ export function evalCacheKey(canvas: Canvas, states?: string[]): string {
   return `${canvas.id}:${(h >>> 0).toString(36)}`;
 }
 
-async function evalFor(canvas: Canvas, states?: string[]): Promise<EvaluationResult | null> {
+export async function evalFor(canvas: Canvas, states?: string[]): Promise<EvaluationResult | null> {
   if (!canvas.root.children || canvas.root.children.length === 0) return null; // empty → no score
   const designed = states ?? designedStatesFor(canvas.id);
   const key = evalCacheKey(canvas, designed);
   const hit = scoreCache.get(key);
   if (hit) return hit;
   try {
-    // Match the agent: relax tells for the canvas's own genre (provenance preset).
-    const genre = (canvas.metadata?.provenance as { preset?: string } | undefined)?.preset;
-    const result = await evaluateCanvas(canvas, { mode: 'fast', genre, designedStates: designed });
+    // Match the agent: evaluateCanvas resolves the canvas's own genre and preset.
+    const result = await evaluateCanvas(canvas, { mode: 'fast', designedStates: designed });
     if (scoreCache.size > 200) scoreCache.delete(scoreCache.keys().next().value as string);
     scoreCache.set(key, result);
     return result;
@@ -1108,17 +1110,19 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
   const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
   const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
 
-  // Provenance chip (Phase 11) — structure · preset · alignment/density. Shows
+  // Provenance chip (Phase 11) — structure · genre · preset · alignment/density. Shows
   // only the parts that exist; hidden entirely when a canvas has no provenance.
   const prov = canvas.metadata?.provenance;
   let provChip = '';
   if (prov) {
     const parts: string[] = [];
     if (prov.structure) parts.push(esc(prov.structure));
-    if (prov.preset) parts.push(esc(prov.preset));
+    const genre = resolveGenre(canvas).genre;
+    if (genre) parts.push(esc(genre));
+    if (prov.preset && isPresetName(prov.preset)) parts.push(esc(prov.preset));
     const ax = prov.axes ? [prov.axes.alignment, prov.axes.density].filter(Boolean).join('/') : '';
     if (ax) parts.push(esc(ax));
-    if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / preset / axes that produced this canvas"><b>◆</b>${parts.join(' · ')}</span>`;
+    if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / genre / preset / axes of this canvas"><b>◆</b>${parts.join(' · ')}</span>`;
   }
 
   // Phase 25 slice D — a dark token layer makes the theme toggle appear.

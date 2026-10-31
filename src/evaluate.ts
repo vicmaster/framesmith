@@ -5,6 +5,7 @@ import { renderToHtml } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
+import { storedGenre } from './genre.js';
 
 // --- Types ---
 
@@ -100,19 +101,25 @@ export interface EvaluationResult {
 }
 
 export interface GenreReport {
-  /** The genre the cliche checks ran under, or null when none was set. */
+  /** The genre the cliche checks ran under (canonical: an alias like
+   * "dashboard" reports as "data"), or null when none was set. */
   active: string | null;
   /** Where the active genre came from: the explicit `genre` option, the canvas
-   * provenance stamp (metadata.provenance.preset), or null when unset. */
+   * provenance stamp (metadata.provenance.genre, or a legacy genre stored in
+   * provenance.preset), or null when unset. */
   source: 'explicit' | 'provenance' | null;
-  /** Tells the active genre relaxed (skipped entirely). Empty when the active
-   * genre is unknown to the relaxation table — a signal the stamp isn't doing
-   * what the author may think. */
+  /** Tells skipped entirely, by the genre and by the applied preset. Empty
+   * when neither relaxes anything — for a genre stamp, a signal the stamp
+   * isn't doing what the author may think. */
   relaxed: ClicheTell[];
   /** Tells that stayed ACTIVE but would be relaxed by some other genre —
-   * e.g. under "dashboard", accent-hue/pure-black-white still flag but
+   * e.g. under "data", accent-hue/pure-black-white still flag but
    * "material" would relax them. */
   notRelaxed: Array<{ tell: ClicheTell; relaxedBy: string[] }>;
+  /** Phase 30 — present when the canvas's applied preset relaxed tells on its
+   * own (the material preset), so `relaxed` is explained even when `active`
+   * is null. */
+  byPreset?: { preset: string; relaxed: ClicheTell[] };
 }
 
 interface NodeEntry {
@@ -1013,18 +1020,22 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
 // fake browser chrome, the hanging eyebrow header, fabricated data). Advisory
 // by design (warning/info, never a hard error); genre can relax a gate.
 
-/** Genre (active preset / design system) → tells it relaxes because they're
- * intentional in that style. Material Design is legitimately purple. */
+/** Genre (what the screen is for) → tells it relaxes because they're
+ * intentional in that kind of screen. Material Design is legitimately purple. */
 const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
   // Material Design legitimately uses a purple accent AND white elevated
   // surfaces (cards on an off-white background), so both are intentional here.
+  // Also a preset (RELAXED_BY_PRESET); kept as a genre because agents are
+  // told to declare editors and admin forms as "material".
   material: ['accent-hue', 'pure-black-white'],
-  // Phase 22 slice C (#135) — data-dense product screens: realistic figures
+  // Phase 22 slice C (#135) — screens whose figures are the user's own data
+  // (dashboards, activity, finance, fitness, logistics): realistic figures
   // ARE the design (they drive column widths, wrapping, $2.7M-vs-$2,700,000
   // legibility), so "fabricated data" flags would zero the category for the
-  // screen's whole reason to exist. `data` is an alias.
-  dashboard: ['honest-content'],
+  // screen's whole reason to exist. Phase 30: `data` is canonical (it names
+  // what the numbers are, not a layout); `dashboard` is the alias.
   data: ['honest-content'],
+  dashboard: ['honest-content'],
   // Phase 29 slice A (#194) — transactional commerce screens: a checkout's
   // line prices, subtotal, store credit and total ARE the design (they set the
   // column widths, the decimal alignment, and which number reads as the one
@@ -1040,28 +1051,61 @@ const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
   checkout: ['honest-content'],
 };
 
-/** Genres that are aliases of another entry — folded out of the genre report
- * so an alias never reads as a second option. */
-const GENRE_ALIASES = new Set(['data', 'checkout']);
+/** Phase 30 — the preset half of the ruleset: applying the material STYLE
+ * relaxes material's tells whatever the genre is, so untangling genre from
+ * preset doesn't strip a material-preset canvas of its relaxation. */
+const RELAXED_BY_PRESET: Record<string, ClicheTell[]> = {
+  material: ['accent-hue', 'pure-black-white'],
+};
+
+/** Genres that are aliases of another entry — folded to their canonical
+ * genre in the report so an alias never reads as a second option. */
+const GENRE_ALIASES = new Map<string, string>([['dashboard', 'data'], ['checkout', 'commerce']]);
+
+// Own-key lookups only: a stored genre is free text, and "constructor" must
+// read as an unknown genre, not Object.prototype.constructor.
+function lookup(table: Record<string, ClicheTell[]>, key: string | undefined): ClicheTell[] {
+  return key !== undefined && Object.hasOwn(table, key) ? table[key] : [];
+}
+
+export function canonicalGenre(genre: string): string {
+  return GENRE_ALIASES.get(genre) ?? genre;
+}
 
 /** Issue #162 — what a genre stamp buys, for canvas_set_genre's immediate
  * feedback (the evaluate-time report stays buildGenreReport's job). */
 export function relaxedByGenre(genre: string): ClicheTell[] {
-  return RELAXED_BY_GENRE[genre] ?? [];
+  return lookup(RELAXED_BY_GENRE, genre);
+}
+export function relaxedByPreset(preset: string | undefined): ClicheTell[] {
+  return lookup(RELAXED_BY_PRESET, preset);
 }
 export function knownGenres(): string[] {
   return Object.keys(RELAXED_BY_GENRE);
 }
 
+/** Phase 30 — the one genre resolution every evaluator shares (canvas_evaluate,
+ * canvas_autofix, the viewer): the explicit option, else the canvas's stored
+ * genre (incl. the legacy read of `preset`), folded to its canonical name. */
+export function resolveGenre(canvas: Canvas, explicit?: string): { genre: string | undefined; source: GenreReport['source'] } {
+  if (explicit !== undefined) return { genre: canonicalGenre(explicit), source: 'explicit' };
+  const stored = storedGenre(canvas.metadata?.provenance);
+  return stored !== undefined ? { genre: canonicalGenre(stored), source: 'provenance' } : { genre: undefined, source: null };
+}
+
 /** Issue #152 — make the genre decision visible in the evaluate result: which
  * genre ran, where it came from, what it relaxed, and which tells a DIFFERENT
  * genre would have relaxed (the tradeoff that's otherwise only discoverable by
- * watching the score move). Aliases (`data`, `checkout`) are folded into their
- * canonical genre in relaxedBy so they don't read as separate options. */
-function buildGenreReport(genre: string | undefined, explicit: boolean, relaxed: Set<ClicheTell>): GenreReport {
+ * watching the score move). Aliases (`dashboard`, `checkout`) are folded into
+ * their canonical genre in relaxedBy so they don't read as separate options. */
+function buildGenreReport(
+  resolved: { genre: string | undefined; source: GenreReport['source'] },
+  relaxed: Set<ClicheTell>,
+  preset: string | undefined,
+): GenreReport {
   const notRelaxed = new Map<ClicheTell, string[]>();
   for (const [g, tells] of Object.entries(RELAXED_BY_GENRE)) {
-    if (GENRE_ALIASES.has(g)) continue; // `data` → dashboard, `checkout` → commerce
+    if (GENRE_ALIASES.has(g)) continue;
     for (const tell of tells) {
       if (relaxed.has(tell)) continue;
       const by = notRelaxed.get(tell) ?? [];
@@ -1069,11 +1113,13 @@ function buildGenreReport(genre: string | undefined, explicit: boolean, relaxed:
       notRelaxed.set(tell, by);
     }
   }
+  const byPreset = relaxedByPreset(preset);
   return {
-    active: genre ?? null,
-    source: explicit ? 'explicit' : genre !== undefined ? 'provenance' : null,
+    active: resolved.genre ?? null,
+    source: resolved.source,
     relaxed: [...relaxed],
     notRelaxed: [...notRelaxed].map(([tell, relaxedBy]) => ({ tell, relaxedBy })),
+    ...(byPreset.length ? { byPreset: { preset: preset!, relaxed: byPreset } } : {}),
   };
 }
 
@@ -1388,7 +1434,7 @@ function tellHonestContent(ctx: ClicheCtx): EvaluationIssue[] {
       nodeId: node.id,
       nodeName: node.name,
       message: `"${text.slice(0, 40)}" looks like fabricated data (${reason}).`,
-      suggestion: `Use a labeled placeholder until real data exists, e.g. "<Label> — to confirm" + a neutral block. If this is a data-dense product screen whose realistic figures ARE the design (a dashboard mockup), pass genre: "dashboard" instead — it relaxes this tell.`,
+      suggestion: `Use a labeled placeholder until real data exists, e.g. "<Label> — to confirm" + a neutral block. If the figures are the user's own data and ARE the design (a dashboard, activity, finance or fitness screen), declare genre: "data" instead — it relaxes this tell.`,
     });
   }
   return issues;
@@ -2110,9 +2156,11 @@ export async function evaluateCanvas(
 
   let genreReport: GenreReport | undefined;
   if (activeCategories.includes('cliche')) {
-    // Genre comes from the explicit option, else the Phase 11 provenance stamp.
-    const genre = options.genre ?? canvas.metadata?.provenance?.preset;
-    const relaxed = new Set(RELAXED_BY_GENRE[genre ?? ''] ?? []);
+    // Genre comes from the explicit option, else the canvas's stored genre;
+    // the applied preset contributes its own relaxation on top.
+    const resolved = resolveGenre(canvas, options.genre);
+    const preset = canvas.metadata?.provenance?.preset;
+    const relaxed = new Set([...relaxedByGenre(resolved.genre ?? ''), ...relaxedByPreset(preset)]);
     // Resolved entries → $accent becomes a real hex for hue math; rawEntries →
     // distinguish a literal default purple (autofixable) from a $token one.
     // Table header cells are small uppercase labels by convention — exclude
@@ -2130,7 +2178,7 @@ export async function evaluateCanvas(
       }
     }
     results.set('cliche', checkCliche(entries, rawEntries, mergedTokens, { relaxed, tableDescendantIds }));
-    genreReport = buildGenreReport(genre, options.genre !== undefined, relaxed);
+    genreReport = buildGenreReport(resolved, relaxed, preset);
   }
 
   const overallScore = aggregateScores(results, CATEGORY_WEIGHTS);

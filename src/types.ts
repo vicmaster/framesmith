@@ -333,6 +333,12 @@ export interface Structure {
 export interface Provenance {
   structure?: string;
   preset?: string;
+  /** Phase 30 — the evaluation genre (what the screen is FOR), written by
+   * canvas_set_genre. Before Phase 30 it shared `preset`; the KEY is the
+   * migration marker: when present (a string, or null for "no genre"),
+   * `preset` is always a preset. When absent, a `preset` value that is not a
+   * built-in preset name is read as a legacy genre (see resolveGenre). */
+  genre?: string | null;
   axes?: Partial<StructureAxes>;
   /** Phase 17 — set when the canvas was imported from an implementation:
    * 'html' for snippets, or the source URL. Auth material is never recorded. */

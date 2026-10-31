@@ -148,8 +148,10 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   // no reason to mention "material", which relaxes different tells), and keyed
   // on quoted/backticked mentions so prose like "dashboard vocabulary" — which
   // describes a style, not a genre value — stays exempt.
-  const aliasBlock = evaluateSrc.match(/const GENRE_ALIASES[^=]*=\s*new Set\(\[([\s\S]*?)\]\)/)?.[1] ?? '';
-  const aliases = new Set([...aliasBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]));
+  // GENRE_ALIASES is a Map of [alias, canonical] pairs (Phase 30 made `data`
+  // canonical and `dashboard` its alias).
+  const aliasBlock = evaluateSrc.match(/const GENRE_ALIASES[^=]*=\s*new Map[^(]*\(\[([\s\S]*?)\]\);/)?.[1] ?? '';
+  const aliases = new Set([...aliasBlock.matchAll(/\['([^']+)',\s*'[^']+'\]/g)].map((m) => m[1]));
   const canonical = genres.filter((g) => !aliases.has(g));
   expect('genre aliases parsed from evaluate.ts', aliases.size > 0, [...aliases].join(', '));
 
@@ -181,6 +183,27 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
     }
     expect(`every passage offering a "${tell}" genre offers all of them`, offenders.length === 0, offenders.join(' | '));
   }
+}
+
+// ── 7b. Phase 30 slice A: `data` is the genre agents are told to declare ─────
+// `dashboard` stays an alias forever (stored canvases carry it), but no agent
+// surface may RECOMMEND it — the layout word pushed a fitness app into the
+// wrong label. And the genre/preset split's new output fields stay documented.
+{
+  const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
+  const recommends = /genre:\s*\\?["`]dashboard\\?["`]|canvas_set_genre\(\s*\\?["`]dashboard/;
+  const offenders: string[] = [];
+  for (const [label, src] of [['src/index.ts', indexSrc], ['src/evaluate.ts', evaluateSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
+    src.split('\n').forEach((line, i) => { if (recommends.test(line)) offenders.push(`${label}:${i + 1}`); });
+  }
+  expect('no agent surface recommends genre: "dashboard" (declare "data")', offenders.length === 0, offenders.join(', '));
+  expect('aliases parsed: dashboard → data, checkout → commerce', /\['dashboard',\s*'data'\]/.test(evaluateSrc) && /\['checkout',\s*'commerce'\]/.test(evaluateSrc));
+
+  for (const field of ['byPreset', 'presetRelaxes', 'canonical']) {
+    expect(`genre field "${field}" documented in src/index.ts`, indexSrc.includes(field));
+    expect(`genre field "${field}" documented in GUIDELINES`, guidelines.includes(field));
+  }
+  expect('canvas_set_genre documented as writing provenance.genre', indexSrc.includes('metadata.provenance.genre') && readme.includes('metadata.provenance.genre'));
 }
 
 // ── 8. gate-integrity vocabulary is surfaced where agents look ───────────────

@@ -9,7 +9,8 @@
 
 import './test-env.js';
 import { createCanvas, addVariant } from './src/scene-graph.js';
-import { evalCacheKey } from './src/viewer.js';
+import { evalCacheKey, evalFor } from './src/viewer.js';
+import { evaluateCanvas } from './src/evaluate.js';
 import { parseAndExecute } from './src/operations.js';
 
 let allPass = true;
@@ -33,10 +34,47 @@ canvas.lastModified = new Date(Date.now() + 60_000).toISOString();
 check('lastModified change alone → same key', evalCacheKey(canvas) === k0);
 
 // The #150 incident: stamping the provenance preset (genre) must move the key,
-// because genre changes which cliché tells are relaxed.
+// because genre changes which cliché tells are relaxed. Since Phase 30 this is
+// a legacy genre stamp, still read from `preset`.
 canvas.metadata = { ...canvas.metadata, provenance: { preset: 'dashboard', at: new Date().toISOString() } };
 const k1 = evalCacheKey(canvas);
 check('stamping provenance.preset → new key', k1 !== k0);
+
+// Phase 30 — genre and preset are separate fields; both move the key, and a
+// write that changes neither (just `at`) doesn't.
+{
+  const c = createCanvas('Cache Key Axes');
+  parseAndExecute(c.root, `I("document", { type: "text", content: "Revenue", fontSize: 14 })`, c);
+  c.metadata = { ...c.metadata, provenance: { genre: 'commerce', preset: 'dark', at: 'a' } };
+  const base = evalCacheKey(c);
+  c.metadata = { ...c.metadata, provenance: { genre: 'commerce', preset: 'dark', at: 'b' } };
+  check('only `at` changed → same key', evalCacheKey(c) === base);
+  c.metadata = { ...c.metadata, provenance: { genre: 'data', preset: 'dark', at: 'b' } };
+  check('genre field change → new key', evalCacheKey(c) !== base);
+  c.metadata = { ...c.metadata, provenance: { genre: 'commerce', preset: 'material', at: 'b' } };
+  check('preset change with the genre held → new key', evalCacheKey(c) !== base);
+}
+
+// Phase 30 — the viewer scores through the same genre resolution as the
+// agent: its fast score equals evaluateCanvas's for legacy and split stamps.
+for (const provenance of [
+  { preset: 'dashboard', at: 'x' },
+  { genre: 'commerce', preset: 'dark', at: 'x' },
+  { preset: 'material', at: 'x' },
+]) {
+  const c = createCanvas(`Viewer Parity ${JSON.stringify(provenance)}`);
+  parseAndExecute(c.root, `
+f=I("document", { type: "frame", layout: "vertical", gap: 16, padding: 24, fill: "#F8FAFC" })
+I(f, { type: "text", content: "$2,481,330.17", fontSize: 32, color: "#1E293B" })
+I(f, { type: "text", content: "Updated hourly", fontSize: 14, color: "#000000" })
+`, c);
+  c.metadata = { ...c.metadata, provenance } as typeof c.metadata;
+  const viewer = await evalFor(c, []);
+  const agent = await evaluateCanvas(c, { mode: 'fast', designedStates: [] });
+  check(`viewer score = canvas_evaluate score for ${JSON.stringify(provenance)}`,
+    viewer?.overallScore === agent.overallScore && JSON.stringify(viewer?.genre) === JSON.stringify(agent.genre),
+    `${viewer?.overallScore} vs ${agent.overallScore}`);
+}
 
 // Unrelated metadata (feedback) doesn't feed the evaluation → same key.
 canvas.metadata = { ...canvas.metadata, feedback: [{ id: 'fb-1', note: 'nudge left', createdAt: 'x' }] } as typeof canvas.metadata;

@@ -48,7 +48,7 @@ const dashboardRoot = (): SceneNode => ({
 {
   const def = await evaluateCanvas(fakeCanvas(dashboardRoot()), { mode: 'fast' });
   check('default: money/percent copy flags honest-content', honestFlags(def.issues).length >= 3, `got ${honestFlags(def.issues).length}`);
-  check('default: suggestion names the genre escape hatch', honestFlags(def.issues).every((i: { suggestion?: string }) => i.suggestion?.includes('genre: "dashboard"')));
+  check('default: suggestion names the genre escape hatch', honestFlags(def.issues).every((i: { suggestion?: string }) => i.suggestion?.includes('genre: "data"')));
 
   const dash = await evaluateCanvas(fakeCanvas(dashboardRoot()), { mode: 'fast', genre: 'dashboard' });
   check('genre "dashboard": zero honest-content flags', honestFlags(dash.issues).length === 0, `got ${honestFlags(dash.issues).length}`);
