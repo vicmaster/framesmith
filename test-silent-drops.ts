@@ -72,6 +72,14 @@ odd=I("document", {type:"frame", width:390, layout:"vertical", gap:5})`, canvas)
   check('an array with a non-number entry warns too', /series\[0\]\.highlight/.test(badEntry.warning ?? ''), badEntry.warning);
   const [good] = parseAndExecute(canvas.root, `U("${bad.nodeId}", {series:[{data:[1,2,3], highlight:2}]})`, canvas);
   check('a valid scalar highlight carries no warning', good.ok && !good.warning, good.warning);
+  const [cleared] = parseAndExecute(canvas.root, `U("${bad.nodeId}", {series:[{data:[1,2,3], highlight:null}]})`, canvas);
+  check('highlight: null (clearing it) carries no warning', cleared.ok && !cleared.warning, cleared.warning);
+  const [outOfRange] = parseAndExecute(canvas.root, `U("${bad.nodeId}", {series:[{data:[1,2,3], highlight:[1, 7]}]})`, canvas);
+  check('an index past the data warns', /\[7\]/.test(outOfRange.warning ?? ''), outOfRange.warning);
+  const [fraction] = parseAndExecute(canvas.root, `U("${bad.nodeId}", {series:[{data:[1,2,3], highlight:0.7}]})`, canvas);
+  check('a fractional index warns', /0\.7/.test(fraction.warning ?? ''), fraction.warning);
+  const [nested] = parseAndExecute(canvas.root, `I("document", {type:"frame", children:[{type:"chart", kind:"bar", series:[{data:[1,2], highlight:"x"}]}]})`, canvas);
+  check('a chart nested in inserted children is checked too', /series\[0\]\.highlight/.test(nested.warning ?? ''), nested.warning);
 }
 
 // ── 4. evaluate knows the last stress verdict ────────────────────────────────
@@ -88,16 +96,21 @@ odd=I("document", {type:"frame", width:390, layout:"vertical", gap:5})`, canvas)
   check('blocking issues + FRAGILE stress → both named', !withIssues.ready && /1 issue/.test(withIssues.directive) && /3 layout break/.test(withIssues.directive));
 
   const stale = buildEvaluateDirective(fake(), 0, { warnings: 4, current: false });
-  check('FRAGILE on an earlier version → readiness unchanged', stale.ready);
-  check('...but the directive says to re-run canvas_stress', /re-run canvas_stress/.test(stale.directive));
+  check('FRAGILE on an earlier version → still NOT READY (an edit is not a fix)', !stale.ready && /^NOT READY/.test(stale.directive));
+  check('...and the directive says to re-run canvas_stress to confirm', /re-run canvas_stress to confirm/.test(stale.directive));
+  check('READY never sits next to a stress caveat', !/READY TO PRESENT[^]*canvas_stress/.test(stale.directive));
 
   const clean = buildEvaluateDirective(fake(), 0, { warnings: 0, current: true });
   const noRun = buildEvaluateDirective(fake());
   check('CLEAN stress → same directive as no stress run', clean.ready && clean.directive === noRun.directive);
 
-  recordStressRun('c1', { versionHash: 'sha256r:a', warnings: 2 });
-  recordStressRun('c1', { versionHash: 'sha256r:b', warnings: 0 });
-  check('the last stress run per canvas wins', lastStressRun('c1')?.versionHash === 'sha256r:b' && lastStressRun('c1')?.warnings === 0);
+  recordStressRun('c1', { versionHash: 'sha256r:a', warnings: 2 }, true);
+  recordStressRun('c1', { versionHash: 'sha256r:a', warnings: 0 }, false);
+  check('a passing SUBSET run never clears a FRAGILE record', lastStressRun('c1')?.warnings === 2);
+  recordStressRun('c1', { versionHash: 'sha256r:b', warnings: 1 }, false);
+  check('a subset run that breaks records FRAGILE', lastStressRun('c1')?.versionHash === 'sha256r:b' && lastStressRun('c1')?.warnings === 1);
+  recordStressRun('c1', { versionHash: 'sha256r:b', warnings: 0 }, true);
+  check('a full CLEAN run clears it', lastStressRun('c1')?.warnings === 0);
   check('no run recorded → undefined', lastStressRun('never') === undefined);
 }
 

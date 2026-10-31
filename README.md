@@ -179,8 +179,8 @@ Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitl
 |-------|------|-------------|
 | `name` | string? | Canvas name |
 | `projectId` | string? | Target project. Defaults to the built-in Untitled project. See `project_list`. |
-| `width` | number? | Artboard width in px (default 1440) — e.g. 390 for a phone screen |
-| `height` | number? | Artboard height in px (default 900) |
+| `width` | number? | Artboard width in px, a positive integer (default 1440). A phone screen is `width: 390, height: 844`. |
+| `height` | number? | Artboard height in px, a positive integer (default 900). Each dimension defaults on its own. |
 
 The response also carries a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
 
@@ -767,8 +767,8 @@ Compare two canvases visually. Returns a diff image with changed regions highlig
 |-------|------|-------------|
 | `canvasId1` | string | First canvas ID |
 | `canvasId2` | string | Second canvas ID |
-| `width` | number? | Viewport width (default 1440) |
-| `height` | number? | Viewport height (default 900) |
+| `width` | number? | Viewport width (default: the first canvas's artboard width) |
+| `height` | number? | Viewport height (default: the first canvas's artboard height) |
 | `scale` | number? | Device scale (default 1) |
 
 ### `get_feedback` / `resolve_feedback`
@@ -805,7 +805,7 @@ The **`directive`** is the operating contract that keeps unfinished work off the
 
 Open point-and-tell comments block too: when the canvas has any, the result carries `openFeedback: n` and the directive stays blocking even at a READY score — the human's note outranks the heuristics. Read them with `get_feedback`, address each, close them with `resolve_feedback`.
 
-A `FRAGILE` stress run blocks too. Once `canvas_stress` has run on the canvas in this server session, the result carries **`stress`**: `{ verdict, warnings, current }`, where `current` says whether it ran on the canvas's present `versionHash`. A `FRAGILE` run on the current version keeps the directive `NOT READY` even with zero evaluate issues; a `FRAGILE` run on an earlier version leaves readiness alone but asks you to re-run `canvas_stress` before presenting. `canvas_evaluate` never runs stress itself.
+A `FRAGILE` stress run blocks too. Once `canvas_stress` has recorded a verdict for the canvas, the result carries **`stress`**: `{ verdict, warnings, current }`, where `current` says whether that run was on the canvas's present `versionHash`. A `FRAGILE` verdict keeps the directive `NOT READY` even with zero evaluate issues, until a full `CLEAN` run (all five perturbations) replaces it; a subset run can record `FRAGILE` but never clear it. When `current` is false the directive tells you to re-run stress to confirm your fix. The verdict lives in server memory, so a restart forgets it. `canvas_evaluate` never runs stress itself.
 
 Whenever the `cliche` category runs, the result also carries a **`genre`** field auditing the genre decision: `{ active, source, relaxed, notRelaxed }` — the genre in effect, whether it came from the `genre` param or the canvas's provenance stamp, the tells it relaxed, and `notRelaxed` (`[{ tell, relaxedBy }]`) — tells still flagging that a *different* genre would relax. A score pinned by tells listed in `notRelaxed` usually means the wrong genre was declared.
 
@@ -940,7 +940,7 @@ Apply the ops by joining them with newlines and passing to `batch_design`, then 
 
 ### `canvas_stress`
 
-Content stress test — does the design survive real data? Re-renders the canvas under hostile-but-realistic content perturbations and reports exactly what broke, by node id. Never mutates the canvas.
+Content stress test — does the design survive real data? Re-renders the canvas under hostile-but-realistic content perturbations and reports exactly what broke, by node id. Never mutates the canvas. The verdict is remembered for `canvas_evaluate`: any run with warnings records `FRAGILE` (its directive then stays `NOT READY`), and only a run of the full default set records `CLEAN`, so a passing subset never clears an earlier `FRAGILE`.
 
 | Perturbation | What it does |
 |---|---|

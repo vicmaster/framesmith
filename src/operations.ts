@@ -29,21 +29,33 @@ export function ignoredShadowWarning(node: SceneNode, props: Record<string, unkn
   return '`shadow` was ignored: this node also has `shadows`, which always wins at render time. Put the value in `shadows` (array or CSS string), or clear `shadows` first.';
 }
 
-/** A chart series `highlight` takes an index or an array of indices; anything
- * else renders no emphasis. Say so instead of dropping it silently. */
+/** A chart series `highlight` takes a data index or an array of them (null
+ * clears it); anything else emphasizes nothing. Say so instead of dropping it
+ * silently. Walks nested `children` so an inserted subtree is checked too. */
 export function invalidHighlightWarning(props: Record<string, unknown>): string | undefined {
-  if (!Array.isArray(props.series)) return undefined;
-  const isIndex = (v: unknown) => typeof v === 'number' && isFinite(v);
   const bad: string[] = [];
-  props.series.forEach((s, i) => {
-    if (!s || typeof s !== 'object' || !('highlight' in s)) return;
-    const h = (s as { highlight: unknown }).highlight;
-    if (h === undefined || isIndex(h)) return;
-    if (Array.isArray(h) && h.every(isIndex)) return;
-    bad.push(`series[${i}].highlight ${JSON.stringify(h)}`);
-  });
+  const visit = (node: Record<string, unknown>) => {
+    if (Array.isArray(node.series)) {
+      node.series.forEach((s, i) => {
+        if (!s || typeof s !== 'object' || !('highlight' in s)) return;
+        const { highlight, data } = s as { highlight: unknown; data?: unknown };
+        if (highlight === undefined || highlight === null) return;
+        const length = Array.isArray(data) ? data.length : Infinity;
+        const isIndex = (v: unknown) => Number.isInteger(v) && (v as number) >= 0 && (v as number) < length;
+        const entries = Array.isArray(highlight) ? highlight : [highlight];
+        const dropped = entries.filter((v) => !isIndex(v));
+        if (dropped.length > 0 || !(Array.isArray(highlight) || typeof highlight === 'number')) {
+          bad.push(`series[${i}].highlight ${JSON.stringify(dropped.length ? dropped : highlight)}`);
+        }
+      });
+    }
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) if (child && typeof child === 'object') visit(child as Record<string, unknown>);
+    }
+  };
+  visit(props);
   if (bad.length === 0) return undefined;
-  return `Ignored ${bad.join(', ')}: highlight takes a data index (2) or an array of indices ([2, 5]); non-numeric entries render no emphasis.`;
+  return `No emphasis for ${bad.join(', ')}: highlight takes a data index (2) or an array of indices ([2, 5]) within the series' data — those entries were dropped.`;
 }
 
 /** Split an operations string into logical ops (issue #228). A newline ends an

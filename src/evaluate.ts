@@ -2073,8 +2073,10 @@ export async function evaluateCanvas(
   // the consistency and typography (measure) checks.
   let detailedLayout: LayoutRect[] | undefined;
   if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography'))) {
-    const html = renderToHtml(resolvedRoot, 1440, 900, canvas);
-    detailedLayout = await computeLayout(html);
+    const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+    const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+    const html = renderToHtml(resolvedRoot, w, h, canvas);
+    detailedLayout = await computeLayout(html, undefined, 10, { width: w, height: h });
   }
   if (activeCategories.includes('typography')) {
     results.set('typography', checkTypography(entries, mergedTokens, {
