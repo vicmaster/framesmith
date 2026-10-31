@@ -190,13 +190,13 @@ Values marked medium came from secondary sources because Apple's HIG pages are J
 - Six mobile realisations in `src/structures.ts`, referencing type roles and $tokens only.
 - `test-patterns.ts` (`BAR = 95` at :14, five themes at :18; it runs fast mode only today) extended per FR-E4 with a detailed-mode and stress pass in the full tier; `test-discoverability.ts:75-83` extended to anatomies and surfaces.
 
-**Slice F — the viewer (FR-F1..F2)** — needs B's type and profile table and D's `safeArea` for the overlay.
+**Slice F — the viewer (FR-F1..F2)** — needs B's type, profile table and `root.safeArea` (for the overlay).
 - `src/viewer.ts:603-604` and `:756` (thumb sizing), `:515` / `:679` (card iframes), `:1107-1109` and `:1350-1385` (detail sizing, breakpoint buttons, compare grid), `:1474-1476` (active-state detection). Profile table imported from `src/surfaces.ts`.
 - Tests: `test-viewer-perf.ts` must stay green (thumbnail change cannot cost render time); a new viewer route test for card sizing and the framed detail markup.
 
 **Slice G — acceptance (FR-G1).** Rebuild Ridgeline from the attempt brief (`.framesmith/mobile-surface-attempt/`, untracked) on the merged phase, quote the results in the final PR.
 
-Slice order: A → B → C → D → E → F → G. A untangles the field B's ruleset table reads. B gives C a type to key on. C's target rule exists before D so each D primitive is born under it. E needs D's primitives. F needs B and D, and can move ahead of E if convenient. G needs everything.
+Slice order: A → B → C → D → E → F → G. A untangles the field B's ruleset table reads. B gives C a type to key on. C's target rule exists before D so each D primitive is born under it. E needs D's primitives. F needs only B, and can move earlier if convenient. G needs everything.
 
 ---
 
