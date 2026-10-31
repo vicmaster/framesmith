@@ -541,6 +541,20 @@ All five slices are merged, and the acceptance proof has been run: the checkout 
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-29-SPEC.md`](docs/specs/PHASE-29-SPEC.md). Deliberately out of scope: a checkout archetype and a product-image primitive (craft work that belongs on top of a correct evaluator), and flow-shaped state coverage (a larger design question)._
 
+### Phase 30 — The mobile surface (v2.4)
+
+The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and got 100/100, READY TO PRESENT, without a single mobile check running: the touch-target rule only looks at form controls, and the screen had none. Mobile today is a screen size, not a surface. This phase gives a canvas a declared `type` (`web` or `mobile`), separates it from genre and preset so the three declarations stop colliding, and builds the three layers a surface needs: rules that judge a phone, vocabulary to build one, and starting points. Acceptance is literal: the attempt screen rebuilt from a mobile archetype, CLEAN with every tap target a primitive.
+
+- [ ] Slice A — untangle the declarations: genre gets its own field so `apply_preset` stops overwriting it, every stored canvas keeps its verdict through a legacy read, and `data` becomes the canonical purpose genre with `dashboard` as its alias
+- [ ] Slice B — the type axis: `metadata.surface` with one device profile (`iphone-390`), `canvas_create({ type })` and `canvas_set_type`, a ruleset table keyed by type, genre and preset that composes by union and can turn rules on, a `surface` report on every evaluation, and a mobile type scale from `generate_design_system`
+- [ ] Slice C — the mobile ruleset: 44px targets as an error on every tappable primitive, safe areas, a type floor, undeclared phone-width canvases told to declare, hand-built tap targets and multi-column prose named as advisories, and stress that knows the type
+- [ ] Slice D — vocabulary: `fixed` / `sticky` positioning, `safeArea` on the root, and the `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row` and `sheet` primitives
+- [ ] Slice E — starting points: anatomy and realisation on structures, resolution by canvas type, six mobile realisations, and the pattern gate extended to them
+- [ ] Slice F — the viewer: thumbnails at the artboard's real proportions and a device frame with a safe-area overlay
+- [ ] Slice G — the acceptance re-run
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
+
 ### Continuous integration (infrastructure)
 
 Nothing runs on a pull request today: no workflow, no branch protection, no checks. That held because a single disciplined maintainer ran things by hand, but it has already failed silently — the repository has 102 test files and no `test` script to run them as a suite, and two tests were found failing at the v2.0.0 tag itself. The missing runner is the root cause; a pipeline that is red on its first run only teaches you to ignore the red X. Running the suite together for the first time turned up three failing tests, two of them red at the v2.0.0 tag itself; all three are fixed.
