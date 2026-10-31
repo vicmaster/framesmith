@@ -1845,13 +1845,18 @@ function mobileTarget(
   for (let hop = 0; hop < 2 && cur; hop++) {
     if (cur.type === 'frame' && cur.layout === 'horizontal' && countControls(cur) === 1) {
       const pad = paddingSides(cur, rootWidth);
-      const side = (v: SceneNode['width'], min: SceneNode['minWidth'], own: number, padding: number): number => {
-        const full = v === '100%' || v === 'fill_container';
-        const sized = typeof v === 'number' ? v : full ? rootWidth : own + padding;
+      // A width-less row in a vertical (or layout-less) parent that doesn't
+      // set cross-axis alignment stretches to the parent's width.
+      const host = parentOf.get(cur.id) ?? null;
+      const stretches = cur.width === undefined && host !== null && host.layout !== 'horizontal' && host.layout !== 'grid'
+        && (host.alignItems === undefined || host.alignItems === 'stretch');
+      // A full width spans the artboard; a full height says nothing about it.
+      const side = (v: SceneNode['width'], min: SceneNode['minWidth'], own: number, padding: number, full: number | undefined): number => {
+        const sized = typeof v === 'number' ? v : full !== undefined && (v === '100%' || v === 'fill_container') ? full : own + padding;
         return Math.max(sized, typeof min === 'number' ? min : 0);
       };
-      tw = Math.max(tw, side(cur.width, cur.minWidth, w, pad.left + pad.right));
-      th = Math.max(th, side(cur.height, cur.minHeight, h, pad.top + pad.bottom));
+      tw = Math.max(tw, stretches ? rootWidth : side(cur.width, cur.minWidth, w, pad.left + pad.right, rootWidth));
+      th = Math.max(th, side(cur.height, cur.minHeight, h, pad.top + pad.bottom, undefined));
     }
     cur = parentOf.get(cur.id) ?? null;
   }

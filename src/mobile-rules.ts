@@ -88,23 +88,53 @@ const textOf = (n: SceneNode): string | undefined =>
 
 const isPositioned = (n: SceneNode): boolean => n.position !== undefined && POSITIONED.has(n.position);
 
+/** Parent links and the in-flow-content answer per node, built once per
+ * evaluated tree: the walks below ask about the same subtrees repeatedly, and
+ * recomputing would be cubic in nesting depth. */
+interface TreeIndex { parentOf: Map<SceneNode, SceneNode>; flow: Map<SceneNode, boolean> }
+const indexes = new WeakMap<SceneNode, TreeIndex>();
+
+function indexFor(ctx: MobileContext): TreeIndex {
+  let index = indexes.get(ctx.root);
+  if (!index) {
+    const parentOf = new Map<SceneNode, SceneNode>();
+    (function link(n: SceneNode) { for (const c of n.children ?? []) { parentOf.set(c, n); link(c); } })(ctx.root);
+    index = { parentOf, flow: new Map() };
+    indexes.set(ctx.root, index);
+  }
+  return index;
+}
+
 /** Content per the spec's Terms: text, icons, controls, the tappable
  * primitives, instances (opaque — they may hold content), and images narrower
  * than the artboard. Everything else is background. */
-function isContent(n: SceneNode, ancestors: SceneNode[], ctx: MobileContext): boolean {
+function isContent(n: SceneNode, ctx: MobileContext): boolean {
   if (n.type === 'text') return textOf(n) !== undefined;
   if (CONTENT_TYPES.has(n.type)) return true;
   if (n.type !== 'image') return false;
   if (isNum(n.width)) return n.width < ctx.width;
   // A non-numeric width spans the artboard only if nothing above it insets it.
-  return ancestors.some((a) => { const p = paddingSides(a, ctx.width); return p.left + p.right > 0; });
+  // A positioned image's percentage width is of its containing block's padding
+  // box, so ancestor padding never insets it.
+  if (isPositioned(n)) return false;
+  const { parentOf } = indexFor(ctx);
+  for (let a = parentOf.get(n); a; a = parentOf.get(a)) {
+    const p = paddingSides(a, ctx.width);
+    if (p.left + p.right > 0) return true;
+  }
+  return false;
 }
 
 /** Whether any in-flow content sits beneath `n` (positioned subtrees are
  * placed on their own). */
-function holdsFlowContent(n: SceneNode, ancestors: SceneNode[], ctx: MobileContext): boolean {
-  const next = [...ancestors, n];
-  return (n.children ?? []).some((c) => !isPositioned(c) && (isContent(c, next, ctx) || holdsFlowContent(c, next, ctx)));
+function holdsFlowContent(n: SceneNode, ctx: MobileContext): boolean {
+  const { flow } = indexFor(ctx);
+  let held = flow.get(n);
+  if (held === undefined) {
+    held = (n.children ?? []).some((c) => !isPositioned(c) && (isContent(c, ctx) || holdsFlowContent(c, ctx)));
+    flow.set(n, held);
+  }
+  return held;
 }
 
 // ── mobile-safe-area ───────────────────────────────────────────────────────
@@ -127,15 +157,14 @@ interface Hit { node: SceneNode; offset: number }
  * `container`, and its offset from that edge. `offset` is where the
  * container's content box starts (padding already added). Alignment inside
  * fixed-height frames is ignored, so offsets are under-counted, never over. */
-function firstContent(container: SceneNode, offset: number, edge: 'top' | 'bottom', ancestors: SceneNode[], ctx: MobileContext): Hit | null {
-  const next = [...ancestors, container];
+function firstContent(container: SceneNode, offset: number, edge: 'top' | 'bottom', ctx: MobileContext): Hit | null {
   const children = (container.children ?? []).filter((c) => !isPositioned(c));
   const ordered = edge === 'top' ? children : [...children].reverse();
   const visit = (child: SceneNode, at: number): Hit | null => {
-    if (isContent(child, next, ctx)) return { node: child, offset: at };
-    if (!holdsFlowContent(child, next, ctx)) return null;
+    if (isContent(child, ctx)) return { node: child, offset: at };
+    if (!holdsFlowContent(child, ctx)) return null;
     const pad = paddingSides(child, ctx.width);
-    return firstContent(child, at + (edge === 'top' ? pad.top : pad.bottom), edge, next, ctx);
+    return firstContent(child, at + (edge === 'top' ? pad.top : pad.bottom), edge, ctx);
   };
 
   if (container.layout === 'horizontal' || container.layout === 'grid') {
@@ -179,7 +208,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   for (const edge of ['top', 'bottom'] as const) {
     if (edge === 'top' ? insets.topReserved : insets.bottomReserved) continue;
     const inset = insets[edge];
-    const hit = firstContent(ctx.root, edge === 'top' ? rootPad.top : rootPad.bottom, edge, [], ctx);
+    const hit = firstContent(ctx.root, edge === 'top' ? rootPad.top : rootPad.bottom, edge, ctx);
     if (hit && hit.offset < inset) {
       issues.push(issue('usability', rule, 'warning', hit.node,
         `"${hit.node.name ?? hit.node.id}" sits about ${Math.round(hit.offset)}px from the ${edge} of the screen — inside the ${inset}px ${edge === 'top' ? 'status-bar' : 'home-indicator'} inset.`,
@@ -191,24 +220,24 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   // numeric y up to the root. Anything else has an in-flow containing block
   // whose position fast mode doesn't know.
   let unplaceable = false;
-  const visit = (n: SceneNode, ancestors: SceneNode[], placedY: Map<SceneNode, number>): void => {
-    if (isPositioned(n)) {
-      const parent = ancestors[ancestors.length - 1];
+  const placedY = new Map<SceneNode, number>();
+  const visit = (n: SceneNode, parent: SceneNode | undefined): void => {
+    if (parent && isPositioned(n)) {
       const base = parent === ctx.root ? 0 : placedY.get(parent);
       const y = base !== undefined && isNum(n.y) ? base + n.y : undefined;
       if (y === undefined) {
-        if (isContent(n, ancestors, ctx) || holdsFlowContent(n, ancestors, ctx)) unplaceable = true;
+        if (isContent(n, ctx) || holdsFlowContent(n, ctx)) unplaceable = true;
       } else {
         placedY.set(n, y);
-        checkPlaced(n, y, ancestors);
+        checkPlaced(n, y);
       }
     }
-    for (const c of n.children ?? []) visit(c, [...ancestors, n], placedY);
+    for (const c of n.children ?? []) visit(c, n);
   };
 
-  const checkPlaced = (n: SceneNode, y: number, ancestors: SceneNode[]): void => {
+  const checkPlaced = (n: SceneNode, y: number): void => {
     const bottomEdge = ctx.height - insets.bottom;
-    if (isContent(n, ancestors, ctx)) {
+    if (isContent(n, ctx)) {
       const h = n.type === 'text' ? textHeight(n) : isNum(n.height) ? n.height : 0;
       if (y < insets.top || y + h > bottomEdge) {
         const edge = y < insets.top ? 'top' : 'bottom';
@@ -218,10 +247,10 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
       }
       return;
     }
-    if (!holdsFlowContent(n, ancestors, ctx)) return;
+    if (!holdsFlowContent(n, ctx)) return;
     const pad = paddingSides(n, ctx.width);
-    const top = firstContent(n, y + pad.top, 'top', ancestors, ctx);
-    const bottom = isNum(n.height) ? firstContent(n, ctx.height - (y + n.height) + pad.bottom, 'bottom', ancestors, ctx) : null;
+    const top = firstContent(n, y + pad.top, 'top', ctx);
+    const bottom = isNum(n.height) ? firstContent(n, ctx.height - (y + n.height) + pad.bottom, 'bottom', ctx) : null;
     for (const [hit, edge, inset] of [[top, 'top', insets.top], [bottom, 'bottom', insets.bottom]] as const) {
       if (hit && hit.offset < inset) {
         issues.push(issue('usability', rule, 'warning', hit.node,
@@ -231,7 +260,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
     }
   };
 
-  visit(ctx.root, [], new Map());
+  visit(ctx.root, undefined);
   if (unplaceable) {
     issues.push(issue('usability', rule, 'info', ctx.root,
       'Some positioned content sits inside an in-flow frame, so fast mode cannot place it against the safe areas.',
@@ -339,14 +368,16 @@ export function checkHandbuiltTargets(ctx: MobileContext): EvaluationIssue[] {
     const icons: SceneNode[] = [];
     const texts: SceneNode[] = [];
     let other = false;
-    (function walk(x: SceneNode, ancestors: SceneNode[]) {
+    // Stops as soon as the frame can no longer be tap-shaped.
+    (function walk(x: SceneNode) {
       for (const c of x.children ?? []) {
+        if (other || icons.length > 1 || texts.length > 1) return;
         if (c.type === 'icon') icons.push(c);
         else if (textOf(c) !== undefined) texts.push(c);
-        else if (isContent(c, [...ancestors, x], ctx)) other = true;
-        walk(c, [...ancestors, x]);
+        else if (isContent(c, ctx)) other = true;
+        walk(c);
       }
-    })(n, []);
+    })(n);
     if (other || icons.length !== 1 || texts.length > 1) return null;
     if (texts.length === 1 && proseWords(texts[0].content as string) > LABEL_WORDS) return null;
     return { icon: icons[0] };

@@ -35,6 +35,11 @@ async function safeArea(c: Canvas, mode: 'fast' | 'detailed'): Promise<Evaluatio
 }
 const show = (list: EvaluationIssue[]) => JSON.stringify(list.map((i) => `${i.severity} ${i.nodeId}: ${i.message.slice(0, 80)}`));
 
+async function iss(c: Canvas, rule: string, mode: 'fast' | 'detailed' = 'fast', categories?: string[]): Promise<EvaluationIssue[]> {
+  const r = await evaluateCanvas(c, { mode, ...(categories ? { categories: categories as never } : {}) });
+  return r.issues.filter((i) => i.rule === rule);
+}
+
 const flow = `f=I("document", { type: "frame", layout: "vertical", gap: 12, padding: [0, 16] })
 I(f, { type: "text", content: "Today" })
 I(f, { type: "text", content: "Nothing planned." })`;
@@ -71,6 +76,11 @@ I(w, { type: "text", content: "Badge", position: "absolute", x: 0, y: -80 })`);
   const tallDetailed = await safeArea(tall, 'detailed');
   check('tall screen on the default path: detailed catches the document end in the inset', tallDetailed.length > 0 && tallDetailed.every((i) => i.message.includes('end of the scroll')), show(tallDetailed));
   check('…which fast mode trusts the reservation for (recorded gap until slice D)', tallFast.length === 0, show(tallFast));
+
+  console.log('\n── boundaries (detailed) ──');
+  check('G-D1 detailed + categories [usability] only still checks rendered rects (E21)', (await iss(tall, 'mobile-safe-area', 'detailed', ['usability'])).length > 0);
+  let ops = 'p0=I("document", { type: "frame" })\n'; for (let k = 1; k < 14; k++) ops += `p${k}=I(p${k - 1}, { type: "frame" })\n`; ops += 'I(p13, { type: "text", content: "Deep" })';
+  check('G-D2 text 15 levels deep in the top inset (bare root) is seen in detailed (E22)', (await iss(phone(ops, { bare: true }), 'mobile-safe-area', 'detailed')).some((i) => i.message.includes('top')));
 } finally {
   await shutdown();
 }
@@ -116,6 +126,29 @@ I(b, { type: "text", content: "Morning run" })` });
   } finally {
     await client.close();
   }
+}
+
+// ── stress wiring boundaries (MCP) ──
+{
+  const home = mkdtempSync(join(tmpdir(), 'fm-gap-')); const cwd = mkdtempSync(join(tmpdir(), 'fm-gap-cwd-'));
+  const transport = new StdioClientTransport({ command: resolve('node_modules/.bin/tsx'), args: [resolve('src/index.ts')], cwd,
+    env: { ...process.env, FRAMESMITH_HOME: home, CANVAS_MCP_PROJECT_DIR: cwd, FRAMESMITH_VIEWER_URL: 'http://localhost:1' } as Record<string, string>, stderr: 'ignore' });
+  const client = new Client({ name: 'gap', version: '0' }); await client.connect(transport);
+  const tool = async (name: string, args: Record<string, unknown>) => { const r = await client.callTool({ name, arguments: args }) as { content: { text: string }[] }; try { return JSON.parse(r.content[0].text); } catch { return { text: r.content[0]?.text }; } };
+  try {
+    const m = await tool('canvas_create', { name: 'Mono', type: 'mobile' });
+    await tool('batch_design', { canvasId: m.canvasId, operations: 'b=I("document", { type: "frame", width: 40, height: 20 })\nI(b, { type: "text", content: "FM" })' });
+    const s = await tool('canvas_stress', { canvasId: m.canvasId, perturbations: ['long-text'] });
+    check('G-M1 canvas_stress on a mobile canvas leaves a 2-char monogram alone (X05)', s.counts?.warnings === 0, JSON.stringify(s.counts) + JSON.stringify(s.perturbations ?? s.results ?? '').slice(0, 120));
+    const w = await tool('canvas_create', { name: 'Web', type: 'web', width: 600, height: 400 });
+    await tool('batch_design', { canvasId: w.canvasId, operations: 'b=I("document", { type: "frame", width: 300, height: 20 })\nI(b, { type: "text", content: "Morning run" })' });
+    await tool('canvas_stress', { canvasId: w.canvasId });
+    const cur = await tool('canvas_evaluate', { canvasId: w.canvasId });
+    check('G-M2 directive says "this exact version" when the run is current (D02)', cur.stress?.current === true && cur.directive.includes('this exact version'), cur.directive.slice(0, 200));
+    await tool('batch_design', { canvasId: w.canvasId, operations: 'I("document", { type: "text", content: "Edited" })' });
+    const aft = await tool('canvas_evaluate', { canvasId: w.canvasId });
+    check('G-M3 after an edit the same-type record is no longer current (X04)', aft.stress?.current === false && aft.directive.includes('earlier version'), JSON.stringify(aft.stress));
+  } finally { await client.close(); }
 }
 
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');

@@ -89,6 +89,16 @@ I(r, { type: "text", content: "Sync" })
 I(r, { type: "toggle" })`), 'mobile-touch-target');
   check('row padding 32 renders ~9px on a phone → toggle row is 41px → error', scaled.length === 1, show(scaled));
 
+  const stretched = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", height: 44 })
+I(r, { type: "text", content: "Remember me" })
+I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
+  check('a width-less 44px row in a vertical parent stretches full width → passes (the hint works verbatim)', stretched.length === 0, show(stretched));
+
+  const fullHeight = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", width: "100%", height: "100%" })
+I(r, { type: "text", content: "Remember me" })
+I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
+  check('a full-HEIGHT row says nothing about its height → still an error', fullHeight.length === 1 && fullHeight[0].message.includes('390×18'), show(fullHeight));
+
   const two = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", height: 56 })
 I(r, { type: "text", content: "Pair" })
 I(r, { type: "checkbox", width: 24, height: 24 })
@@ -173,6 +183,12 @@ ${flow}
 I("document", { type: "frame", height: 34 })`, { bare: true }), 'mobile-safe-area');
   check('full-width hero image under the status bar, text below the inset → clean', hero.length === 0, show(hero));
 
+  const absHero = phone(`I("document", { type: "image", src: "https://example.com/hero.jpg", position: "absolute", x: 0, y: 0, width: "100%", height: 200 })
+${flow}`);
+  absHero.root.padding = 16;
+  const absHeroI = await issues(absHero, 'mobile-safe-area');
+  check('absolute full-width hero in a padded root is background, not content → clean', absHeroI.length === 0, show(absHeroI));
+
   const row = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", padding: [8, 16] })
 I(r, { type: "text", content: "Back" })
 I(r, { type: "text", content: "Edit" })
@@ -190,6 +206,31 @@ I(o, { type: "text", content: "Welcome back" })`);
 w=I("document", { type: "frame", layout: "vertical" })
 I(w, { type: "text", content: "Badge", position: "absolute", x: 0, y: 0 })`), 'mobile-safe-area');
   check('absolute content inside an in-flow frame → one info naming detailed mode', nested.length === 1 && nested[0].severity === 'info' && nested[0].suggestion?.includes('detailed'), show(nested));
+}
+
+// ── cost: the walks stay near-linear in nesting depth ─────────────────────
+{
+  console.log('\n── cost ──');
+  const chain = (depth: number): Canvas => {
+    const c = phone('', { bare: true });
+    let parent = c.root;
+    for (let k = 0; k < depth; k++) {
+      const f = { id: `d${depth}-${k}`, type: 'frame', layout: 'vertical', children: [] } as unknown as SceneNode;
+      parent.children = [...(parent.children ?? []), f];
+      parent = f;
+    }
+    parent.children = [{ id: `d${depth}-leaf`, type: 'icon', icon: 'bell' } as SceneNode];
+    return c;
+  };
+  const time = async (c: Canvas) => {
+    const t = performance.now();
+    await evaluateCanvas(c, { mode: 'fast', categories: ['usability'] });
+    return performance.now() - t;
+  };
+  await time(chain(50)); // warm up
+  const small = Math.min(await time(chain(150)), await time(chain(150)));
+  const large = Math.min(await time(chain(600)), await time(chain(600)));
+  check('a 4× deeper chain costs well under 16× (no cubic walk)', large < small * 16, `${small.toFixed(1)}ms → ${large.toFixed(1)}ms`);
 }
 
 // ── FR-C4 mobile-type-floor ───────────────────────────────────────────────
@@ -309,6 +350,106 @@ I(s, { type: "text", content: "5:12 /km" })`);
   check('FRAGILE then a type change: still NOT READY, the note names the earlier type', !fragileOtherType.ready && fragileOtherType.directive.includes('earlier type ("mobile")'), fragileOtherType.directive);
   const fragileEdit = buildEvaluateDirective(clean, 0, { warnings: 2, current: false });
   check('FRAGILE then an edit: the note says earlier version', fragileEdit.directive.includes('earlier version'));
+}
+
+// ── boundaries (from the slice C mutation round) ───────────────────────────
+// Each check below killed a mutant the rule fixtures above let survive.
+async function iss(c: Canvas, rule: string, mode: 'fast' | 'detailed' = 'fast', categories?: string[]): Promise<EvaluationIssue[]> {
+  const r = await evaluateCanvas(c, { mode, ...(categories ? { categories: categories as never } : {}) });
+  return r.issues.filter((i) => i.rule === rule);
+}
+const T = (content: string, fs: number) => `I("document", { type: "text", content: "${content}", fontSize: ${fs} })`;
+const WORDS = ['alpha', 'bravo', 'cedar', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima', 'mike'];
+const W = (n: number) => WORDS.slice(0, n).join(' ');
+{
+  console.log('\n── boundaries ──');
+// --- type floor / prose boundaries
+check('G-F1 11px label: no type-floor issue (M31)', (await iss(phone(T('Mon', 11)), 'mobile-type-floor')).length === 0);
+check('G-F2 $body at exactly 16: clean (M32)', (await iss((() => { const c = phone('I("document", { type: "text", content: "Hi", fontSize: "$body" })'); c.variables = { ...c.variables, typography: { body: { fontSize: 16 } } } as never; return c; })(), 'mobile-type-floor')).length === 0);
+check('G-F3 13px 6-word prose: no issue (M04,M34)', (await iss(phone(T(W(6), 13)), 'mobile-type-floor')).length === 0);
+check('G-F4 12px 5-word prose: warning (M06)', (await iss(phone(T(W(5), 12)), 'mobile-type-floor')).length === 1);
+check('G-F5 12px 4-word prose: none (M05)', (await iss(phone(T(W(4), 12)), 'mobile-type-floor')).length === 0);
+check('G-F6 14px exactly 12 words: info (M07)', (await iss(phone(T(W(12), 14)), 'mobile-type-floor')).length === 1);
+check('G-F7 14px 11 words: none (M08)', (await iss(phone(T(W(11), 14)), 'mobile-type-floor')).length === 0);
+
+// --- one-column
+const row2 = (a: string, b: string, layout = 'horizontal') => `r=I("document", { type: "frame", layout: "${layout}" })\na=I(r, { type: "frame" })\nI(a, { type: "text", content: "${a}" })\nb=I(r, { type: "frame" })\nI(b, { type: "text", content: "${b}" })`;
+check('G-C1 avatar + one prose block row: no one-column (M35)', (await iss(phone(row2('JD', W(10))), 'mobile-one-column')).length === 0);
+check('G-C2 grid with two prose blocks: info (M36)', (await iss(phone(row2(W(10), W(10), 'grid')), 'mobile-one-column')).length === 1);
+check('G-C3 two blocks of exactly 8 words: info (M09)', (await iss(phone(row2(W(8), W(8))), 'mobile-one-column')).length === 1);
+check('G-C4 web canvas with two prose columns: no one-column (E17)', (await iss(phone(row2(W(10), W(10)), { type: 'web' }), 'mobile-one-column')).length === 0);
+
+// --- handbuilt
+check('G-H1 icon + exactly 3-word label, 32 tall: info (M10)', (await iss(phone('s=I("document", { type: "frame", layout: "horizontal", height: 32 })\nI(s, { type: "icon", icon: "plus" })\nI(s, { type: "text", content: "Add new item" })'), 'mobile-handbuilt-target')).length === 1);
+check('G-H2 icon + 4-word label: not tap shaped (M39-ish)', (await iss(phone('s=I("document", { type: "frame", layout: "horizontal", height: 32 })\nI(s, { type: "icon", icon: "plus" })\nI(s, { type: "text", content: "Add a new item" })'), 'mobile-handbuilt-target')).length === 0);
+check('G-H5 icon + two short texts: not tap shaped (M39)', (await iss(phone('s=I("document", { type: "frame", layout: "horizontal", height: 32 })\nI(s, { type: "icon", icon: "plus" })\nI(s, { type: "text", content: "Add" })\nI(s, { type: "text", content: "item" })'), 'mobile-handbuilt-target')).length === 0);
+check('G-H3 hug icon frame, default icon 24 + padding 10 = 44: none (M38)', (await iss(phone('h=I("document", { type: "frame", padding: 10 })\nI(h, { type: "icon", icon: "x" })'), 'mobile-handbuilt-target')).length === 0);
+check('G-H4 3-value padding [0,12,0] height 44 icon-only: none (M17)', await (async () => { const c = phone('h=I("document", { type: "frame", height: 44 })\nI(h, { type: "icon", icon: "x" })'); (c.root.children![0] as SceneNode).padding = [0, 12, 0] as never; return (await iss(c, 'mobile-handbuilt-target')).length === 0; })());
+
+// --- artboard
+check('G-A1 mobile 390x900: info (M40)', (await iss(phone(T('x', 16), { height: 900 }), 'mobile-artboard')).length === 1);
+check('G-A2 mobile at exactly 500: warning (M41)', (await iss(phone(T('x', 16), { width: 500, height: 844 }), 'mobile-artboard')).some((i) => i.severity === 'warning'));
+check('G-A3 mobile at 480 (<500): info only (M02)', (await iss(phone(T('x', 16), { width: 480, height: 844 }), 'mobile-artboard')).every((i) => i.severity === 'info'));
+
+// --- touch target
+const tt = async (ops: string) => (await iss(phone(ops), 'mobile-touch-target')).length;
+check('G-T1 toggle > vertical wrapper > 44px row: passes via hop 2 (E01)', await tt('r=I("document", { type: "frame", layout: "horizontal", height: 44, width: "100%" })\nw=I(r, { type: "frame", layout: "vertical" })\nI(w, { type: "toggle" })') === 0);
+check('G-T2 3 levels deep: row out of reach → error (E02)', await tt('r=I("document", { type: "frame", layout: "horizontal", height: 44, width: "100%" })\na=I(r, { type: "frame", layout: "vertical" })\nb=I(a, { type: "frame", layout: "vertical" })\nI(b, { type: "checkbox", width: 24, height: 24 })') === 1);
+check('G-T3 row minHeight 44, no height: passes (E06)', await tt('r=I("document", { type: "frame", layout: "horizontal", minHeight: 44, width: "100%" })\nI(r, { type: "checkbox", width: 24, height: 24 })') === 0);
+check('G-T4 row width fill_container height 44: passes (E05)', await tt('r=I("document", { type: "frame", layout: "horizontal", height: 44, width: "fill_container" })\nI(r, { type: "checkbox", width: 24, height: 24 })') === 0);
+check('G-T5 two checkboxes in a wide 56 row: both error (E04)', await tt('r=I("document", { type: "frame", layout: "horizontal", height: 56, width: "100%" })\nI(r, { type: "checkbox", width: 24, height: 24 })\nI(r, { type: "checkbox", width: 24, height: 24 })') === 2);
+{
+  const r = await evaluateCanvas(phone('f=I("document", { type: "frame", layout: "vertical", padding: 12 })\nI(f, { type: "text", content: "Remember me" })\nI(f, { type: "checkbox", width: 32, height: 32 })'), { mode: 'fast', categories: ['usability'] });
+  const u = r.categories.find((c) => c.name === 'usability')!;
+  check('G-T6 touch error costs 25 points: usability 75 (E10)', u.score === 75, String(u.score));
+}
+{
+  const r = await evaluateCanvas(phone('a=I("document", { type: "frame", width: 40, height: 40 })\nI(a, { type: "icon", icon: "bell" })'), { mode: 'fast', categories: ['usability'] });
+  check('G-T7 info-only handbuilt finding costs 0: usability 100 (E13)', r.categories.find((c) => c.name === 'usability')!.score === 100);
+}
+{
+  const r = await evaluateCanvas(phone(T('Mon', 9)), { mode: 'fast', categories: ['typography'] });
+  const t = r.categories.find((c) => c.name === 'typography')!;
+  const base = await evaluateCanvas(phone(T('Mon', 16)), { mode: 'fast', categories: ['typography'] });
+  check('G-T8 type-floor warning costs 10 vs the same text at 16 (E12)', base.categories[0].score - t.score >= 10, `${base.categories[0].score} vs ${t.score}`);
+}
+
+// --- safe-area fast
+const sa = async (ops: string, o: Parameters<typeof phone>[1] = {}) => (await iss(phone(ops, o), 'mobile-safe-area')).length;
+const flow1 = 'f=I("document", { type: "frame", layout: "vertical", gap: 12 })\nI(f, { type: "text", content: "Today" })';
+check('G-S1 bare root + spacers + positioned text at y 100: clean (M21)', await sa(`I("document", { type: "frame", height: 47 })\n${flow1}\nI("document", { type: "frame", height: 34 })\nI("document", { type: "text", content: "Pin", position: "absolute", x: 0, y: 100 })`, { bare: true }) === 0);
+check('G-S2 numeric image width 390 on bare root: background (M19)', await sa(`I("document", { type: "image", src: "https://example.com/h.jpg", width: 390, height: 220 })\n${flow1}\nI("document", { type: "frame", height: 34 })`, { bare: true }) === 0);
+check('G-S3 positioned text, y 800, lineHeight 1.5 @20px: bottom warning (M25)', await sa(`${flow1}\nI("document", { type: "text", content: "Saved", fontSize: 20, lineHeight: 1.5, position: "absolute", x: 0, y: 800 })`) === 1);
+check('G-S4 positioned text height 20 ending exactly at 810: clean (M26)', await sa(`${flow1}\nI("document", { type: "text", content: "Saved", height: 20, position: "absolute", x: 0, y: 790 })`) === 0);
+check('G-S5 explicit safeArea {0,0} reserved: no walk warning (S07)', await (async () => { const c = phone(flow1); (c.root as SceneNode).safeArea = { top: 0, bottom: 0 } as never; return (await iss(c, 'mobile-safe-area')).length === 0; })());
+// --- stress pure
+{
+  let n = 0; const id = () => `g${++n}`;
+  const row = (title: string) => ({ id: id(), type: 'list-row', title } as unknown as SceneNode);
+  const mk = (kids: SceneNode[]) => ({ id: 'document', type: 'document', children: kids } as SceneNode);
+  const sp = { id: id(), type: 'frame' } as SceneNode;
+  const root = mk([{ id: id(), type: 'frame', children: [row('A1'), row('A2'), sp, row('B1'), row('B2')] } as SceneNode]);
+  const e = applyPerturbation('empty', root, { type: 'mobile' });
+  check('G-L1 two runs in one container: empty removes both (T14)', e.root.children![0].children!.length === 1, String(e.root.children![0].children!.length));
+  const m = applyPerturbation('many', root, { type: 'mobile' });
+  check('G-L2 two runs: many triples both (T14)', m.root.children![0].children!.length === 1 + 12, String(m.root.children![0].children!.length));
+  const sm = mk([{ id: id(), type: 'text', content: 'Mon' } as SceneNode, { id: id(), type: 'text', content: 'Home' } as SceneNode]);
+  const lt = applyPerturbation('long-text', sm, { type: 'mobile' });
+  check('G-L3 mobile long-text: 3-char "Mon" untouched, 4-char "Home" perturbed (T01)', lt.root.children![0].content === 'Mon' && (lt.root.children![1].content as string).length > 10);
+  const prim = mk([
+    { id: 'b', type: 'button', label: 'Start run' }, { id: 'n', type: 'nav-bar', title: 'Routes', leading: { label: 'Back' }, trailing: [{ label: 'Edit' }] },
+  ] as unknown as SceneNode[]);
+  const L = (r: SceneNode, i: number) => r.children![i] as unknown as { label?: string; title?: string; leading?: { label: string }; trailing?: { label: string }[] };
+  const mob = applyPerturbation('long-text', prim, { type: 'mobile' });
+  check('G-P1 mobile long-text: button label perturbed (T05)', (L(mob.root, 0).label ?? '').length > 15);
+  check('G-P2 mobile long-text: nav-bar title perturbed (T06)', (L(mob.root, 1).title ?? '').length > 10);
+  check('G-P3 mobile long-text: nav-bar leading/trailing labels fixed (T07,T08)', L(mob.root, 1).leading!.label === 'Back' && L(mob.root, 1).trailing![0].label === 'Edit');
+  const i18 = applyPerturbation('i18n', prim, { type: 'mobile' });
+  check('G-P4 mobile i18n: nav-bar leading/trailing labels perturbed (T07,T08)', L(i18.root, 1).leading!.label !== 'Back' && L(i18.root, 1).trailing![0].label !== 'Edit');
+  const blank = mk([{ id: 'b2', type: 'button', label: '   ' }] as unknown as SceneNode[]);
+  check('G-P5 whitespace-only label is not touched (T11)', applyPerturbation('long-text', blank, { type: 'web' }).touched.length === 0);
+}
+
 }
 
 // ── the real tool handlers over MCP stdio ─────────────────────────────────
