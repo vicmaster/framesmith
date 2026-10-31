@@ -1119,7 +1119,8 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
     if (prov.structure) parts.push(esc(prov.structure));
     const genre = resolveGenre(canvas).genre;
     if (genre) parts.push(esc(genre));
-    if (prov.preset && isPresetName(prov.preset)) parts.push(esc(prov.preset));
+    // A legacy genre stored in `preset` already showed as the genre above.
+    if (prov.preset && ('genre' in prov || isPresetName(prov.preset))) parts.push(esc(prov.preset));
     const ax = prov.axes ? [prov.axes.alignment, prov.axes.density].filter(Boolean).join('/') : '';
     if (ax) parts.push(esc(ax));
     if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / genre / preset / axes of this canvas"><b>◆</b>${parts.join(' · ')}</span>`;

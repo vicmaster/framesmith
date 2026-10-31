@@ -1084,6 +1084,22 @@ export function knownGenres(): string[] {
   return Object.keys(RELAXED_BY_GENRE);
 }
 
+/** canvas_set_genre's result fields for a stamp on a canvas with `preset`:
+ * the canonical genre, what the genre relaxes, and what the preset relaxes on
+ * its own (a genre clear never removes the latter). */
+export function describeGenreStamp(genre: string | null, preset: string | undefined): {
+  canonical: string | null;
+  relaxes: ClicheTell[];
+  presetRelaxes?: { preset: string; relaxed: ClicheTell[] };
+} {
+  const presetRelaxed = relaxedByPreset(preset);
+  return {
+    canonical: genre === null ? null : canonicalGenre(genre),
+    relaxes: genre === null ? [] : relaxedByGenre(genre),
+    ...(presetRelaxed.length ? { presetRelaxes: { preset: preset!, relaxed: presetRelaxed } } : {}),
+  };
+}
+
 /** Phase 30 — the one genre resolution every evaluator shares (canvas_evaluate,
  * canvas_autofix, the viewer): the explicit option, else the canvas's stored
  * genre (incl. the legacy read of `preset`), folded to its canonical name. */

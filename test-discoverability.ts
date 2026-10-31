@@ -191,7 +191,7 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
 // wrong label. And the genre/preset split's new output fields stay documented.
 {
   const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
-  const recommends = /genre:\s*\\?["`]dashboard\\?["`]|canvas_set_genre\(\s*\\?["`]dashboard/;
+  const recommends = /genre[:=]?\s*\\?["'`]dashboard\\?["'`]|set_genre\(\s*\\?["'`]dashboard/;
   const offenders: string[] = [];
   for (const [label, src] of [['src/index.ts', indexSrc], ['src/evaluate.ts', evaluateSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
     src.split('\n').forEach((line, i) => { if (recommends.test(line)) offenders.push(`${label}:${i + 1}`); });

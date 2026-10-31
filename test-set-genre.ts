@@ -13,8 +13,9 @@ import { createCanvas, setCanvasGenre, getCanvas } from './src/scene-graph.js';
 import { applyStructure } from './src/structures.js';
 import { parseAndExecute } from './src/operations.js';
 import { canvasVersionHash } from './src/version.js';
-import { evaluateCanvas, relaxedByGenre, relaxedByPreset, canonicalGenre, knownGenres } from './src/evaluate.js';
+import { evaluateCanvas, relaxedByGenre, canonicalGenre, describeGenreStamp, knownGenres } from './src/evaluate.js';
 import { stampPreset, isPresetName } from './src/genre.js';
+import { registerPreset } from './src/presets.js';
 
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
@@ -147,7 +148,8 @@ const applyPreset = (id: string, preset: string) => {
     r.genre?.active === null && r.genre!.relaxed.slice().sort().join(',') === 'accent-hue,pure-black-white' && r.genre?.byPreset?.preset === 'material', JSON.stringify(r.genre));
   const tellsOf = (res: typeof r) => res.issues.filter((i) => i.category === 'cliche').map((i) => i.tell).sort().join(',');
   check('AC7: score and tells unchanged vs genre material', r.overallScore === twin.overallScore && tellsOf(r) === tellsOf(twin), `${r.overallScore}/${tellsOf(r)} vs ${twin.overallScore}/${tellsOf(twin)}`);
-  check('AC7: the pure-black ink is actually relaxed (fixture sanity)', !tellsOf(r).includes('pure-black-white'));
+  const bareTells = tellsOf(await evaluateCanvas(freshCanvas('ac7-bare'), { mode: 'fast' }));
+  check('AC7: the pure-black ink flags without material and is relaxed with it (fixture sanity)', bareTells.includes('pure-black-white') && !tellsOf(r).includes('pure-black-white'), bareTells);
   // AC8 — an explicit genre replaces only the genre axis.
   const e = await evaluateCanvas(c, { mode: 'fast', genre: 'commerce' });
   check('AC8: explicit commerce on a material preset relaxes all three',
@@ -176,7 +178,15 @@ const applyPreset = (id: string, preset: string) => {
   const c = freshCanvas('ac14', { preset: 'material' });
   const r = setCanvasGenre(c.id, null);
   check('AC14: material preset is not a genre to clear', r?.previous === null && prov(c.id)?.preset === 'material');
-  check('AC14: the preset relaxation is still reported', relaxedByPreset(prov(c.id)?.preset as string).length === 2);
+  const d = describeGenreStamp(null, prov(c.id)?.preset as string);
+  check('AC14: the tool result reports presetRelaxes', d.presetRelaxes?.preset === 'material' && d.presetRelaxes.relaxed.length === 2 && d.canonical === null, JSON.stringify(d));
+}
+{
+  // AC11 — the tool result's canonical field folds the alias.
+  const d = describeGenreStamp('dashboard', undefined);
+  check('AC11: canonical "data" for "dashboard", relaxes honest-content, no presetRelaxes',
+    d.canonical === 'data' && d.relaxes.join(',') === 'honest-content' && d.presetRelaxes === undefined, JSON.stringify(d));
+  check('AC11: canonical "commerce" for "checkout"', describeGenreStamp('checkout', 'dark').canonical === 'commerce');
 }
 {
   // AC15 — genre is free text; own-key lookups only.
@@ -187,6 +197,15 @@ const applyPreset = (id: string, preset: string) => {
   try { r = await evaluateCanvas(c, { mode: 'fast' }); } catch { threw = true; }
   check('AC15: "constructor" genre evaluates', !threw && r?.genre?.active === 'constructor' && r.genre.relaxed.length === 0);
   check('AC15: relaxedByGenre("__proto__") → []', relaxedByGenre('__proto__').length === 0);
+}
+{
+  // A preset registered at runtime (import_design_md) under a genre's name
+  // must not change how a stored legacy genre reads — the registry differs
+  // per process, so it can never decide what a stored value means.
+  registerPreset({ name: 'commerce', description: 'imported', variables: {} });
+  const r = await evaluateCanvas(freshCanvas('registry', { preset: 'commerce' }), { mode: 'fast' });
+  check('registered preset "commerce" does not turn a legacy commerce genre into a preset', r.genre?.active === 'commerce' && r.genre.relaxed.includes('honest-content'));
+  check('isPresetName ignores the runtime registry', !isPresetName('commerce'));
 }
 {
   // Built-in preset names come from presets.ts, captured before imports.
