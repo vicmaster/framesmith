@@ -29,6 +29,23 @@ export function ignoredShadowWarning(node: SceneNode, props: Record<string, unkn
   return '`shadow` was ignored: this node also has `shadows`, which always wins at render time. Put the value in `shadows` (array or CSS string), or clear `shadows` first.';
 }
 
+/** A chart series `highlight` takes an index or an array of indices; anything
+ * else renders no emphasis. Say so instead of dropping it silently. */
+export function invalidHighlightWarning(props: Record<string, unknown>): string | undefined {
+  if (!Array.isArray(props.series)) return undefined;
+  const isIndex = (v: unknown) => typeof v === 'number' && isFinite(v);
+  const bad: string[] = [];
+  props.series.forEach((s, i) => {
+    if (!s || typeof s !== 'object' || !('highlight' in s)) return;
+    const h = (s as { highlight: unknown }).highlight;
+    if (h === undefined || isIndex(h)) return;
+    if (Array.isArray(h) && h.every(isIndex)) return;
+    bad.push(`series[${i}].highlight ${JSON.stringify(h)}`);
+  });
+  if (bad.length === 0) return undefined;
+  return `Ignored ${bad.join(', ')}: highlight takes a data index (2) or an array of indices ([2, 5]); non-numeric entries render no emphasis.`;
+}
+
 /** Split an operations string into logical ops (issue #228). A newline ends an
  * op only at bracket depth 0, so one op may span lines (its inner newlines
  * become spaces, keeping executeLine's single-line regexes valid). At depth 0
@@ -344,8 +361,9 @@ function executeLine(root: SceneNode, line: string, bindings: Map<string, string
   }
 }
 
-/** Attach the ignored-`shadow` warning to a successful result when it applies. */
+/** Attach the ignored-`shadow` / invalid-`highlight` warnings to a successful
+ * result when they apply. */
 function withWarning(result: OperationResult, node: SceneNode, props: Record<string, unknown>): OperationResult {
-  const warning = ignoredShadowWarning(node, props);
-  return warning ? { ...result, warning } : result;
+  const warnings = [ignoredShadowWarning(node, props), invalidHighlightWarning(props)].filter(Boolean);
+  return warnings.length ? { ...result, warning: warnings.join(' ') } : result;
 }

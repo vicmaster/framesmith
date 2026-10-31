@@ -238,6 +238,14 @@ export function chartGeometry(node: SceneNode, boxW: number, boxH: number): Char
   };
 }
 
+/** Highlight indices: a single finite number is shorthand for `[n]`; anything
+ * else non-array means no emphasis (batch_design warns — see operations.ts). */
+function chartHighlight(value: unknown): number[] | null {
+  if (typeof value === 'number' && isFinite(value)) return [value];
+  if (!Array.isArray(value)) return null;
+  return value.filter((n): n is number => typeof n === 'number' && isFinite(n));
+}
+
 /** Sanitized series: finite numbers only, empty series dropped, colors defaulted. */
 function chartSeriesData(node: SceneNode): Array<{ data: number[]; stroke: string; strokeWidth: number; dash: string | null; area: boolean; points: boolean; highlight: number[] | null; barGradient: boolean }> {
   return (node.series ?? [])
@@ -249,7 +257,7 @@ function chartSeriesData(node: SceneNode): Array<{ data: number[]; stroke: strin
       dash: dasharrayValue(s.strokeDasharray),
       area: s.area === true,
       points: s.points === true,
-      highlight: Array.isArray(s.highlight) ? s.highlight.filter((n) => typeof n === 'number') : null,
+      highlight: chartHighlight(s.highlight),
       barGradient: s.barGradient === true,
     }))
     .filter((s) => s.data.length > 0);

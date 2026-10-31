@@ -179,6 +179,8 @@ Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitl
 |-------|------|-------------|
 | `name` | string? | Canvas name |
 | `projectId` | string? | Target project. Defaults to the built-in Untitled project. See `project_list`. |
+| `width` | number? | Artboard width in px (default 1440) — e.g. 390 for a phone screen |
+| `height` | number? | Artboard height in px (default 900) |
 
 The response also carries a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
 
@@ -334,7 +336,7 @@ I(panel, { type: "chart", kind: "donut", width: 176, height: 176, centerValue: "
   ] })
 ```
 
-A **bar chart with a selected day** is `highlight: [11]` on the series (selected bar solid, the rest muted; `barGradient: true` fades the muted bars inside the SVG, invisible to the gradient-overuse tell). A **sparkline** is `kind: "sparkline"` — axis-free, latest point emphasized by default, sized for a KPI card corner. `segments[].color` and series `stroke` both take `$chart-1`…`$chart-6` refs.
+A **bar chart with a selected day** is `highlight: [11]` (or `highlight: 11`) on the series (selected bar solid, the rest muted; `barGradient: true` fades the muted bars inside the SVG, invisible to the gradient-overuse tell). A **sparkline** is `kind: "sparkline"` — axis-free, latest point emphasized by default, sized for a KPI card corner. `segments[].color` and series `stroke` both take `$chart-1`…`$chart-6` refs.
 
 Multi-series in one node; x positions are data indexes (a shorter series stops early against a longer one — booked months vs a full-year target); `xDomain`/`yDomain` default from the data (bars floor at 0); `kind: "bar"` renders grouped bars from the same series model. Dash the projected series, solid the actuals. Editing one value is a one-prop edit — never hand-compute path `d` strings for a chart.
 
@@ -802,6 +804,8 @@ Auto-score a design against quality heuristics. Returns an overall score (0–10
 The **`directive`** is the operating contract that keeps unfinished work off the user's screen. Readiness turns on **blocking findings, not the score**: it reads `READY TO PRESENT` when there are zero errors, zero warnings, **and** zero cliché tells; otherwise `NOT READY` with what to resolve. (Cliché tells block even at info severity — they're the slop signal; pure advisories like "consider extracting components" are optional.) The score is always reported alongside the directive and remains the quality bar to aim for (**> 95**) — but it no longer withholds readiness on its own: once nothing blocking is left, a design at or below the bar still reads `READY`, and the directive says so explicitly, naming the advisory findings as the remaining lever. Resolve everything blocking and re-evaluate until it says `READY` before showing the design to the user.
 
 Open point-and-tell comments block too: when the canvas has any, the result carries `openFeedback: n` and the directive stays blocking even at a READY score — the human's note outranks the heuristics. Read them with `get_feedback`, address each, close them with `resolve_feedback`.
+
+A `FRAGILE` stress run blocks too. Once `canvas_stress` has run on the canvas in this server session, the result carries **`stress`**: `{ verdict, warnings, current }`, where `current` says whether it ran on the canvas's present `versionHash`. A `FRAGILE` run on the current version keeps the directive `NOT READY` even with zero evaluate issues; a `FRAGILE` run on an earlier version leaves readiness alone but asks you to re-run `canvas_stress` before presenting. `canvas_evaluate` never runs stress itself.
 
 Whenever the `cliche` category runs, the result also carries a **`genre`** field auditing the genre decision: `{ active, source, relaxed, notRelaxed }` — the genre in effect, whether it came from the `genre` param or the canvas's provenance stamp, the tells it relaxed, and `notRelaxed` (`[{ tell, relaxedBy }]`) — tells still flagging that a *different* genre would relax. A score pinned by tells listed in `notRelaxed` usually means the wrong genre was declared.
 

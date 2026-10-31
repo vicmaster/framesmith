@@ -249,3 +249,21 @@ export function compareLayouts(
 
   return findings;
 }
+
+/** The last canvas_stress result per canvas, kept for canvas_evaluate's
+ * directive so "READY TO PRESENT" can't contradict a FRAGILE stress run on
+ * the same version. In memory only: one server process, last run wins. */
+export interface StressRecord {
+  versionHash: string;
+  warnings: number;
+}
+
+const lastStressRuns = new Map<string, StressRecord>();
+
+export function recordStressRun(canvasId: string, record: StressRecord): void {
+  lastStressRuns.set(canvasId, record);
+}
+
+export function lastStressRun(canvasId: string): StressRecord | undefined {
+  return lastStressRuns.get(canvasId);
+}
