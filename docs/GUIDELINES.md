@@ -36,6 +36,16 @@ Pick the right `width` per node — this is the single biggest lever for respons
 
 **Artboard height is a viewport, not a limit.** The root's `height` sizes the default `screenshot` capture, but content taller than it is normal — it scrolls on a real page, and a `clip` finding from `canvas_stress` for exactly that case is `info`, not a problem to fix. To actually see past the artboard (a long page, a design that grew under stress content), pass `fullPage: true` to `screenshot` — or to `export`, which takes the same option — instead of editing the root height by hand.
 
+## Declaring the medium (web or mobile)
+
+A canvas declares what medium it is on, separately from its genre (what it is for) and its preset (what style it uses). The type picks which rules judge the screen and which defaults the generators use. It never changes what renders.
+
+- **A phone app screen is `canvas_create({ type: "mobile" })`**, not a 390px-wide web canvas. It gets the device artboard (390×844 for the default `device: "iphone-390"`) and the root reserves the device's insets as `safeArea: { top: 47, bottom: 34 }`. The renderer adds those to the root's own top and bottom padding, at exact pixels, and the root's fill paints the bands, so in-flow content never sits under the status bar or the home indicator. `canvas_create` reports `type`, `typeSource` (`"declared"` or `"default"`), `device` and `safeArea`.
+- **`type: "web"` is the default.** An undeclared canvas is judged as web and its evaluate result says `source: "default"`.
+- **`canvas_set_type` re-declares an existing canvas** (`"web"`, `"mobile"`, or `null` to clear). It writes the declaration only. It never resizes the artboard and never writes `safeArea`, because either would reflow what you placed. When the result has a `hint`, follow it: `U("document", { safeArea: { top: 47, bottom: 34 } })` reserves the insets, and the hint names the device size if the root differs.
+- **`generate_design_system` on a mobile canvas** pivots the type scale on the device body size: 17px for every personality except `data-dense`, which uses 16px. An explicit `baseSize` wins. The result reports `baseSize` and `baseSizeSource`.
+- **Every evaluate result carries a `surface` report**: `{ type, device, source, rulesOn, rulesOff, conflicts }`. Each axis value (type, genre, preset) contributes a ruleset, and the active rules are their union. `rulesOn` and `rulesOff` name the rule ids the rulesets turned on and off; a rule both enabled and disabled stays on and is listed in `conflicts`, so composing declarations can never switch a guardrail off.
+
 ## Responsive hints
 
 Set `responsive` on **container nodes** (frames with `layout: "horizontal"` or `layout: "grid"` and children). The renderer emits the right media-query rules — flex-wrap for horizontal containers, a single-column collapse with spans reset for grid.

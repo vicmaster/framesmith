@@ -179,10 +179,12 @@ Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitl
 |-------|------|-------------|
 | `name` | string? | Canvas name |
 | `projectId` | string? | Target project. Defaults to the built-in Untitled project. See `project_list`. |
-| `width` | number? | Artboard width in px, a positive integer (default 1440). A phone screen is `width: 390, height: 844`. |
-| `height` | number? | Artboard height in px, a positive integer (default 900). Each dimension defaults on its own. |
+| `width` | number? | Artboard width in px, a positive integer (default 1440, or the device width for `type: "mobile"`). |
+| `height` | number? | Artboard height in px, a positive integer (default 900, or the device height for `type: "mobile"`). Each dimension defaults on its own. |
+| `type` | `"web"` \| `"mobile"`? | What medium the canvas is on. `"mobile"` declares a phone app screen: the artboard defaults to the device size and the root gets the device's safe-area insets as `safeArea: { top, bottom }`, which the renderer adds to the root's top and bottom padding. Omitted, the canvas is undeclared and judged as web. |
+| `device` | string? | Device profile for `type: "mobile"` (default `"iphone-390"`: 390×844, insets 47 top and 34 bottom). Only valid with `type: "mobile"`. |
 
-The response also carries the artboard `width`/`height` and a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
+The response also carries the artboard `width`/`height`, `type`, `typeSource` (`"declared"` or `"default"`), `device` and `safeArea` for a mobile canvas, and a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
 
 ### `canvas_list`
 
@@ -466,7 +468,7 @@ The headline call for a new project's look: **one seed color + one personality �
 |-------|------|-------------|
 | `seed` | string | The brand color everything derives from (`#RRGGBB`) |
 | `personality` | string | **Required** — `technical`, `editorial`, `soft`, or `data-dense`. Dashboards → `data-dense`/`technical`, marketing/content → `editorial`, consumer → `soft` |
-| `baseSize` / `ratio` | number? | Override the personality's type pivot / scale ratio |
+| `baseSize` / `ratio` | number? | Override the type pivot / scale ratio. On a canvas declared `type: "mobile"` the pivot defaults to the device body size (17px; 16px for `data-dense`); `baseSize` still wins. The result reports the pivot as `baseSize` + `baseSizeSource` (`"explicit"`, `"personality"` or `"mobile"`). |
 | `canvasId` / `projectId` / `workspaceId` | string? | Exactly one — the token layer written to |
 | `preserveInherited` | boolean? | Canvas scope only. Default `true` — see "Inherited tokens" below. Pass `false` to write the generated language whole. |
 
@@ -797,6 +799,18 @@ Durably declare what a canvas *is* — writes the evaluation genre to `metadata.
 
 Returns `{ canvasId, genre, canonical, previous, relaxes, presetRelaxes?, note?, versionHashUnchanged }` — `canonical` is the genre with its alias folded (`"dashboard"` → `"data"`, `"checkout"` → `"commerce"`, what evaluate reports); `relaxes` lists the cliché tells the stamp relaxes; `presetRelaxes` (`{ preset, relaxed }`) appears when the canvas's preset relaxes tells on its own (the material preset), which a genre clear doesn't remove; an unknown genre is stored but relaxes nothing, and the `note` says so immediately. Other provenance facts (structure, `importedFrom`) are preserved, and the stamp never moves the canvas's `versionHash` (the hash covers design content only) — recorded approvals stay valid.
 
+### `canvas_set_type`
+
+Declare what medium an existing canvas is on. Writes `metadata.surface` only: it never resizes the artboard and never writes the root's `safeArea`, because either would reflow what is already placed. For a new phone screen, `canvas_create({ type: "mobile" })` does all of it at once.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `canvasId` | string | Canvas to declare |
+| `type` | `"web"` \| `"mobile"` \| null | The medium; `null` clears the declaration (the canvas reads as undeclared web again) |
+| `device` | string? | Device profile for `"mobile"` (default `"iphone-390"`). Only valid with `"mobile"`. |
+
+Returns `{ canvasId, type, device, source, previous, artboard, hint?, versionHashUnchanged }`. `previous` is the declaration it replaced (or `null`); `artboard` is the root's unchanged size. On a mobile result whose root has no `safeArea` or a size other than the device's, `hint` names the op that finishes the job, e.g. `U("document", { safeArea: { top: 47, bottom: 34 } })`. The declaration is metadata, so the `versionHash` doesn't move; it does change which rules run, so re-evaluate after it.
+
 ### `canvas_evaluate`
 
 Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.
@@ -808,6 +822,8 @@ Open point-and-tell comments block too: when the canvas has any, the result carr
 A `FRAGILE` stress run blocks too. Once `canvas_stress` has recorded a verdict for the canvas, the result carries **`stress`**: `{ verdict, warnings, current }`, where `current` says whether that run was on the canvas's present `versionHash`. A `FRAGILE` verdict keeps the directive `NOT READY` even with zero evaluate issues, until a full `CLEAN` run (all five perturbations) replaces it; a subset run can record `FRAGILE` but never clear it. When `current` is false the directive tells you to re-run stress to confirm your fix. The verdict lives in server memory, so a restart forgets it. `canvas_evaluate` never runs stress itself.
 
 Whenever the `cliche` category runs, the result also carries a **`genre`** field auditing the genre decision: `{ active, source, relaxed, notRelaxed, byPreset? }` — the genre in effect (canonical: a `"dashboard"` stamp reports `"data"`, a `"checkout"` one `"commerce"`), whether it came from the `genre` param or the canvas's provenance stamp, the tells relaxed, `notRelaxed` (`[{ tell, relaxedBy }]`) — tells still flagging that a *different* genre would relax — and `byPreset` (`{ preset, relaxed }`), present when the applied preset relaxed tells on its own (the material preset relaxes accent-hue and pure-black-white whatever the genre). A score pinned by tells listed in `notRelaxed` usually means the wrong genre was declared.
+
+Every result also carries a **`surface`** field: `{ type, device, source, rulesOn, rulesOff, conflicts }` — the canvas type (`"web"` or `"mobile"`), its device profile (`null` on web), whether the type was `"declared"` (by `canvas_create` or `canvas_set_type`) or is the `"default"` web of an undeclared canvas, and the rule ids the composed type, genre and preset rulesets turned on (`rulesOn`) and off (`rulesOff`). A rule both enabled and disabled stays on and is listed in `conflicts`. `canvas_autofix` returns the same field.
 
 Whenever the `coverage` category runs on a **base** canvas, the result also carries a **`coverage`** field: `{ dataBearing, states, missing }` — whether the screen carries data-bearing content, which state variants (`canvas_add_variant`) already exist, and which demanded states are missing. It's absent on variant canvases (a variant *is* a designed state, so it doesn't demand states of itself).
 

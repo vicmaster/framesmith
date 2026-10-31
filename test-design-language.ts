@@ -7,7 +7,7 @@
 // Usage: npx tsx test-design-language.ts
 
 import './test-env.js';
-import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from './src/design-language.js';
+import { generateDesignSystem, typeBase, PERSONALITY_NAMES, type PersonalityName } from './src/design-language.js';
 import { createCanvas } from './src/scene-graph.js';
 import { applyStructure } from './src/structures.js';
 import { evaluateCanvas } from './src/evaluate.js';
@@ -93,6 +93,29 @@ for (const personality of PERSONALITY_NAMES) {
   let err = '';
   try { generateDesignSystem(SEED, 'brutalist' as PersonalityName); } catch (e) { err = (e as Error).message; }
   check('unknown personality throws with the roster', err.includes('technical') && err.includes('data-dense'), err.slice(0, 80));
+}
+
+// ── Phase 30 slice B: the mobile type scale (FR-B4) ───────────────────────
+{
+  console.log('\n── mobile type scale ──');
+  for (const personality of PERSONALITY_NAMES) {
+    const sys = generateDesignSystem(SEED, personality, { surface: 'mobile' });
+    const typo = sys.variables.typography!;
+    const body = typo['body'].fontSize as number;
+    const want = personality === 'data-dense' ? 16 : 17;
+    check(`${personality}: mobile body is ${want}`, body === want, String(body));
+    check(`${personality}: mobile body ≥ 16 (the mobile floor)`, body >= 16);
+    const small = Object.entries(typo).filter(([, spec]) => typeof spec.fontSize === 'number' && (spec.fontSize as number) < 11);
+    check(`${personality}: no role or step below 11 on mobile`, small.length === 0, small.map(([k, v]) => `${k}=${v.fontSize}`).join(', '));
+    const base = typeBase(personality, { surface: 'mobile' });
+    check(`${personality}: typeBase reports the mobile source`, base.source === 'mobile' && base.size === want);
+  }
+  const explicit = generateDesignSystem(SEED, 'soft', { surface: 'mobile', baseSize: 15 });
+  check('explicit baseSize wins over the mobile pivot', explicit.variables.typography!['body'].fontSize === 15);
+  check('typeBase: explicit source', typeBase('soft', { surface: 'mobile', baseSize: 15 }).source === 'explicit');
+  const web = generateDesignSystem(SEED, 'technical', { surface: 'web' });
+  check('web keeps the personality pivot', web.variables.typography!['body'].fontSize === generateDesignSystem(SEED, 'technical').variables.typography!['body'].fontSize);
+  check('typeBase: personality source on web', typeBase('data-dense', { surface: 'web' }).source === 'personality' && typeBase('data-dense').size === 13);
 }
 
 console.log(allPass ? '\nAll design-language tests passed.' : '\nSOME TESTS FAILED');

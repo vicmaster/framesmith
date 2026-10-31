@@ -6,6 +6,7 @@ import { computeLayout, type LayoutRect } from './screenshot.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
+import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, type SurfaceType } from './surfaces.js';
 
 // --- Types ---
 
@@ -86,6 +87,13 @@ export interface EvaluationResult {
    */
   genre?: GenreReport;
   /**
+   * Phase 30 slice B — always present: the canvas's declared type (or the
+   * `web` default) and the rule ids the composed type + genre + preset
+   * rulesets turned on and off. A rule both enabled and disabled stays on and
+   * is listed in `conflicts`.
+   */
+  surface: SurfaceReport;
+  /**
    * Phase 24 slice C — present when the coverage category ran on a BASE
    * canvas: whether the screen carries data-bearing content (tables / forms),
    * which state variants are designed, and which demanded states are missing
@@ -120,6 +128,18 @@ export interface GenreReport {
    * own (the material preset), so `relaxed` is explained even when `active`
    * is null. */
   byPreset?: { preset: string; relaxed: ClicheTell[] };
+}
+
+export interface SurfaceReport {
+  type: SurfaceType;
+  /** The device profile a mobile canvas targets; null on web. */
+  device: string | null;
+  /** 'declared' when canvas_create / canvas_set_type set the type; 'default'
+   * when nobody did (the canvas is judged as web). */
+  source: 'declared' | 'default';
+  rulesOn: string[];
+  rulesOff: string[];
+  conflicts: string[];
 }
 
 interface NodeEntry {
@@ -1020,69 +1040,10 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
 // fake browser chrome, the hanging eyebrow header, fabricated data). Advisory
 // by design (warning/info, never a hard error); genre can relax a gate.
 
-/** Genre (what the screen is for) → tells it relaxes because they're
- * intentional in that kind of screen. Material Design is legitimately purple. */
-const RELAXED_BY_GENRE: Record<string, ClicheTell[]> = {
-  // Material Design legitimately uses a purple accent AND white elevated
-  // surfaces (cards on an off-white background), so both are intentional here.
-  // Also a preset (RELAXED_BY_PRESET); kept as a genre because agents are
-  // told to declare editors and admin forms as "material".
-  material: ['accent-hue', 'pure-black-white'],
-  // Phase 22 slice C (#135) — screens whose figures are the user's own data
-  // (dashboards, activity, finance, fitness, logistics): realistic figures
-  // ARE the design (they drive column widths, wrapping, $2.7M-vs-$2,700,000
-  // legibility), so "fabricated data" flags would zero the category for the
-  // screen's whole reason to exist. Phase 30: `data` is canonical (it names
-  // what the numbers are, not a layout); `dashboard` is the alias.
-  data: ['honest-content'],
-  dashboard: ['honest-content'],
-  // Phase 29 slice A (#194) — transactional commerce screens: a checkout's
-  // line prices, subtotal, store credit and total ARE the design (they set the
-  // column widths, the decimal alignment, and which number reads as the one
-  // you're about to pay), so the fabricated-data tell zeroes the category for
-  // the screen's whole reason to exist. Scope is the TRANSACTION — cart,
-  // checkout, order confirmation, billing history. NOT a pricing or marketing
-  // page: invented customer counts, savings claims and testimonials are
-  // exactly the slop this tell exists to catch, and `commerce` doesn't touch
-  // them (it relaxes honest-content, which fires on figures — the marketing
-  // slop lands on slop-copy and on honest-content's testimonial/logo shapes).
-  // `checkout` is an alias.
-  commerce: ['honest-content'],
-  checkout: ['honest-content'],
-};
-
-/** Phase 30 — the preset half of the ruleset: applying the material STYLE
- * relaxes material's tells whatever the genre is, so untangling genre from
- * preset doesn't strip a material-preset canvas of its relaxation. */
-const RELAXED_BY_PRESET: Record<string, ClicheTell[]> = {
-  material: ['accent-hue', 'pure-black-white'],
-};
-
-/** Genres that are aliases of another entry — folded to their canonical
- * genre in the report so an alias never reads as a second option. */
-const GENRE_ALIASES = new Map<string, string>([['dashboard', 'data'], ['checkout', 'commerce']]);
-
-// Own-key lookups only: a stored genre is free text, and "constructor" must
-// read as an unknown genre, not Object.prototype.constructor.
-function lookup(table: Record<string, ClicheTell[]>, key: string | undefined): ClicheTell[] {
-  return key !== undefined && Object.hasOwn(table, key) ? table[key] : [];
-}
-
-export function canonicalGenre(genre: string): string {
-  return GENRE_ALIASES.get(genre) ?? genre;
-}
-
-/** Issue #162 — what a genre stamp buys, for canvas_set_genre's immediate
- * feedback (the evaluate-time report stays buildGenreReport's job). */
-export function relaxedByGenre(genre: string): ClicheTell[] {
-  return lookup(RELAXED_BY_GENRE, genre);
-}
-export function relaxedByPreset(preset: string | undefined): ClicheTell[] {
-  return lookup(RELAXED_BY_PRESET, preset);
-}
-export function knownGenres(): string[] {
-  return Object.keys(RELAXED_BY_GENRE);
-}
+// Phase 30 slice B — the genre/preset relaxation tables moved into the
+// axis-keyed ruleset table in surfaces.ts (RULESETS); these re-exports keep
+// their callers unchanged.
+export { canonicalGenre, relaxedByGenre, relaxedByPreset, knownGenres } from './surfaces.js';
 
 /** canvas_set_genre's result fields for a stamp on a canvas with `preset`:
  * the canonical genre, what the genre relaxes, and what the preset relaxes on
@@ -1120,9 +1081,8 @@ function buildGenreReport(
   preset: string | undefined,
 ): GenreReport {
   const notRelaxed = new Map<ClicheTell, string[]>();
-  for (const [g, tells] of Object.entries(RELAXED_BY_GENRE)) {
-    if (GENRE_ALIASES.has(g)) continue;
-    for (const tell of tells) {
+  for (const [g, ruleset] of genreRulesets()) {
+    for (const tell of ruleset.relax ?? []) {
       if (relaxed.has(tell)) continue;
       const by = notRelaxed.get(tell) ?? [];
       if (!by.includes(g)) by.push(g);
@@ -2084,6 +2044,13 @@ export async function evaluateCanvas(
   // workspace design system.
   const mergedTokens = getCanvasTokens(canvas);
   const resolvedRoot = resolveVariables(canvas.root, mergedTokens);
+  // Phase 30 slice B — one composition of the type, genre and preset rulesets
+  // serves the cliche relaxation and the surface report.
+  const declared = resolveSurface(canvas);
+  const resolvedGenre = resolveGenre(canvas, options.genre);
+  const preset = canvas.metadata?.provenance?.preset;
+  const rules = composeRulesets(activeRulesets({ type: declared.type, genre: resolvedGenre.genre, preset }));
+  const surface: SurfaceReport = { ...declared, rulesOn: rules.on, rulesOff: rules.off, conflicts: rules.conflicts };
   const entries = buildTreeContext(resolvedRoot);
   // Also walk the unresolved tree for token usage stats
   const rawEntries = buildTreeContext(canvas.root);
@@ -2107,6 +2074,7 @@ export async function evaluateCanvas(
       summary: 'Canvas is empty — nothing has been designed yet.',
       stats: { totalNodes: entries.length, textNodes: 0, frameNodes: 0, maxDepth: 0, tokenUsagePercent: 0, componentReusePercent: 0 },
       mode: options.mode,
+      surface,
     };
   }
 
@@ -2173,10 +2141,8 @@ export async function evaluateCanvas(
   let genreReport: GenreReport | undefined;
   if (activeCategories.includes('cliche')) {
     // Genre comes from the explicit option, else the canvas's stored genre;
-    // the applied preset contributes its own relaxation on top.
-    const resolved = resolveGenre(canvas, options.genre);
-    const preset = canvas.metadata?.provenance?.preset;
-    const relaxed = new Set([...relaxedByGenre(resolved.genre ?? ''), ...relaxedByPreset(preset)]);
+    // the applied preset contributes its own relaxation on top (composed above).
+    const relaxed = new Set(rules.relaxed);
     // Resolved entries → $accent becomes a real hex for hue math; rawEntries →
     // distinguish a literal default purple (autofixable) from a $token one.
     // Table header cells are small uppercase labels by convention — exclude
@@ -2194,7 +2160,7 @@ export async function evaluateCanvas(
       }
     }
     results.set('cliche', checkCliche(entries, rawEntries, mergedTokens, { relaxed, tableDescendantIds }));
-    genreReport = buildGenreReport(resolved, relaxed, preset);
+    genreReport = buildGenreReport(resolvedGenre, relaxed, preset);
   }
 
   const overallScore = aggregateScores(results, CATEGORY_WEIGHTS);
@@ -2234,6 +2200,7 @@ export async function evaluateCanvas(
     issues: allIssues,
     ...(coverageReport ? { coverage: coverageReport } : {}),
     ...(genreReport ? { genre: genreReport } : {}),
+    surface,
     summary: generateSummary(overallScore, categories, allIssues),
     stats: {
       totalNodes,

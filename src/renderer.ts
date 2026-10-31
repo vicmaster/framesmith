@@ -677,6 +677,7 @@ function buildStyles(node: SceneNode, registered?: ReadonlySet<string>): string 
       }
     }
   }
+  if (node.type === 'document') s.push(...safeAreaPadding(node));
 
   // Position
   if (node.position) s.push(`position: ${node.position}`);
@@ -1035,6 +1036,33 @@ function findNearestContainer(ancestors: SceneNode[]): SceneNode | undefined {
     if (a.type === 'frame' || a.type === 'document' || a.type === 'component') return a;
   }
   return undefined;
+}
+
+/** Phase 30 slice B — the root's safeArea insets ride on top of its authored
+ * top/bottom padding, at exact px (insets never scale fluidly). Each side is
+ * honoured only when it is a finite non-negative number. */
+function safeAreaPadding(node: SceneNode): string[] {
+  const insets = node.safeArea;
+  if (!insets || typeof insets !== 'object') return [];
+  const valid = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+  const sides = paddingSides(node.padding);
+  const out: string[] = [];
+  if (valid(insets.top)) out.push(`padding-top: calc(${sides.top} + ${insets.top}px)`);
+  if (valid(insets.bottom)) out.push(`padding-bottom: calc(${sides.bottom} + ${insets.bottom}px)`);
+  return out;
+}
+
+/** The authored top/bottom padding as buildStyles emits it (0px when absent or
+ * not numeric). */
+function paddingSides(padding: SceneNode['padding']): { top: string; bottom: string } {
+  const px = (v: unknown) => (typeof v === 'number' ? responsivePadding(v) : '0px');
+  if (typeof padding === 'number') return { top: px(padding), bottom: px(padding) };
+  // CSS shorthand order: one or two values share top/bottom; three or four
+  // put bottom third.
+  if (Array.isArray(padding) && padding.length && padding.every((p) => typeof p === 'number')) {
+    return { top: px(padding[0]), bottom: px(padding[padding.length >= 3 ? 2 : 0]) };
+  }
+  return { top: '0px', bottom: '0px' };
 }
 
 function responsivePadding(value: number): string {
