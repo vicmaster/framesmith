@@ -63,19 +63,19 @@ One profile ships. The mechanism is keyed by profile id so a second device (393�
 |---|---|---|---|
 | Profile id | `iphone-390` | — | — |
 | Artboard | 390×844 | iPhone 12/13/14 class | high |
-| Safe top inset | 47 | iOS portrait inset for this class | medium (third-party, consistent) |
-| Safe bottom inset | 34 | iOS home-indicator inset | medium |
-| Touch target floor | 44 | Apple HIG 44pt; WCAG 2.2 SC 2.5.5 (AAA) 44px | high (WCAG verified) |
-| Nav bar height | 44 (large title 96) | iOS | medium |
-| Tab bar height | 49, plus the 34 bottom inset | iOS | medium |
-| Tab count | 2–5 allowed, 3–5 recommended, every tab labeled | Material 3 nav bar 3–5 (verified); Apple (secondary) | high |
-| Body size | 17 (floor 16) | iOS Dynamic Type Body 17; 16 is the Material and mobile-web floor | high |
-| Smallest text | 11 | iOS Caption 2 | high |
-| List row min height | 44 (56 with a subtitle) | iOS table row 44 | medium |
-| Side margin | 16 | iOS and Material compact | medium |
-| Home indicator | 134×5 pill, centred in the bottom inset | iOS | medium |
+| Safe top inset | 47 | iOS portrait inset for this class (useyourloaf iPhone 12/14 tables) | medium (secondary sources agree; no Apple number) |
+| Safe bottom inset | 34 | iOS home-indicator inset (same tables) | medium (secondary sources agree) |
+| Touch target floor | 44 | Apple HIG Buttons ("hit region of at least 44x44 pt"); WCAG 2.2 SC 2.5.5 (AAA) 44px | high (both verified) |
+| Nav bar height | 44 (large title 96) | iOS convention | house value (no Apple number reachable) |
+| Tab bar height | 49, plus the 34 bottom inset | iOS convention | house value (the HIG gives a height for tvOS only) |
+| Tab count | 2–5 allowed, 3–5 recommended, every tab labeled | Material 3 nav bar 3–5 (verified); Apple HIG Tab bars: "five or fewer", include labels (verified) | high |
+| Body size | 17 (floor 16) | Apple HIG Typography: Body 17 at the Large default (verified); 16 is the Material and mobile-web floor | high |
+| Smallest text | 11 | Apple HIG Typography: Caption 2 = 11 (verified) | high |
+| List row min height | 44 (56 with a subtitle) | 44 follows the hit region; 56 is a house value | house value (the HIG gives no row heights) |
+| Side margin | 16 | iOS and Material compact | house value (the HIG defers to system margins) |
+| Home indicator | 134×5 pill, centred in the bottom inset | one secondary source | low (house value) |
 
-Values marked medium came from secondary sources because Apple's HIG pages are JS-rendered and could not be fetched. Slice B, which lands the profile table, re-checks them against the HIG before they land in code; a corrected value changes this table in the same PR.
+Slice B re-checked every value against the HIG through developer.apple.com's JSON and Markdown endpoints (2026-10-31). No value changed. Apple's own pages confirm the 44pt target, Body 17, Caption 2 = 11 and "five or fewer" labeled tabs. The insets come from secondary tables that agree with each other. The bar heights, row heights, side margin and home indicator have no Apple source that could be read, so they are house values; a simulator measurement can raise them later.
 
 ### Terms used below
 
@@ -176,6 +176,17 @@ Values marked medium came from secondary sources because Apple's HIG pages are J
 - `generate_design_system` (`src/index.ts`, base/ratio at :1113-1114; `src/design-language.ts` role mapping at :184-218): mobile base per FR-B4.
 - Surfaces: `canvas_create` / `canvas_set_type` / `canvas_evaluate` docstrings, `INSTRUCTIONS`, GOTCHAS, GUIDELINES; `test-discoverability.ts` gains a types list and a device-profile list.
 - Tests: new `test-surface.ts` (creation defaults, set-type, union, conflict, report, `safeArea` shell padding as an HTML-string assertion with no Chrome, and `metadata.surface` render invariance), `test-design-language.ts` mobile cases.
+
+- **As built (spec changes recorded at slice B):**
+  - *No rule ids yet.* Every `enable` / `disable` list in the ruleset table is empty, the mobile row included, because a rule id lands in the same change as the check that honours it. On a mobile canvas the `surface` report's `rulesOn` is therefore `[]` in slice B; FR-B3's "lists every mobile rule id" becomes real as slice C registers each check. Semantics for slice C: an opt-in rule runs only when some active ruleset enables it; a default rule runs unless one disables it.
+  - *The table holds canonical genres only.* `GENRE_ALIASES` moved to `src/surfaces.ts` with the table, and every lookup folds an alias first. `relaxedByGenre`, `relaxedByPreset`, `knownGenres` and `canonicalGenre` are views over it, re-exported from `evaluate.ts` so callers did not change. `test-discoverability.ts` imports the table instead of parsing `evaluate.ts`.
+  - *The table has a `base` row* (empty for now) beside `type`, `genre` and `preset`, so FR-C6's base-ruleset rule has a home.
+  - *`surface` is always on the evaluate result*, every mode and category filter, the empty-canvas result included; `canvas_autofix` returns it too.
+  - *`safeArea` renders as `padding-top: calc(<authored top> + <inset>px)`* (and bottom likewise) on the document root only, at exact pixels even when the authored padding is fluid. A side that is not a finite non-negative number is ignored. `safeArea` is part of the root, so it is in the `versionHash`.
+  - *`canvas_create`* errors on `device` without `type: "mobile"` and on an unknown device, and reports `type`, `typeSource`, `device` and `safeArea`. *`canvas_set_type`* reports `previous`, the unchanged `artboard`, and a `hint` naming the `safeArea` op and the device size when a mobile result lacks them.
+  - *`generate_design_system`* reports its GENERATED pivot as `baseSize` + `baseSizeSource` (`explicit` / `personality` / `mobile`). Project and workspace scope have no type, so they stay web. A `$body` inherited from a workspace or project design system is still preserved by default (it appears in `designSystemConflicts`), so FR-B4's "body ≥ 16" holds for what the canvas renders only without one or with `preserveInherited: false`.
+  - *One reader for `safeArea`.* `usableSafeArea` (a side counts only as a finite non-negative number) serves both the renderer and `canvas_set_type`'s hint, so the hint never treats a value the renderer ignores as reserved.
+  - *`canvas_autofix` reads fresh in propose mode too* (it called `ensureFresh` only with `apply: true`), so its proposals and its `genre` / `surface` reports describe what is on disk.
 
 **Slice C — the mobile ruleset (FR-C1..C8)**
 - Each check is registered by rule id in the ruleset table and runs only when on, except `mobile-artboard`, which is in the base ruleset (FR-C6).

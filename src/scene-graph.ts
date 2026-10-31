@@ -6,6 +6,7 @@ import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile } from './repo-store.js';
 import { canvasVersionHash } from './version.js';
 import { migrateProvenance } from './genre.js';
+import { deviceProfile, DEFAULT_DEVICE, type SurfaceType } from './surfaces.js';
 
 const store = new Map<string, Canvas>();
 
@@ -132,8 +133,13 @@ export function createCanvas(
   name?: string,
   projectId: string = DEFAULT_PROJECT_ID,
   size: { width?: number; height?: number } = {},
+  surface?: { type: SurfaceType; device?: string },
 ): Canvas {
   const id = nanoid(10);
+  // Phase 30 slice B — a mobile canvas takes its device's artboard (an
+  // explicit width/height wins per side) and reserves the device insets on
+  // the root, so in-flow content can never reach them.
+  const profile = surface?.type === 'mobile' ? deviceProfile(surface.device ?? DEFAULT_DEVICE) : undefined;
   const canvas: Canvas = {
     id,
     name: name ?? `Canvas ${store.size + 1}`,
@@ -142,15 +148,17 @@ export function createCanvas(
       type: 'document',
       name: 'Document',
       children: [],
-      width: size.width ?? 1440,
-      height: size.height ?? 900,
+      width: size.width ?? profile?.width ?? 1440,
+      height: size.height ?? profile?.height ?? 900,
       fill: '#FFFFFF',
+      ...(profile ? { safeArea: { ...profile.safeArea } } : {}),
     },
     variables: {},
     components: {},
     createdAt: new Date().toISOString(),
     lastModified: new Date().toISOString(),
     projectId,
+    ...(surface ? { metadata: { surface: { ...surface } } } : {}),
   };
   store.set(id, canvas);
   persistCanvas(canvas);
@@ -187,6 +195,28 @@ export function setCanvasGenre(canvasId: string, genre: string | null): { previo
   prov.genre = genre;
   if (genre !== null) prov.at = new Date().toISOString();
   canvas.metadata = { ...canvas.metadata, provenance: prov as import('./types.js').Provenance };
+  touchCanvas(canvasId);
+  return { previous };
+}
+
+/** Phase 30 slice B — declare (or clear, with null) what medium a canvas is
+ * on. Writes only metadata.surface: never the artboard size or the root's
+ * safeArea, since either would reflow what the agent placed. Returns the prior
+ * declaration, or undefined when the canvas doesn't exist. */
+export function setCanvasType(
+  canvasId: string,
+  surface: { type: SurfaceType; device?: string } | null,
+): { previous: { type: SurfaceType; device?: string } | null } | undefined {
+  ensureFresh(canvasId);
+  const canvas = store.get(canvasId);
+  if (!canvas) return undefined;
+  const previous = canvas.metadata?.surface ? { ...canvas.metadata.surface } : null;
+  if (surface === null && previous === null) return { previous }; // nothing to clear — don't dirty the file
+  const metadata = { ...canvas.metadata };
+  if (surface === null) delete metadata.surface;
+  else metadata.surface = { ...surface };
+  if (Object.keys(metadata).length) canvas.metadata = metadata;
+  else delete canvas.metadata;
   touchCanvas(canvasId);
   return { previous };
 }
@@ -499,10 +529,10 @@ function deepCloneWithNewIds(node: SceneNode, overrides?: Partial<SceneNode>, id
 /** Phase 24 slice A (FR-A1) — clone a base canvas into a linked state variant.
  * The variant is a full sibling canvas (re-keyed node IDs, same project,
  * copied tokens/components/fonts) stamped with metadata.variant. Provenance
- * (structure/preset/genre — WHAT the screen is) carries over; feedback and
- * critique (per-canvas judgments) deliberately don't. Adding a variant to a
- * canvas that is itself a variant links to the ROOT base (spec C6: variant
- * trees deeper than one level have no UX meaning). */
+ * (structure/preset/genre — WHAT the screen is) and the surface type carry
+ * over; feedback and critique (per-canvas judgments) deliberately don't.
+ * Adding a variant to a canvas that is itself a variant links to the ROOT base
+ * (spec C6: variant trees deeper than one level have no UX meaning). */
 export function addVariant(canvasId: string, state: string): { canvas: Canvas; idMap: Record<string, string> } {
   ensureFresh(canvasId);
   let base = store.get(canvasId);
@@ -531,6 +561,7 @@ export function addVariant(canvasId: string, state: string): { canvas: Canvas; i
   if (base.fonts) canvas.fonts = structuredClone(base.fonts);
   canvas.metadata = {
     ...(base.metadata?.provenance ? { provenance: structuredClone(base.metadata.provenance) } : {}),
+    ...(base.metadata?.surface ? { surface: structuredClone(base.metadata.surface) } : {}),
     variant: { of: baseId, state: normalized, at: new Date().toISOString() },
   };
   touchCanvas(canvas.id);

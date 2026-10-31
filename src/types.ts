@@ -87,6 +87,10 @@ export interface SceneNode {
   gridColumn?: number | string;
   gridRow?: number | string;
   padding?: number | string | Array<number | string>;  // values or "$space-*" refs (2 or 4 entries)
+  /** Phase 30 slice B — document root only: the device insets the renderer
+   * adds to the root's own top and bottom padding (canvas_create with
+   * `type: "mobile"` writes the profile's). The root's fill paints them. */
+  safeArea?: { top: number; bottom: number };
   alignItems?: 'start' | 'center' | 'end' | 'stretch';
   justifyContent?: 'start' | 'center' | 'end' | 'space-between' | 'space-around';
   wrap?: boolean;
@@ -430,6 +434,11 @@ export interface Canvas {
      * cloned from the base; the viewer groups them and the coverage check
      * (slice C) counts them. */
     variant?: VariantLink;
+    /** Phase 30 slice B — what medium the canvas is on (canvas_create `type`
+     * / canvas_set_type). Absent means `web`, never declared. It selects
+     * rules, generator defaults and presentation, never the render — the
+     * insets a phone needs live on the root as `safeArea`. */
+    surface?: { type: 'web' | 'mobile'; device?: string };
     [key: string]: unknown;
   };
 }

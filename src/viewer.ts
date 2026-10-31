@@ -6,6 +6,7 @@ import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDe
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { evaluateCanvas, resolveGenre, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
+import { resolveSurface } from './surfaces.js';
 import { isPresetName } from './genre.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
 
@@ -847,9 +848,11 @@ function designedStatesFor(canvasId: string, listing?: CanvasSummary[]): string[
 }
 
 export function evalCacheKey(canvas: Canvas, states?: string[]): string {
-  // Phase 30: genre and preset are separate axes, and both change the score.
+  // Phase 30: type, genre and preset are separate axes, and each changes the
+  // score (they select the rulesets that run).
   const prov = canvas.metadata?.provenance;
-  const genre = `${resolveGenre(canvas).genre ?? ''}/${prov?.preset ?? ''}`;
+  const surface = resolveSurface(canvas);
+  const genre = `${resolveGenre(canvas).genre ?? ''}/${prov?.preset ?? ''}/${surface.type}/${surface.device ?? ''}`;
   let tokens = '';
   try { tokens = JSON.stringify(getCanvasTokens(canvas)); } catch { /* mirrored canvas with no live project — tree + genre still key it */ }
   // Phase 24 slice C — the coverage check reads the canvas's designed state

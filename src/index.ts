@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, addVariant } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, setCanvasType, addVariant } from './scene-graph.js';
+import { deviceProfile, resolveSurface, surfaceFor, usableSafeArea } from './surfaces.js';
 import { canvasVersionHash, checkVersionHash } from './version.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
@@ -28,7 +29,7 @@ import { applyPerturbation, compareLayouts, lastStressRun, PERTURBATION_NAMES, r
 import { buildEvaluateDirective } from './directive.js';
 import { generateTypeScale, generateSpaceScale, resolveRatio, type RatioName } from './scales.js';
 import { generateColorSystem } from './color-system.js';
-import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from './design-language.js';
+import { generateDesignSystem, typeBase, PERSONALITY_NAMES, type PersonalityName } from './design-language.js';
 import { evaluateProject } from './project-evaluate.js';
 import { startViewer, getViewerUrl, setExternalViewerUrl } from './viewer.js';
 import { evaluateCanvas, describeGenreStamp, knownGenres } from './evaluate.js';
@@ -82,6 +83,8 @@ Bulk edits & queries: replace_matching_properties applies one property change to
 
 Point-and-tell feedback: the user toggles Comment mode in the viewer and clicks any element to leave a note anchored to that node (or to the whole page). Comments are stored on the canvas, git-diffable in bound repos, and reach the running server automatically. Check get_feedback when picking up a canvas — each entry carries the anchor nodeId plus a node snapshot, enough to act on immediately. Open feedback blocks presenting, same as open inspector comments: address every item, then close each via resolve_feedback with a one-line note saying what changed (your note shows up as a reply in the viewer's Feedback tab).
 
+Phone app screens: declare the medium. canvas_create({ type: "mobile" }) makes a phone screen — the device artboard (390×844 for the default device "iphone-390") with the root reserving the safe-area insets as safeArea: { top: 47, bottom: 34 } (the renderer adds them to the root's own top/bottom padding, so in-flow content never sits under the status bar or home indicator). type: "web" (the default) is a web page; canvas_set_type changes or clears the declaration on an existing canvas (it never resizes or writes safeArea — its result's hint names the op that does). The type selects a ruleset and defaults, never the render (no rule ids are registered yet, so the surface report's rulesOn is empty today; the mobile checks register theirs as they land): generate_design_system on a mobile canvas pivots the type scale on the device body size (17px; 16px for data-dense), and every evaluate result carries a "surface" report ({ type, device, source "declared" | "default", rulesOn, rulesOff, conflicts }) naming the rule ids the type + genre + preset rulesets turned on and off — a rule both enabled and disabled stays on (in rulesOn) and is listed in conflicts.
+
 Gotchas (current sharp edges):
 - Row rules and accent bars are per-side borders — borderTop: { width: 1, color: "$border" } on each table row, borderLeft: { width: 3, color: "$primary" } for an accent edge (style "dashed"|"dotted" for forecast/draft outlines; strokeDasharray dashes SVG paths). Never fake hairlines with gap: 1 + background bleed-through.
 - Prefer STRUCTURED gradient / shadows ({ stops: [...] } and [{ x, y, blur, color }]); a raw CSS string on those fields is accepted too. The plural \`shadows\` always beats the singular \`shadow\` — writing \`shadow\` on a node that has \`shadows\` is a no-op (batch_design warns when this happens).
@@ -103,7 +106,7 @@ const WORKFLOW_CHEATSHEET = [
   'Start from a taste-vetted pattern: list_structures → apply_structure, then ADAPT it — don\'t start from a blank canvas.',
   'Use the whole toolkit by default — icons, fonts, real controls (toggle/checkbox/radio/select), components, $tokens. Never fake them; never omit them where a real UI has them.',
   'Read the framesmith://guidelines resource before drawing (esp. "Designing with taste": one focal point, real hierarchy, one type + spacing scale, restraint).',
-  'Author at one target width (the canvas artboard — pass width/height to canvas_create for a phone screen); reference tokens with $name (e.g. fill: "$surface").',
+  'Author at one target width (the canvas artboard — pass width/height to canvas_create for another size; for a phone app screen pass type: "mobile", which sizes the artboard to the device and reserves its safe-area insets on the root); reference tokens with $name (e.g. fill: "$surface").',
   'screenshot → review the render → iterate.',
   'canvas_evaluate → resolve EVERY comment (canvas_autofix apply: true for the mechanical subset / batch_design for the rest) → re-evaluate → repeat until the inspector is CLEAN (zero warnings, zero errors, zero cliché tells). That\'s the readiness gate — not the score, which is always reported and worth climbing toward (aim for > 95) but no longer withholds readiness once nothing blocking is left. Only present once CLEAN.',
   'Final polish when an LLM API key is present: canvas_evaluate mode "llm" (the five-axis vision rubric) → canvas_revise on failing axes → re-judge until it passes or canvas_revise stops. The heuristic gate is the floor; the critique loop is the ceiling — make it the standard last step before presenting, not an exception. It never blocks: still-failing axes after canvas_revise stops get named to the user, not looped on. Keyless sessions skip it (a note says so), nothing else changes.',
@@ -137,6 +140,7 @@ const GOTCHAS = [
   'Every state, every string: a data screen is not done at one static frame with ideal data. Tables demand designed "empty" + "loading" state variants, forms demand "error" (the coverage category warns until they exist — each is one canvas_add_variant + one scaffold stamp: empty-state / skeleton-table / skeleton-card / skeleton-stat-card); skeleton blocks pulse only in the live viewer, never in screenshots. Skeleton EVERY data surface on a loading variant, not just the table — coverage flags a "half-designed" loading state when a region still shows live values beside skeletoned ones. Then canvas_stress before presenting: it renders hostile-but-realistic content (long-text / i18n / big-numbers / empty / many) and reports clips and overflows by node id — fix with fluid widths / minWidth or minHeight floors / wrapping, or textOverflow: "ellipsis" on a label that must stay single-line (that downgrades its clip to info instead of warning), and re-run until CLEAN. canvas_evaluate remembers the last stress verdict: after a FRAGILE run the directive stays NOT READY until a full CLEAN run (all five perturbations) replaces it — a subset run can record FRAGILE but never clear it.',
   'Derive, don\'t hand-pick: generate_design_system (seed + REQUIRED personality: technical/editorial/soft/data-dense) writes the whole design language in one call — including $display/$heading/$title/$body/$label typography roles, $elevation.* shadow tokens (reference as shadow: "$elevation.raised"; the dark layer re-states depth), and $motion defaults. For targeted regeneration only: generate_scale gives a modular type + space scale from a ratio (craft defaults baked in; fluid clamp() optional); generate_color_system gives OKLCH ramps + a matched neutral + status colors + the semantic tokens the structures use, AA by construction, WITH a dark theme (sparse dark.colors layer) AND the color range — chart-1…chart-6 for series/segments/legend dots, plus the accent/success/warning/danger/neutral -tint layer for chips/tiles/badges (pair tint as fill with its base color as ink; AA by construction, dark included). Render dark via theme: "dark" on screenshot/screenshot_responsive/export; canvas_evaluate contrast-checks both themes automatically (dark failures point at the dark layer — never write a literal fix; APCA Lc is info-only, WCAG 2.2 gates). Literals that equal a token get re-attached by autofix; timing belongs in $motion tokens.',
   'Beyond one canvas: bento/editorial compositions are REAL grid — layout: "grid" + gridColumns (count / fr-weight array / template string) + gridColumn/gridRow spans (a number means span N); responsive: "stack" collapses to one column on mobile. Never approximate tiles with nested flex. When a multi-screen module feels done, project_evaluate reviews the SET — radius-drift / accent-drift / token-adoption / copied-chrome / state-coverage findings, each naming its canvases — and mode "llm" judges up to 8 screens together for flow consistency (flowSkipped lists anything past the cap; keyless → full roll-up + a note). ADVISORY: only the per-canvas directives gate presenting.',
+  'Declare the medium: a phone app screen is canvas_create({ type: "mobile" }) (device "iphone-390": 390×844, root safeArea: { top: 47, bottom: 34 } added to the root padding by the renderer) — not a 390px-wide web canvas. canvas_set_type re-declares an existing canvas (type: "web" | "mobile" | null) WITHOUT resizing it or writing safeArea; follow its hint. The type changes the ruleset and defaults only (generate_design_system pivots on a 17px body, 16 for data-dense; no mobile rule ids are registered yet), never pixels; evaluate\'s "surface" report shows the type, its source ("declared" | "default"; canvas_create reports the same as typeSource) and the rulesOn / rulesOff / conflicts the rulesets composed.',
   'Gate integrity: a canvas describing a SHIPPED view is a contract — run canvas_check_drift against the live route BEFORE designing on it (findings: missing-in-page / missing-in-canvas / control-mismatch / table-mismatch), and reconcile deliberately: update the canvas, flag the implementation, or ask — never silently annotate a difference. canvas_sync_from_url answers "how much does it LOOK different" (pixel %); canvas_version makes approvals falsifiable — record { canvasId, versionHash } at approval time and check with expectedHash later (metadata/feedback never moves the hash; ANY inherited workspace/project token edit DOES, even to a token the canvas does not use). A legacy sha256: hash still checks but carries a warning — re-record it as the current sha256r: versionHash. CI can demand both: npx framesmith check-drift / verify exit 1 on failure.',
 ];
 
@@ -169,18 +173,26 @@ server.resource(
 // --- canvas_create ---
 server.tool(
   'canvas_create',
-  'Create a new design canvas. Returns the canvas ID, root node ID, project assignment, the artboard `width`/`height`, viewer URL, and a `diversification` signal — the recently-built structures in this project plus a hint to differ on at least one taxonomy axis, so successive canvases don\'t converge on the same layout. Always share the viewer URL with the user so they can see the design live in their browser. If `projectId` is omitted, the canvas lands in the default Untitled project. The artboard defaults to 1440×900; pass `width`/`height` for another size (e.g. 390×844 for a phone screen).',
+  'Create a new design canvas. Returns the canvas ID, root node ID, project assignment, the artboard `width`/`height`, viewer URL, and a `diversification` signal — the recently-built structures in this project plus a hint to differ on at least one taxonomy axis, so successive canvases don\'t converge on the same layout. Always share the viewer URL with the user so they can see the design live in their browser. If `projectId` is omitted, the canvas lands in the default Untitled project. The artboard defaults to 1440×900; pass `width`/`height` for another size. Building a PHONE APP screen? Pass `type: "mobile"` — it declares the canvas a phone screen (it selects the mobile ruleset, and generate_design_system gives it a 17px body) and gives you the device artboard (390×844 for the default `device: "iphone-390"`) with the root reserving the device\'s safe-area insets as `safeArea: { top: 47, bottom: 34 }` (the renderer adds them to the root\'s top/bottom padding, so in-flow content never sits under the status bar or home indicator). `type: "web"` (the default) declares a web page. The result reports `type`, `typeSource` ("declared" | "default"), and for mobile `device` + `safeArea`. Change it later with canvas_set_type.',
   {
     name: z.string().optional().describe('Name for the canvas'),
     projectId: z.string().optional().describe('Project to create the canvas in. Defaults to the built-in Untitled project. Use project_list to see available projects.'),
-    width: z.number().int().positive().optional().describe('Artboard width in px (default 1440)'),
-    height: z.number().int().positive().optional().describe('Artboard height in px (default 900)'),
+    width: z.number().int().positive().optional().describe('Artboard width in px (default 1440, or the device width for type "mobile")'),
+    height: z.number().int().positive().optional().describe('Artboard height in px (default 900, or the device height for type "mobile")'),
+    type: z.enum(['web', 'mobile']).optional().describe('What medium the canvas is on: "web" (default) or "mobile" (a phone app screen: device artboard + safe-area insets on the root)'),
+    device: z.string().optional().describe('Device profile for type "mobile" (default "iphone-390": 390×844, insets 47/34). Only valid with type "mobile".'),
   },
-  async ({ name, projectId, width, height }) => {
+  async ({ name, projectId, width, height, type, device }) => {
     if (projectId && !getProject(projectId)) {
       return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see available projects.` }], isError: true };
     }
-    const canvas = createCanvas(name, projectId ?? DEFAULT_PROJECT_ID, { width, height });
+    if (device !== undefined && type === undefined) {
+      return { content: [{ type: 'text', text: 'Error: device only applies to type "mobile" — pass type: "mobile" with it.' }], isError: true };
+    }
+    const declared = type === undefined ? undefined : surfaceFor(type, device);
+    if (declared && 'error' in declared) return { content: [{ type: 'text', text: `Error: ${declared.error}` }], isError: true };
+    const canvas = createCanvas(name, projectId ?? DEFAULT_PROJECT_ID, { width, height }, declared?.surface);
+    const surface = resolveSurface(canvas);
     const viewerUrl = getViewerUrl();
     return {
       content: [
@@ -193,6 +205,10 @@ server.tool(
             projectId: canvas.projectId,
             width: canvas.root.width,
             height: canvas.root.height,
+            type: surface.type,
+            typeSource: surface.source,
+            ...(surface.device ? { device: surface.device } : {}),
+            ...(canvas.root.safeArea ? { safeArea: canvas.root.safeArea } : {}),
             viewerUrl: viewerUrl ? `${viewerUrl}/canvas/${canvas.id}` : null,
             galleryUrl: viewerUrl,
             diversification: diversificationFor(canvas.projectId),
@@ -542,7 +558,7 @@ Concatenate bindings: U(header+"/childId", {...})
 Returns { ok, nodeIds, results }: nodeIds maps each bound variable to the node ID it created (e.g. { "header": "n_a1b2" }) — record it and use those IDs to target nodes in later calls (bindings only live within a single call). results lists each op's outcome in order. If the call wrote a fontFamily nothing can serve yet (not cached, not registered, not system/generic), an extra "Font warnings" content item names it — cache-only check, no network, so it can't catch everything set_fonts/network resolution would.
 
 Node types: frame, text, rectangle, ellipse, image, icon, path, component, instance, toggle, checkbox, radio, select, chart, skeleton
-Properties: fill, gradient, stroke, strokeWidth, strokeStyle, borderTop, borderRight, borderBottom, borderLeft, cornerRadius, width, height, minWidth, minHeight, maxWidth, layout ("horizontal"|"vertical"|"grid"), gap (0 = flush, never flagged as off-scale), rowGap, gridColumns, gridColumn, gridRow, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, textAlign, lineHeight, letterSpacing (px), textDecoration, textTransform ("uppercase" etc. — don't bake casing into content), textOverflow ("ellipsis" — designed single-line truncation for labels that must survive hostile-length content; canvas_stress reports clips behind it as info, not warnings), tabularNums (fixed-width digits so number columns align — table scaffolds and chart ticks carry it by default), fontVariationSettings (variable-font axes, e.g. '"wght" 650'), src, objectFit, opacity, shadow, shadows (plural wins — a \`shadow\` written where \`shadows\` is set is ignored, and the op result carries a warning saying so), blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, iconStyle, checked, disabled, value, pulse, d, viewBox, strokeLinecap, strokeLinejoin, strokeDasharray, animation, transition (object, or the string "$motion.<name>" referencing a motion token), kind, series, segments, innerRatio, centerValue, centerLabel, sparkKind, xDomain, yDomain, curve, gridlines, xLabels, yLabels, componentId, overrides, responsive
+Properties: fill, gradient, stroke, strokeWidth, strokeStyle, borderTop, borderRight, borderBottom, borderLeft, cornerRadius, width, height, minWidth, minHeight, maxWidth, layout ("horizontal"|"vertical"|"grid"), gap (0 = flush, never flagged as off-scale), rowGap, gridColumns, gridColumn, gridRow, padding, alignItems, justifyContent, fontSize, fontFamily, fontWeight, color, content, textAlign, lineHeight, letterSpacing (px), textDecoration, textTransform ("uppercase" etc. — don't bake casing into content), textOverflow ("ellipsis" — designed single-line truncation for labels that must survive hostile-length content; canvas_stress reports clips behind it as info, not warnings), tabularNums (fixed-width digits so number columns align — table scaffolds and chart ticks carry it by default), fontVariationSettings (variable-font axes, e.g. '"wght" 650'), src, objectFit, opacity, shadow, shadows (plural wins — a \`shadow\` written where \`shadows\` is set is ignored, and the op result carries a warning saying so), blur, backdropBlur, backdropFilter, overflow, wrap, position, x, y, icon, iconSize, iconColor, iconStyle, checked, disabled, value, pulse, d, viewBox, strokeLinecap, strokeLinejoin, strokeDasharray, animation, transition (object, or the string "$motion.<name>" referencing a motion token), kind, series, segments, innerRatio, centerValue, centerLabel, sparkKind, xDomain, yDomain, curve, gridlines, xLabels, yLabels, componentId, overrides, safeArea ({ top, bottom }, document root only — insets the renderer adds to the root's top/bottom padding; canvas_create type "mobile" writes the device's), responsive
 
 Charts: { type: "chart", kind: "line"|"bar"|"donut"|"sparkline", series: [{ data: [210, 450, 648], stroke: "$accent", strokeDasharray?: "6 4", area?, points?, highlight?: [2] (a lone index 2 works too; null clears it; an entry that isn't an index into data renders no emphasis and the op result warns), barGradient? }], yDomain?: [0, 2700], curve?: "smooth", gridlines?: 4, xLabels?: ["Jan", ..., "Dec"], yLabels? } — the node does ALL the value→coordinate math (multi-series in one node; x = data index, a shorter series stops early against a longer one; domains auto from data, bars floor at 0). Dash the projected/forecast series, solid the actuals; highlight: [i] renders those bars solid over muted siblings (the selected-day treatment) and barGradient fades the muted bars inside the SVG. DONUT: kind "donut" + segments: [{ value, color: "$chart-1", label? }] + innerRatio? + centerValue/centerLabel — data-bound slices from 12 o\'clock clockwise, center figure rendered tabular; compose the legend yourself from frames + $chart-* dots. SPARKLINE: kind "sparkline" (+ sparkKind "bar"|"line") — axis-free mini-trend for KPI cards, latest point emphasized by default (override with series.highlight). NEVER hand-compute path d-strings, absolutely-position tick labels, fake a donut with conic gradients, or hand-place sparkline bars.
 
@@ -1107,11 +1123,11 @@ Personalities (required — pick a stance, don't default into sameness):
 - "soft" — warm, rounded, human (Plus Jakarta Sans + Inter, 12/16/20 radii, springy motion). For consumer apps, onboarding, anything friendly.
 - "data-dense" — instrument-panel density (Inter + a JetBrains Mono "figures" role, 13px pivot, minimal radii, near-flat depth). For dashboards, tables, monitoring.
 
-The typography layer ships ROLE tokens the structures speak — $display / $heading / $title (page/screen titles, one step below $display — every archetype's page title references it) / $body / $label / $caption (+ $figures when a mono face exists) — alongside the text-xs…text-3xl steps. Depth: reference elevation from any node as shadow: "$elevation.flat|raised|floating|overlay" — the dark layer re-states each depth so it reads on dark surfaces. The COLOR RANGE rides along (Phase 28): $chart-1…$chart-6 categorical series tokens for dataviz, and the tint layer ($accent-tint / $success-tint / … — tint as fill, base color as ink, AA by construction both themes) for chips, icon tiles, pills, and avatars. Writes to exactly ONE of canvasId / projectId / workspaceId. Canvas scope keeps tokens the canvas resolves through an inherited design system rather than clobbering them — but preservation is FIELD-WISE for typography, so an inherited role that carries only a size keeps that size and still picks up this personality's family/weight/tracking (before v2.1 it swallowed the whole spec and the role silently rendered in the fallback stack). What was kept is reported two ways: \`preservedFromDesignSystem\` for ordinary tokens, and \`designSystemConflicts\` for tokens in the semantic vocabulary THIS system defines (the surface/ink/border/accent semantics, the STATUS colours and their paired -tint layer, the \$chart-* range, and the type roles — an inherited success keeps pairing with the GENERATED success-tint and fails contrast) — a conflict means the screen is running two design languages at once, and each entry names the fix. \`preserveInherited: false\` writes the generated language whole. The response's typographyRoles reports what the canvas ACTUALLY resolves, not what was generated — the two differ exactly when preservation fired. The two single-purpose generators stay available for targeted regeneration (just the palette, just the scale).`,
+The typography layer ships ROLE tokens the structures speak — $display / $heading / $title (page/screen titles, one step below $display — every archetype's page title references it) / $body / $label / $caption (+ $figures when a mono face exists) — alongside the text-xs…text-3xl steps. Depth: reference elevation from any node as shadow: "$elevation.flat|raised|floating|overlay" — the dark layer re-states each depth so it reads on dark surfaces. The COLOR RANGE rides along (Phase 28): $chart-1…$chart-6 categorical series tokens for dataviz, and the tint layer ($accent-tint / $success-tint / … — tint as fill, base color as ink, AA by construction both themes) for chips, icon tiles, pills, and avatars. Writes to exactly ONE of canvasId / projectId / workspaceId. Canvas scope keeps tokens the canvas resolves through an inherited design system rather than clobbering them — but preservation is FIELD-WISE for typography, so an inherited role that carries only a size keeps that size and still picks up this personality's family/weight/tracking (before v2.1 it swallowed the whole spec and the role silently rendered in the fallback stack). What was kept is reported two ways: \`preservedFromDesignSystem\` for ordinary tokens, and \`designSystemConflicts\` for tokens in the semantic vocabulary THIS system defines (the surface/ink/border/accent semantics, the STATUS colours and their paired -tint layer, the \$chart-* range, and the type roles — an inherited success keeps pairing with the GENERATED success-tint and fails contrast) — a conflict means the screen is running two design languages at once, and each entry names the fix. \`preserveInherited: false\` writes the generated language whole. The response's typographyRoles reports what the canvas ACTUALLY resolves, not what was generated — the two differ exactly when preservation fired. The two single-purpose generators stay available for targeted regeneration (just the palette, just the scale). On a canvas declared type: "mobile" (canvas_create / canvas_set_type) the type scale pivots on the device body size — 17px for every personality except data-dense, which uses 16px — so the generated $body meets the phone body floor; an explicit baseSize still wins. The result reports the GENERATED pivot as baseSize + baseSizeSource ("explicit" | "personality" | "mobile"); if the canvas inherits a $body from a workspace/project design system, that body is preserved by default and shows up in designSystemConflicts (typographyRoles.body is what renders) — pass preserveInherited: false to take the mobile body.`,
   {
     seed: z.string().describe('The brand color to derive everything from (#RRGGBB)'),
     personality: z.enum(['technical', 'editorial', 'soft', 'data-dense']).describe('The design stance — required. Genre guide: dashboards → data-dense or technical; marketing/content → editorial; consumer → soft.'),
-    baseSize: z.number().optional().describe('Override the personality\'s type pivot (10–24px)'),
+    baseSize: z.number().optional().describe('Override the type pivot (10–24px) — the personality\'s, or the 17/16px mobile body on a type "mobile" canvas'),
     ratio: z.union([z.enum(['minor-second', 'major-second', 'minor-third', 'major-third', 'perfect-fourth', 'golden']), z.number()]).optional().describe('Override the personality\'s scale ratio'),
     canvasId: z.string().optional().describe('Write to this canvas\'s variables'),
     projectId: z.string().optional().describe('Write to this project\'s design system'),
@@ -1125,7 +1141,14 @@ The typography layer ships ROLE tokens the structures speak — $display / $head
       return { content: [{ type: 'text', text: 'Error: pass exactly ONE of canvasId / projectId / workspaceId — the layer the system is written to.' }], isError: true };
     }
     try {
-      const system = generateDesignSystem(seed, personality as PersonalityName, { baseSize, ratio });
+      // Phase 30 slice B — a mobile canvas gets the device body size as its
+      // pivot (canvas scope only: a project/workspace has no type).
+      if (canvasId) ensureFresh(canvasId);
+      const target = canvasId ? getCanvas(canvasId) : undefined;
+      const declared = target ? resolveSurface(target) : undefined;
+      const typeOpts = { baseSize, ratio, surface: declared?.type, device: declared?.device ?? undefined };
+      const system = generateDesignSystem(seed, personality as PersonalityName, typeOpts);
+      const base = typeBase(personality as PersonalityName, typeOpts);
       const vars = system.variables;
 
       let preserved: PresetApplyResult['preserved'] = [];
@@ -1195,6 +1218,8 @@ The typography layer ships ROLE tokens the structures speak — $display / $head
           wroteTo,
           personality: system.personality,
           intent: system.intent,
+          baseSize: base.size,
+          baseSizeSource: base.source,
           fonts: system.fonts,
           seed: system.colorSystem.seed,
           semantics: system.colorSystem.light,
@@ -1991,6 +2016,50 @@ Stamping a genre does NOT move the canvas's versionHash (the hash covers design 
   }
 );
 
+// --- canvas_set_type (Phase 30 slice B) ---
+server.tool(
+  'canvas_set_type',
+  `Declare what MEDIUM an existing canvas is on: "web" (a web page) or "mobile" (a phone app screen: it selects the mobile ruleset — the evaluate result's surface report lists the rule ids that run — and generate_design_system then gives it a 17px body). Writes metadata.surface only — it NEVER resizes the artboard and NEVER writes the root's safeArea, because either would reflow what you already placed. So a canvas made mobile here usually needs one more op: when the result carries a "hint", it names it — U("document", { safeArea: { top: 47, bottom: 34 } }) to reserve the device insets, and the device artboard size (390×844 for "iphone-390") if the root differs. For a NEW phone screen, prefer canvas_create({ type: "mobile" }), which does all of that at once. Pass type: null to clear the declaration (the canvas reads as an undeclared web canvas again, typeSource "default"). device ("iphone-390", the default) is only valid with "mobile". Clearing leaves the root (including any safeArea) as it is. The result echoes { canvasId, type, device, source, previous ({ type, device } or null), artboard { width, height }, hint?, versionHashUnchanged }. Like canvas_set_genre it does NOT move the versionHash (metadata is outside the hash; the hint's ops do move it, since they change the root) — but the type changes the surface report and the ruleset, so re-evaluate after it.`,
+  {
+    canvasId: z.string().describe('Canvas ID'),
+    type: z.enum(['web', 'mobile']).nullable().describe('"web", "mobile", or null to clear the declaration'),
+    device: z.string().optional().describe('Device profile for "mobile" (default "iphone-390"). Only valid with "mobile".'),
+  },
+  async ({ canvasId, type, device }) => {
+    if (type === null && device !== undefined) {
+      return { content: [{ type: 'text', text: 'Error: device only applies to type "mobile".' }], isError: true };
+    }
+    const declared = type === null ? null : surfaceFor(type, device);
+    if (declared && 'error' in declared) return { content: [{ type: 'text', text: `Error: ${declared.error}` }], isError: true };
+    const result = setCanvasType(canvasId, declared ? declared.surface : null);
+    if (!result) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
+    const canvas = getCanvas(canvasId)!;
+    const surface = resolveSurface(canvas);
+    const artboard = { width: canvas.root.width, height: canvas.root.height };
+    const profile = surface.device ? deviceProfile(surface.device) : undefined;
+    const steps: string[] = [];
+    const insets = usableSafeArea(canvas.root.safeArea);
+    if (profile && (insets.top === undefined || insets.bottom === undefined)) {
+      steps.push(`reserve the device insets with U("document", { safeArea: { top: ${profile.safeArea.top}, bottom: ${profile.safeArea.bottom} } })`);
+    }
+    if (profile && (artboard.width !== profile.width || artboard.height !== profile.height)) {
+      steps.push(`resize the artboard to ${profile.width}×${profile.height} (U("document", { width: ${profile.width}, height: ${profile.height} })) — this canvas is ${artboard.width}×${artboard.height}`);
+    }
+    return {
+      content: [{ type: 'text', text: JSON.stringify({
+        canvasId,
+        type: surface.type,
+        device: surface.device,
+        source: surface.source,
+        previous: result.previous,
+        artboard,
+        ...(steps.length ? { hint: `canvas_set_type never touches the root. To finish making this a ${surface.device} screen: ${steps.join('; ')}.` } : {}),
+        versionHashUnchanged: true,
+      }, null, 2) }],
+    };
+  }
+);
+
 // --- canvas_evaluate ---
 server.tool(
   'canvas_evaluate',
@@ -2002,7 +2071,9 @@ Designed for generator-evaluator loops: generate with batch_design, evaluate wit
 
 THE HEURISTIC DIRECTIVE IS THE PRESENTATION GATE. mode: "llm" adds optional depth (a vision-model rubric critique — composition, hierarchy, polish) on top; it requires an ANTHROPIC_API_KEY or OPENAI_API_KEY and fails gracefully without one — the FULL heuristic result still returns with an llmNote explaining what's missing, and the heuristic directive alone decides. With a key it still decides: a needsRevision verdict never blocks presenting — run canvas_revise, and if it stops with axes still failing, present and name them. Screens whose figures are the user's own data: declare genre: "data" so the design's own realistic figures aren't flagged as fabricated; transactional screens (cart/checkout/order/billing) pass genre: "commerce" for the same reason (see the genre param).
 
-The result's "genre" field (present whenever cliche ran) makes the genre decision auditable: { active, source ("explicit" param | "provenance" stamp | null), relaxed (tells skipped, by the genre and by the applied preset), notRelaxed ([{ tell, relaxedBy }] — tells still flagging that a DIFFERENT genre would relax), byPreset ({ preset, relaxed } — present when the applied preset relaxed tells on its own, e.g. the material preset) }. active is the canonical genre: an alias reports as its canonical name ("dashboard" → "data", "checkout" → "commerce"). If the score is pinned by tells listed in notRelaxed, the genre is probably wrong — genre follows what the screen is FOR (read screens with the user's own figures → "data"; a screen you complete a purchase on → "commerce"; editors/admin forms → "material"), not what it contains.`,
+The result's "genre" field (present whenever cliche ran) makes the genre decision auditable: { active, source ("explicit" param | "provenance" stamp | null), relaxed (tells skipped, by the genre and by the applied preset), notRelaxed ([{ tell, relaxedBy }] — tells still flagging that a DIFFERENT genre would relax), byPreset ({ preset, relaxed } — present when the applied preset relaxed tells on its own, e.g. the material preset) }. active is the canonical genre: an alias reports as its canonical name ("dashboard" → "data", "checkout" → "commerce"). If the score is pinned by tells listed in notRelaxed, the genre is probably wrong — genre follows what the screen is FOR (read screens with the user's own figures → "data"; a screen you complete a purchase on → "commerce"; editors/admin forms → "material"), not what it contains.
+
+The result's "surface" field (always present) reports the canvas TYPE and the rules it selected: { type ("web" | "mobile"), device (the device profile, e.g. "iphone-390", or null on web), source ("declared" by canvas_create type / canvas_set_type, or "default" — never declared, judged as web), rulesOn (rule ids the composed type + genre + preset rulesets turned on), rulesOff (rule ids they turned off), conflicts (ids both enabled and disabled — those stay ON) }.`,
   {
     canvasId: z.string().describe('Canvas ID to evaluate'),
     mode: z.enum(['fast', 'detailed', 'llm']).default('fast').describe('"fast" = JSON-only (<100ms), "detailed" = + Puppeteer layout checks, "llm" = fast + vision-model rubric critique'),
@@ -2069,7 +2140,7 @@ The result's "genre" field (present whenever cliche ran) makes the genre decisio
 // --- canvas_autofix ---
 server.tool(
   'canvas_autofix',
-  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing — gap, scalar AND array-form padding (the fix writes the complete snapped array) — → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins; default-purple accent → swap to a neutral accent; fake-chrome strip → delete; pure-black ink → soften to off-black; a literal fill/stroke/color/cornerRadius that exactly equals a SINGLE token's value → re-pointed to the \$ref — a value shared by multiple tokens is reported with candidates but never auto-fixed). By default this PROPOSES: each fix carries a ready-to-paste \`batch_design\` op string and a one-line rationale. Also: an unknown icon name with exactly one spelling that resolves (hyphens ↔ underscores, or a missing material: prefix — ties broken by the icon set the canvas already uses) → rewritten to that name. Pass apply: true to also WRITE the fixes to the canvas in the same call — the result then reports applied/failed per op. Taste-dependent cliche tells (gradient/glow overuse, the hanging header, fabricated content, eyebrow-rhythm overuse, slop copy, mixed radius systems, competing accents) carry a suggestion but no auto-fix — call canvas_evaluate to see those. Coverage warnings (missing empty/loading/error state variants) also have no mechanical fix: designing a state is judgment — the suggestion names the canvas_add_variant + scaffold path. Usability findings (hit-target size, label association, vague action copy) likewise have no mechanical fix — growing a control, writing a label, or renaming a button is a judgment call; call canvas_evaluate and fix them via batch_design. Closes the generator-evaluator loop: generate with batch_design → autofix (apply: true) → re-evaluate.`,
+  `Run canvas_evaluate in fast mode and return the subset of issues that have a mechanically derived fix (off-scale spacing — gap, scalar AND array-form padding (the fix writes the complete snapped array) — → snap to scale; missing layout on multi-child frame → set vertical; recoverable WCAG contrast failure → switch text to #000 or #FFF, whichever wins; default-purple accent → swap to a neutral accent; fake-chrome strip → delete; pure-black ink → soften to off-black; a literal fill/stroke/color/cornerRadius that exactly equals a SINGLE token's value → re-pointed to the \$ref — a value shared by multiple tokens is reported with candidates but never auto-fixed). By default this PROPOSES: each fix carries a ready-to-paste \`batch_design\` op string and a one-line rationale. Also: an unknown icon name with exactly one spelling that resolves (hyphens ↔ underscores, or a missing material: prefix — ties broken by the icon set the canvas already uses) → rewritten to that name. Pass apply: true to also WRITE the fixes to the canvas in the same call — the result then reports applied/failed per op. Taste-dependent cliche tells (gradient/glow overuse, the hanging header, fabricated content, eyebrow-rhythm overuse, slop copy, mixed radius systems, competing accents) carry a suggestion but no auto-fix — call canvas_evaluate to see those. Coverage warnings (missing empty/loading/error state variants) also have no mechanical fix: designing a state is judgment — the suggestion names the canvas_add_variant + scaffold path. Usability findings (hit-target size, label association, vague action copy) likewise have no mechanical fix — growing a control, writing a label, or renaming a button is a judgment call; call canvas_evaluate and fix them via batch_design. Closes the generator-evaluator loop: generate with batch_design → autofix (apply: true) → re-evaluate. The result carries the same "genre" and "surface" reports as canvas_evaluate.`,
   {
     canvasId: z.string().describe('Canvas ID to autofix'),
     categories: z.array(z.enum(['spacing', 'color', 'typography', 'structure', 'consistency', 'cliche', 'coverage', 'usability']))
@@ -2081,7 +2152,7 @@ server.tool(
       .describe('Write the fixes to the canvas in this call (default false: propose only, returning ops to run via batch_design).'),
   },
   async ({ canvasId, categories, genre, apply }) => {
-    if (apply) ensureFresh(canvasId); // mutating path — pick up external edits first
+    ensureFresh(canvasId); // pick up external edits first — the proposals and the genre/surface reports must describe what's on disk
     const canvas = getCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
@@ -2103,6 +2174,7 @@ server.tool(
           totalIssues: result.issues.length,
           fixableCount: fixes.length,
           ...(result.genre ? { genre: result.genre } : {}),
+          surface: result.surface,
           ...(apply ? { applied: 0, note: 'apply: true had nothing to write' } : {}),
           fixes,
         }, null, 2) }],
@@ -2123,6 +2195,7 @@ server.tool(
         totalIssues: result.issues.length,
         fixableCount: fixes.length,
         ...(result.genre ? { genre: result.genre } : {}),
+        surface: result.surface,
         appliedCount: applied.length,
         applied,
         ...(failed.length ? { failed } : {}),

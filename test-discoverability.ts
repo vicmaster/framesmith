@@ -18,6 +18,7 @@ import './test-env.js';
 import { readFileSync } from 'node:fs';
 import { domToSceneGraph, type RawDomNode } from './src/import.js';
 import { listStructures } from './src/structures.js';
+import { RULESETS, GENRE_ALIASES, SURFACE_TYPES, DEVICE_PROFILES } from './src/surfaces.js';
 
 interface Check { name: string; ok: boolean; detail?: string }
 const checks: Check[] = [];
@@ -116,13 +117,11 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
 }
 
 // ── 7. every relax-genre is surfaced where agents look ───────────────────────
-// Mirrors the RELAXED_BY_GENRE keys in evaluate.ts (module-private, so parsed
-// from source). A new genre must be named in index.ts (genre param / GOTCHAS)
+// Mirrors the genre rows of the ruleset table (src/surfaces.ts RULESETS) plus
+// their aliases. A new genre must be named in index.ts (genre param / GOTCHAS)
 // and GUIDELINES or agents can never discover it.
 {
-  const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
-  const table = evaluateSrc.match(/const RELAXED_BY_GENRE[^=]*=\s*\{([\s\S]*?)\n\};/)?.[1] ?? '';
-  const genres = [...table.matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+  const genres = [...Object.keys(RULESETS.genre), ...GENRE_ALIASES.keys()];
   expect('relax-genres found', genres.length >= 3, genres.join(', '));
   const missingIdx = genres.filter((g) => !indexSrc.includes(`"${g}"`));
   expect('every relax-genre named in src/index.ts', missingIdx.length === 0, missingIdx.join(', '));
@@ -150,15 +149,12 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   // describes a style, not a genre value — stays exempt.
   // GENRE_ALIASES is a Map of [alias, canonical] pairs (Phase 30 made `data`
   // canonical and `dashboard` its alias).
-  const aliasBlock = evaluateSrc.match(/const GENRE_ALIASES[^=]*=\s*new Map[^(]*\(\[([\s\S]*?)\]\);/)?.[1] ?? '';
-  const aliases = new Set([...aliasBlock.matchAll(/\['([^']+)',\s*'[^']+'\]/g)].map((m) => m[1]));
-  const canonical = genres.filter((g) => !aliases.has(g));
-  expect('genre aliases parsed from evaluate.ts', aliases.size > 0, [...aliases].join(', '));
+  const canonical = Object.keys(RULESETS.genre);
+  expect('genre aliases present in the ruleset table', GENRE_ALIASES.size > 0, [...GENRE_ALIASES.keys()].join(', '));
 
   const tellToGenres = new Map<string, string[]>();
   for (const g of canonical) {
-    const tells = table.match(new RegExp(`^\\s{2}${g}:\\s*\\[([^\\]]*)\\]`, 'm'))?.[1] ?? '';
-    for (const t of [...tells.matchAll(/'([^']+)'/g)].map((m) => m[1])) {
+    for (const t of RULESETS.genre[g].relax ?? []) {
       tellToGenres.set(t, [...(tellToGenres.get(t) ?? []), g]);
     }
   }
@@ -193,11 +189,12 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   const evaluateSrc = readFileSync('src/evaluate.ts', 'utf-8');
   const recommends = /genre[:=]?\s*\\?["'`]dashboard\\?["'`]|set_genre\(\s*\\?["'`]dashboard/;
   const offenders: string[] = [];
-  for (const [label, src] of [['src/index.ts', indexSrc], ['src/evaluate.ts', evaluateSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
+  const surfacesSrc = readFileSync('src/surfaces.ts', 'utf-8');
+  for (const [label, src] of [['src/index.ts', indexSrc], ['src/evaluate.ts', evaluateSrc], ['src/surfaces.ts', surfacesSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
     src.split('\n').forEach((line, i) => { if (recommends.test(line)) offenders.push(`${label}:${i + 1}`); });
   }
   expect('no agent surface recommends genre: "dashboard" (declare "data")', offenders.length === 0, offenders.join(', '));
-  expect('aliases parsed: dashboard → data, checkout → commerce', /\['dashboard',\s*'data'\]/.test(evaluateSrc) && /\['checkout',\s*'commerce'\]/.test(evaluateSrc));
+  expect('aliases: dashboard → data, checkout → commerce', GENRE_ALIASES.get('dashboard') === 'data' && GENRE_ALIASES.get('checkout') === 'commerce');
 
   for (const field of ['byPreset', 'presetRelaxes', 'canonical']) {
     expect(`genre field "${field}" documented in src/index.ts`, indexSrc.includes(field));
@@ -364,6 +361,21 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   for (const surface of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines]] as const) {
     const missing = ROLES.filter((r) => !surface[1].includes(r));
     expect(`typography roles in ${surface[0]}`, missing.length === 0, missing.join(', '));
+  }
+}
+
+// ── Phase 30 slice B: the type axis ──────────────────────────────────────────
+// Every canvas type and every device profile is named where agents look, and
+// the surface report's fields are documented — a type an agent can't find is
+// a phone screen judged as a web page.
+{
+  for (const [label, src] of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines]] as const) {
+    const types = SURFACE_TYPES.filter((t) => !src.includes(`type: "${t}"`));
+    expect(`every canvas type named (type: "…") in ${label}`, types.length === 0, types.join(', '));
+    const devices = Object.keys(DEVICE_PROFILES).filter((d) => !src.includes(`"${d}"`));
+    expect(`every device profile named in ${label}`, devices.length === 0, devices.join(', '));
+    const fields = ['rulesOn', 'rulesOff', 'conflicts', 'typeSource', 'safeArea'].filter((f) => !src.includes(f));
+    expect(`surface fields documented in ${label}`, fields.length === 0, fields.join(', '));
   }
 }
 

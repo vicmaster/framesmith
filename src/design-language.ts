@@ -15,6 +15,7 @@
 import { generateColorSystem } from './color-system.js';
 import { generateTypeScale, generateSpaceScale, type RatioName } from './scales.js';
 import type { DesignVariables, ShadowSpec } from './types.js';
+import { DEVICE_PROFILES, DEFAULT_DEVICE, deviceProfile, type SurfaceType } from './surfaces.js';
 
 export type PersonalityName = 'technical' | 'editorial' | 'soft' | 'data-dense';
 export const PERSONALITY_NAMES: PersonalityName[] = ['technical', 'editorial', 'soft', 'data-dense'];
@@ -156,6 +157,22 @@ export interface DesignSystemOptions {
   baseSize?: number;
   /** Override the personality's scale ratio. */
   ratio?: RatioName | number;
+  /** Phase 30 slice B — the canvas type the system is for. On `mobile` the
+   * pivot becomes the device body size (17; 16 for data-dense) unless
+   * `baseSize` is explicit. */
+  surface?: SurfaceType;
+  /** The mobile device profile (default "iphone-390"). */
+  device?: string;
+}
+
+/** Where a generated system's type pivot came from. */
+export function typeBase(personalityName: PersonalityName, opts: DesignSystemOptions = {}): { size: number; source: 'explicit' | 'personality' | 'mobile' } {
+  if (opts.baseSize !== undefined) return { size: opts.baseSize, source: 'explicit' };
+  if (opts.surface === 'mobile') {
+    const profile = deviceProfile(opts.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE];
+    return { size: personalityName === 'data-dense' ? profile.bodyFloor : profile.bodySize, source: 'mobile' };
+  }
+  return { size: PERSONALITIES[personalityName].type.baseSize, source: 'personality' };
 }
 
 /** One seed + one personality → the full token stack. Pure — writing to a
@@ -180,7 +197,7 @@ export function generateDesignSystem(
   Object.assign(colors, colorSystem.categorical, colorSystem.tints);
 
   // Type scale — the existing engine, pivoted by the personality.
-  const baseSize = opts.baseSize ?? p.type.baseSize;
+  const baseSize = typeBase(personalityName, opts).size;
   const steps = generateTypeScale({
     ratio: opts.ratio ?? p.type.ratio,
     baseSize,
