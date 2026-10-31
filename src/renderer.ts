@@ -1064,6 +1064,15 @@ function paddingSides(padding: SceneNode['padding']): { top: string; bottom: str
   return { top: '0px', bottom: '0px' };
 }
 
+/** The px a padding value renders at on a viewport `viewportWidth` wide —
+ * responsivePadding's clamp() evaluated. Phase 30 slice C: the mobile rules
+ * measure rendered padding, since a 48px padding on a 390 artboard renders 13. */
+export function renderedPaddingPx(value: number, viewportWidth: number): number {
+  if (value < PADDING_SCALE_MIN) return value;
+  const min = Math.max(8, Math.round(value * 0.25));
+  return Math.min(value, Math.max(min, (value / DESIGN_WIDTH) * viewportWidth));
+}
+
 function responsivePadding(value: number): string {
   if (value < PADDING_SCALE_MIN) return `${value}px`;
   const min = Math.max(8, Math.round(value * 0.25));

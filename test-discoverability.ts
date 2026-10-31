@@ -379,6 +379,22 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   }
 }
 
+// ── Phase 30 slice C: every registered rule id reaches the agent surfaces ────
+// Rule ids appear on findings (`rule`) and in the surface report (rulesOn). An
+// id an agent can't look up is a finding it can't act on.
+{
+  const ruleIds = new Set<string>();
+  for (const axis of Object.values(RULESETS)) {
+    for (const r of Object.values(axis)) [...(r.enable ?? []), ...(r.disable ?? [])].forEach((id) => ruleIds.add(id));
+  }
+  expect('the ruleset table registers rule ids', ruleIds.size > 0);
+  for (const [label, src] of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
+    const missing = [...ruleIds].filter((id) => !src.includes(id));
+    expect(`every rule id named in ${label}`, missing.length === 0, missing.join(', '));
+  }
+  expect('the issue `rule` field is documented in src/index.ts and GUIDELINES', /"rule" field/.test(indexSrc) && /`rule` field/.test(guidelines));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;

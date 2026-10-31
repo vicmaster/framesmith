@@ -6,7 +6,8 @@ import { computeLayout, type LayoutRect } from './screenshot.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
-import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, type SurfaceType } from './surfaces.js';
+import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, type SurfaceType } from './surfaces.js';
+import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
 
 // --- Types ---
 
@@ -31,6 +32,10 @@ export interface EvaluationIssue {
   category: string;
   /** Present only on `cliche` issues — which machine-made tell fired. */
   tell?: ClicheTell;
+  /** Phase 30 — the ruleset rule that produced this issue (e.g.
+   * "mobile-touch-target"); one of the surface report's rulesOn. Absent on
+   * the checks that have no rule id. */
+  rule?: string;
   /** Phase 25 slice D — set on issues from the DARK-theme evaluation pass
    * (color category dual-runs when a dark token layer exists). Absent =
    * light/default. */
@@ -1824,7 +1829,36 @@ function paddingBox(n: SceneNode): { v: number; h: number } {
   return { v: 0, h: 0 };
 }
 
-function checkUsability(entries: NodeEntry[], rootWidth: number): CheckResult {
+/** Phase 30 slice C — a control's touch target on a mobile canvas: its own
+ * box, extended through up to two ancestors that are ROWS (horizontal frames
+ * holding exactly one control). A row's box per dimension is its numeric size
+ * or min size, a full width counting as the artboard, else the control plus
+ * the row's rendered padding. Unlike the web rule this never extends through
+ * a card that merely holds one control. */
+function mobileTarget(
+  node: SceneNode, w: number, h: number, parentOf: Map<string, SceneNode | null>,
+  countControls: (n: SceneNode) => number, rootWidth: number,
+): { w: number; h: number } {
+  let tw = w;
+  let th = h;
+  let cur = parentOf.get(node.id) ?? null;
+  for (let hop = 0; hop < 2 && cur; hop++) {
+    if (cur.type === 'frame' && cur.layout === 'horizontal' && countControls(cur) === 1) {
+      const pad = paddingSides(cur, rootWidth);
+      const side = (v: SceneNode['width'], min: SceneNode['minWidth'], own: number, padding: number): number => {
+        const full = v === '100%' || v === 'fill_container';
+        const sized = typeof v === 'number' ? v : full ? rootWidth : own + padding;
+        return Math.max(sized, typeof min === 'number' ? min : 0);
+      };
+      tw = Math.max(tw, side(cur.width, cur.minWidth, w, pad.left + pad.right));
+      th = Math.max(th, side(cur.height, cur.minHeight, h, pad.top + pad.bottom));
+    }
+    cur = parentOf.get(cur.id) ?? null;
+  }
+  return { w: tw, h: th };
+}
+
+function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor: number }): CheckResult {
   const issues: EvaluationIssue[] = [];
   let score = 100;
 
@@ -1847,37 +1881,53 @@ function checkUsability(entries: NodeEntry[], rootWidth: number): CheckResult {
       let w = typeof node.width === 'number' ? node.width : def.w;
       let h = typeof node.height === 'number' ? node.height : def.h;
 
-      // The effective target extends to a padded ancestor row when the
-      // control is the only control inside it (the whole row is tappable by
-      // convention) — the WCAG 2.5.8 spacing model, applied structurally.
-      let cur = parentOf.get(node.id) ?? null;
-      for (let hop = 0; hop < 2 && cur && Math.min(w, h) < 24; hop++) {
-        if (countControls(cur) === 1) {
-          const pad = paddingBox(cur);
-          w += pad.h;
-          h += pad.v;
+      if (touch) {
+        const t = mobileTarget(node, w, h, parentOf, countControls, rootWidth);
+        if (Math.min(t.w, t.h) < touch.floor) {
+          score -= 25;
+          issues.push({
+            category: 'usability',
+            rule: 'mobile-touch-target',
+            severity: 'error',
+            nodeId: node.id,
+            nodeName: node.name,
+            message: `${node.type} has a ${Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            suggestion: `Grow the control, or put it alone in a row (a horizontal frame) at least ${touch.floor}px tall — a lone control's row is its target.`,
+          });
         }
-        cur = parentOf.get(cur.id) ?? null;
-      }
+      } else {
+        // The effective target extends to a padded ancestor row when the
+        // control is the only control inside it (the whole row is tappable by
+        // convention) — the WCAG 2.5.8 spacing model, applied structurally.
+        let cur = parentOf.get(node.id) ?? null;
+        for (let hop = 0; hop < 2 && cur && Math.min(w, h) < 24; hop++) {
+          if (countControls(cur) === 1) {
+            const pad = paddingBox(cur);
+            w += pad.h;
+            h += pad.v;
+          }
+          cur = parentOf.get(cur.id) ?? null;
+        }
 
-      if (Math.min(w, h) < 24) {
-        score -= 25;
-        issues.push({
-          category: 'usability',
-          severity: 'error',
-          nodeId: node.id,
-          nodeName: node.name,
-          message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — below the 24px floor (WCAG 2.5.8).`,
-          suggestion: 'Grow the control, or give its row enough padding that the whole row is the target (a lone control inherits its padded row\'s box).',
-        });
-      } else if (touchFirst && Math.min(w, h) < 44) {
-        issues.push({
-          category: 'usability',
-          severity: 'info',
-          nodeId: node.id,
-          nodeName: node.name,
-          message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — fine for pointer input, but this looks like a touch-first screen (44px is the comfortable floor there).`,
-        });
+        if (Math.min(w, h) < 24) {
+          score -= 25;
+          issues.push({
+            category: 'usability',
+            severity: 'error',
+            nodeId: node.id,
+            nodeName: node.name,
+            message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — below the 24px floor (WCAG 2.5.8).`,
+            suggestion: 'Grow the control, or give its row enough padding that the whole row is the target (a lone control inherits its padded row\'s box).',
+          });
+        } else if (touchFirst && Math.min(w, h) < 44) {
+          issues.push({
+            category: 'usability',
+            severity: 'info',
+            nodeId: node.id,
+            nodeName: node.name,
+            message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — fine for pointer input, but this looks like a touch-first screen (44px is the comfortable floor there).`,
+          });
+        }
       }
 
       // Label association: a control the user can't name is a guess. The
@@ -1922,6 +1972,14 @@ function checkUsability(entries: NodeEntry[], rootWidth: number): CheckResult {
   }
 
   return { score: Math.max(0, score), issues };
+}
+
+/** Fold ruleset findings into a category result: −10 per warning (errors
+ * score themselves inside their check), infos free. */
+function withRuleIssues(result: CheckResult, extra: EvaluationIssue[]): CheckResult {
+  if (extra.length === 0) return result;
+  const warnings = extra.filter((i) => i.severity === 'warning').length;
+  return { score: Math.max(0, result.score - warnings * 10), issues: [...result.issues, ...extra] };
 }
 
 const CATEGORY_WEIGHTS = new Map([
@@ -2051,6 +2109,13 @@ export async function evaluateCanvas(
   const preset = canvas.metadata?.provenance?.preset;
   const rules = composeRulesets(activeRulesets({ type: declared.type, genre: resolvedGenre.genre, preset }));
   const surface: SurfaceReport = { ...declared, rulesOn: rules.on, rulesOff: rules.off, conflicts: rules.conflicts };
+  const ruleOn = new Set(rules.on);
+  const mobile: MobileContext = {
+    root: resolvedRoot,
+    profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
+    width: typeof resolvedRoot.width === 'number' ? resolvedRoot.width : 1440,
+    height: typeof resolvedRoot.height === 'number' ? resolvedRoot.height : 900,
+  };
   const entries = buildTreeContext(resolvedRoot);
   // Also walk the unresolved tree for token usage stats
   const rawEntries = buildTreeContext(canvas.root);
@@ -2101,22 +2166,26 @@ export async function evaluateCanvas(
   }
   // Phase 25 slice A — detailed-mode layout is computed ONCE and shared by
   // the consistency and typography (measure) checks.
+  // Phase 30 slice C — mobile-safe-area reads rendered rects too, deeper.
   let detailedLayout: LayoutRect[] | undefined;
-  if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography'))) {
+  const safeAreaDetailed = activeCategories.includes('usability') && ruleOn.has('mobile-safe-area');
+  if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed)) {
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     const html = renderToHtml(resolvedRoot, w, h, canvas);
-    detailedLayout = await computeLayout(html, undefined, 10, { width: w, height: h });
+    detailedLayout = await computeLayout(html, undefined, ruleOn.has('mobile-safe-area') ? 25 : 10, { width: w, height: h });
   }
   if (activeCategories.includes('typography')) {
-    results.set('typography', checkTypography(entries, mergedTokens, {
+    const typography = checkTypography(entries, mergedTokens, {
       rootWidth: typeof canvas.root.width === 'number' ? canvas.root.width : undefined,
       layout: detailedLayout,
       tables: extractInventory(resolvedRoot).tables,
-    }));
+    });
+    const rawById = new Map(rawEntries.map((en) => [en.node.id, en.node]));
+    results.set('typography', withRuleIssues(typography, ruleOn.has('mobile-type-floor') ? checkTypeFloor(mobile, rawById) : []));
   }
   if (activeCategories.includes('structure')) {
-    results.set('structure', checkStructure(rawEntries, canvas));
+    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), ruleOn.has('mobile-artboard') ? checkArtboard(mobile, declared) : []));
   }
   if (activeCategories.includes('consistency')) {
     const consistencyCtx = { rawEntries, tokens: mergedTokens };
@@ -2127,8 +2196,14 @@ export async function evaluateCanvas(
     }
   }
   if (activeCategories.includes('usability')) {
-    const rootWidth = typeof resolvedRoot.width === 'number' ? resolvedRoot.width : 1440;
-    results.set('usability', checkUsability(entries, rootWidth));
+    const touch = ruleOn.has('mobile-touch-target') ? { floor: mobile.profile.touchTarget } : undefined;
+    const usability = checkUsability(entries, mobile.width, touch);
+    const extra = [
+      ...(ruleOn.has('mobile-handbuilt-target') ? checkHandbuiltTargets(mobile) : []),
+      ...(ruleOn.has('mobile-safe-area') ? (detailedLayout ? checkSafeAreaDetailed(mobile, detailedLayout) : checkSafeAreaFast(mobile)) : []),
+      ...(ruleOn.has('mobile-one-column') ? checkOneColumn(mobile) : []),
+    ];
+    results.set('usability', withRuleIssues(usability, extra));
   }
 
   let coverageReport: EvaluationResult['coverage'];
