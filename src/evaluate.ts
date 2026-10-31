@@ -1829,12 +1829,33 @@ function paddingBox(n: SceneNode): { v: number; h: number } {
   return { v: 0, h: 0 };
 }
 
+/** Phase 30 slice C — the width a node renders at, when the tree alone says:
+ * a numeric width; or a full or stretching width, which takes its parent's
+ * content width (parent width minus its rendered padding), up to the root.
+ * A stretch needs a vertical (or layout-less) parent that does not set
+ * cross-axis alignment, and an in-flow node. Undefined when the width hugs
+ * content or depends on something the tree doesn't fix. */
+function knownWidth(n: SceneNode, parentOf: Map<string, SceneNode | null>, rootWidth: number): number | undefined {
+  if (typeof n.width === 'number') return n.width;
+  const parent = parentOf.get(n.id) ?? null;
+  if (!parent) return rootWidth;
+  if (n.position === 'absolute') return undefined;
+  const columnParent = parent.layout !== 'horizontal' && parent.layout !== 'grid';
+  const stretches = n.width === undefined && columnParent && (parent.alignItems === undefined || parent.alignItems === 'stretch');
+  const full = n.width === '100%' || (n.width === 'fill_container' && columnParent);
+  if (!stretches && !full) return undefined;
+  const outer = knownWidth(parent, parentOf, rootWidth);
+  if (outer === undefined) return undefined;
+  const pad = paddingSides(parent, rootWidth);
+  return outer - pad.left - pad.right;
+}
+
 /** Phase 30 slice C — a control's touch target on a mobile canvas: its own
  * box, extended through up to two ancestors that are ROWS (horizontal frames
- * holding exactly one control). A row's box per dimension is its numeric size
- * or min size, a full width counting as the artboard, else the control plus
- * the row's rendered padding. Unlike the web rule this never extends through
- * a card that merely holds one control. */
+ * holding exactly one control). A row's box per dimension is its known size
+ * or min size (a full or stretching width takes its host's width), else the
+ * control plus the row's rendered padding. Unlike the web rule this never
+ * extends through a card that merely holds one control. */
 function mobileTarget(
   node: SceneNode, w: number, h: number, parentOf: Map<string, SceneNode | null>,
   countControls: (n: SceneNode) => number, rootWidth: number,
@@ -1845,18 +1866,9 @@ function mobileTarget(
   for (let hop = 0; hop < 2 && cur; hop++) {
     if (cur.type === 'frame' && cur.layout === 'horizontal' && countControls(cur) === 1) {
       const pad = paddingSides(cur, rootWidth);
-      // A width-less row in a vertical (or layout-less) parent that doesn't
-      // set cross-axis alignment stretches to the parent's width.
-      const host = parentOf.get(cur.id) ?? null;
-      const stretches = cur.width === undefined && host !== null && host.layout !== 'horizontal' && host.layout !== 'grid'
-        && (host.alignItems === undefined || host.alignItems === 'stretch');
-      // A full width spans the artboard; a full height says nothing about it.
-      const side = (v: SceneNode['width'], min: SceneNode['minWidth'], own: number, padding: number, full: number | undefined): number => {
-        const sized = typeof v === 'number' ? v : full !== undefined && (v === '100%' || v === 'fill_container') ? full : own + padding;
-        return Math.max(sized, typeof min === 'number' ? min : 0);
-      };
-      tw = Math.max(tw, stretches ? rootWidth : side(cur.width, cur.minWidth, w, pad.left + pad.right, rootWidth));
-      th = Math.max(th, side(cur.height, cur.minHeight, h, pad.top + pad.bottom, undefined));
+      const min = (v: SceneNode['minWidth']) => (typeof v === 'number' ? v : 0);
+      tw = Math.max(tw, knownWidth(cur, parentOf, rootWidth) ?? w + pad.left + pad.right, min(cur.minWidth));
+      th = Math.max(th, typeof cur.height === 'number' ? cur.height : h + pad.top + pad.bottom, min(cur.minHeight));
     }
     cur = parentOf.get(cur.id) ?? null;
   }

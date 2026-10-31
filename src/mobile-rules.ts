@@ -115,9 +115,13 @@ function isContent(n: SceneNode, ctx: MobileContext): boolean {
   if (isNum(n.width)) return n.width < ctx.width;
   // A non-numeric width spans the artboard only if nothing above it insets it.
   // A positioned image's percentage width is of its containing block's padding
-  // box, so ancestor padding never insets it.
-  if (isPositioned(n)) return false;
+  // box: the root's, or a positioned frame's, spans the artboard; anything
+  // else fast mode can't size, so it counts as content.
   const { parentOf } = indexFor(ctx);
+  if (isPositioned(n)) {
+    const block = parentOf.get(n);
+    return !(block === ctx.root || (block && isPositioned(block) && isNum(block.width) && block.width >= ctx.width));
+  }
   for (let a = parentOf.get(n); a; a = parentOf.get(a)) {
     const p = paddingSides(a, ctx.width);
     if (p.left + p.right > 0) return true;

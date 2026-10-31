@@ -94,6 +94,27 @@ I(r, { type: "text", content: "Remember me" })
 I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
   check('a width-less 44px row in a vertical parent stretches full width → passes (the hint works verbatim)', stretched.length === 0, show(stretched));
 
+  // A stretching row takes its host's width, never more (rendered widths in
+  // parentheses: all below 44, so detailed rendering agrees).
+  const narrowHost = await issues(phone(`c=I("document", { type: "frame", layout: "vertical", width: 40 })
+r=I(c, { type: "frame", layout: "horizontal", height: 44 })
+I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
+  check('row stretching inside a 40px column is 40 wide → error (40×44)', narrowHost.length === 1 && narrowHost[0].message.includes('40×44'), show(narrowHost));
+  const hugHost = phone(`c=I("document", { type: "frame", layout: "vertical" })
+r=I(c, { type: "frame", layout: "horizontal", height: 44 })
+I(r, { type: "checkbox", width: 18, height: 18 })`);
+  hugHost.root.alignItems = 'center';
+  const hugI = await issues(hugHost, 'mobile-touch-target');
+  check('row in a host shrink-wrapped by a centring root → error (18×44)', hugI.length === 1, show(hugI));
+  const inRow = await issues(phone(`o=I("document", { type: "frame", layout: "horizontal" })
+c=I(o, { type: "frame", layout: "vertical" })
+r=I(c, { type: "frame", layout: "horizontal", height: 44 })
+I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
+  check('row in a width-less column inside a horizontal parent → error (18×44)', inRow.length === 1, show(inRow));
+  const absRow = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", height: 44, position: "absolute", x: 16, y: 100 })
+I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
+  check('an absolute row never stretches → error (18×44)', absRow.length === 1, show(absRow));
+
   const fullHeight = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", width: "100%", height: "100%" })
 I(r, { type: "text", content: "Remember me" })
 I(r, { type: "checkbox", width: 18, height: 18 })`), 'mobile-touch-target');
@@ -188,6 +209,13 @@ ${flow}`);
   absHero.root.padding = 16;
   const absHeroI = await issues(absHero, 'mobile-safe-area');
   check('absolute full-width hero in a padded root is background, not content → clean', absHeroI.length === 0, show(absHeroI));
+
+  const smallAbs = phone(`${flow}
+a=I("document", { type: "frame", position: "absolute", x: 16, y: 10, width: 40, height: 40 })
+I(a, { type: "image", src: "https://example.com/avatar.jpg", position: "absolute", x: 0, y: 0, width: "100%", height: 40 })`);
+  smallAbs.root.padding = [0, 16];
+  const smallAbsI = await issues(smallAbs, 'mobile-safe-area');
+  check('a small absolute image inside a 40px absolute frame is content → warning', smallAbsI.length === 1 && smallAbsI[0].message.includes('top'), show(smallAbsI));
 
   const row = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", padding: [8, 16] })
 I(r, { type: "text", content: "Back" })
