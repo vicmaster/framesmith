@@ -270,7 +270,9 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
   const arrayPaddings: { nodeId: string; nodeName?: string; padding: number[] }[] = [];
 
   for (const { node } of entries) {
-    if (node.gap !== undefined && typeof node.gap === 'number') {
+    // gap: 0 is a deliberate flush stack (divider-separated rows, tab bars),
+    // never an off-scale value — the same reason padding ≤ 0 is skipped below.
+    if (typeof node.gap === 'number' && node.gap !== 0) {
       allValues.push({ value: node.gap, nodeId: node.id, nodeName: node.name, prop: 'gap', fixable: true });
     }
     if (node.padding !== undefined) {
@@ -2071,8 +2073,10 @@ export async function evaluateCanvas(
   // the consistency and typography (measure) checks.
   let detailedLayout: LayoutRect[] | undefined;
   if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography'))) {
-    const html = renderToHtml(resolvedRoot, 1440, 900, canvas);
-    detailedLayout = await computeLayout(html);
+    const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
+    const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+    const html = renderToHtml(resolvedRoot, w, h, canvas);
+    detailedLayout = await computeLayout(html, undefined, 10, { width: w, height: h });
   }
   if (activeCategories.includes('typography')) {
     results.set('typography', checkTypography(entries, mergedTokens, {

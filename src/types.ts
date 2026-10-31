@@ -25,8 +25,9 @@ export interface ChartSeries {
   /** Dot markers on each data point. Lines only. */
   points?: boolean;
   /** Phase 28 — bar emphasis: these data indices render solid; the rest render
-   * muted (~30% opacity). The reference-dashboard selected-bar treatment. */
-  highlight?: number[];
+   * muted (~30% opacity). The reference-dashboard selected-bar treatment.
+   * A single index `i` is shorthand for `[i]`. */
+  highlight?: number | number[];
   /** Phase 28 — bars fill with a vertical fade of the series color, rendered
    * inside the SVG (invisible to the gradient-overuse tell by construction).
    * Highlighted bars stay solid. Bars only. */

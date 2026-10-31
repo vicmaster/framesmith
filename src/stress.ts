@@ -249,3 +249,24 @@ export function compareLayouts(
 
   return findings;
 }
+
+/** The last canvas_stress verdict per canvas, kept for canvas_evaluate's
+ * directive so "READY TO PRESENT" can't contradict a FRAGILE stress run. In
+ * memory only: one server process. */
+export interface StressRecord {
+  versionHash: string;
+  warnings: number;
+}
+
+const lastStressRuns = new Map<string, StressRecord>();
+
+/** A FRAGILE run always counts; only a full run can record CLEAN, so a
+ * narrower re-run that happens to pass never hides a known break. */
+export function recordStressRun(canvasId: string, record: StressRecord, fullRun: boolean): void {
+  if (record.warnings === 0 && !fullRun) return;
+  lastStressRuns.set(canvasId, record);
+}
+
+export function lastStressRun(canvasId: string): StressRecord | undefined {
+  return lastStressRuns.get(canvasId);
+}

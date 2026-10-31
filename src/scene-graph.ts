@@ -127,7 +127,11 @@ export function ingestCanvases(canvases: Canvas[]): void {
   }
 }
 
-export function createCanvas(name?: string, projectId: string = DEFAULT_PROJECT_ID): Canvas {
+export function createCanvas(
+  name?: string,
+  projectId: string = DEFAULT_PROJECT_ID,
+  size: { width?: number; height?: number } = {},
+): Canvas {
   const id = nanoid(10);
   const canvas: Canvas = {
     id,
@@ -137,8 +141,8 @@ export function createCanvas(name?: string, projectId: string = DEFAULT_PROJECT_
       type: 'document',
       name: 'Document',
       children: [],
-      width: 1440,
-      height: 900,
+      width: size.width ?? 1440,
+      height: size.height ?? 900,
       fill: '#FFFFFF',
     },
     variables: {},

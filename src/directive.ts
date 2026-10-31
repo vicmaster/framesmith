@@ -13,6 +13,13 @@ import { appendFeedbackDirective } from './feedback.js';
  * below — but still reported in every directive so it can't be forgotten. */
 export const SCORE_BAR = 95;
 
+/** The last canvas_stress verdict as the directive sees it. `current` = it ran
+ * on the canvas's present versionHash. */
+export interface StressState {
+  warnings: number;
+  current: boolean;
+}
+
 export interface DirectiveParts {
   directive: string;
   ready: boolean;
@@ -43,19 +50,32 @@ export function countBlocking(result: EvaluationResult): number {
  * so explicitly and names what is left, so "ready at 93" can never be mistaken
  * for "ready at 100".
  */
-export function buildEvaluateDirective(result: EvaluationResult, openFeedback = 0): DirectiveParts {
+export function buildEvaluateDirective(result: EvaluationResult, openFeedback = 0, stress?: StressState): DirectiveParts {
   const blocking = countBlocking(result);
   const optional = result.issues.length - blocking;
-  const ready = blocking === 0;
+  // A FRAGILE stress run blocks until a CLEAN run replaces it — an edit since
+  // the run only changes what the agent is told to do, never the verdict.
+  const fragile = stress && stress.warnings > 0 ? stress : undefined;
+  const ready = blocking === 0 && !fragile;
 
   const optTail = optional ? ` ${optional} optional refinement(s) noted (info) — address if easy, not required.` : '';
   const belowBar = result.overallScore <= SCORE_BAR
     ? ` Score is ${result.overallScore}, at or below the > ${SCORE_BAR} bar — nothing blocking is left, so the remaining lift is in the ${optional} advisory finding(s) and in craft the heuristics don't measure. Judge the render before presenting.`
     : '';
+  const stressNote = !fragile
+    ? ''
+    : fragile.current
+      ? ` The last canvas_stress run on this exact version was FRAGILE (${fragile.warnings} layout break(s)) — fix them with fluid widths / minWidth or minHeight floors / wrapping / textOverflow: "ellipsis", then re-run canvas_stress until CLEAN.`
+      : ` The last canvas_stress run was FRAGILE (${fragile.warnings} layout break(s)) on an earlier version — re-run canvas_stress to confirm your changes fixed them; only a CLEAN run clears this.`;
 
-  const base = ready
-    ? `READY TO PRESENT — ${result.overallScore}/100, no blocking issues.${optTail}${belowBar}`
-    : `NOT READY — ${result.overallScore}/100 with ${blocking} issue(s) to resolve${optional ? ` (+${optional} optional)` : ''}. Fix them now: canvas_autofix for the mechanical subset, batch_design for the rest (cliché tells included), then re-run canvas_evaluate. Repeat until there are zero warnings and zero cliché tells. Do NOT show this design to the user yet.`;
+  let base: string;
+  if (ready) {
+    base = `READY TO PRESENT — ${result.overallScore}/100, no blocking issues.${optTail}${belowBar}`;
+  } else if (blocking > 0) {
+    base = `NOT READY — ${result.overallScore}/100 with ${blocking} issue(s) to resolve${optional ? ` (+${optional} optional)` : ''}. Fix them now: canvas_autofix for the mechanical subset, batch_design for the rest (cliché tells included), then re-run canvas_evaluate. Repeat until there are zero warnings and zero cliché tells.${stressNote} Do NOT show this design to the user yet.`;
+  } else {
+    base = `NOT READY — ${result.overallScore}/100 with no evaluate issues left, but stress is not cleared.${stressNote} Then re-run canvas_evaluate. Do NOT show this design to the user yet.`;
+  }
 
   return { directive: appendFeedbackDirective(base, openFeedback), ready, blocking, optional };
 }
