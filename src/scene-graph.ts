@@ -529,10 +529,10 @@ function deepCloneWithNewIds(node: SceneNode, overrides?: Partial<SceneNode>, id
 /** Phase 24 slice A (FR-A1) — clone a base canvas into a linked state variant.
  * The variant is a full sibling canvas (re-keyed node IDs, same project,
  * copied tokens/components/fonts) stamped with metadata.variant. Provenance
- * (structure/preset/genre — WHAT the screen is) and the surface type carry over; feedback and
- * critique (per-canvas judgments) deliberately don't. Adding a variant to a
- * canvas that is itself a variant links to the ROOT base (spec C6: variant
- * trees deeper than one level have no UX meaning). */
+ * (structure/preset/genre — WHAT the screen is) and the surface type carry
+ * over; feedback and critique (per-canvas judgments) deliberately don't.
+ * Adding a variant to a canvas that is itself a variant links to the ROOT base
+ * (spec C6: variant trees deeper than one level have no UX meaning). */
 export function addVariant(canvasId: string, state: string): { canvas: Canvas; idMap: Record<string, string> } {
   ensureFresh(canvasId);
   let base = store.get(canvasId);
