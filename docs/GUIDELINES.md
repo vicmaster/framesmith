@@ -16,7 +16,7 @@ Canvases live inside a `Workspace > Project > Canvas` hierarchy. The built-in `P
 
 ## Two-line summary
 
-1. **Author desktop-first at one design width.** Pick a width (1200 or 1440 is typical), compose the design there.
+1. **Author desktop-first at one design width.** Pick a width (1200 or 1440 is typical for a web page; a phone screen is its own artboard, `canvas_create({ width: 390, height: 844 })`), compose the design there.
 2. **Adapt down with `responsive` hints + fluid widths.** The renderer derives the mobile/tablet layout from the same scene graph — you don't author it twice.
 
 ## Width strategies
@@ -306,9 +306,9 @@ Polishing the design to the bar is **your** job, not the user's — they should 
 3. Re-run `canvas_evaluate`.
 4. Repeat until there are **zero errors, zero warnings, and zero cliché tells**.
 
-`canvas_evaluate`'s result includes a `directive` field — it says `READY TO PRESENT` or `NOT READY` with what's left. **Only present a design once it says READY.** Don't ship the first attempt; ship the one that passes the bar.
+`canvas_evaluate`'s result includes a `directive` field — it says `READY TO PRESENT` or `NOT READY` with what's left. **Only present a design once it says READY.** On a data screen that includes stress: after a `FRAGILE` `canvas_stress` run the directive stays NOT READY until a full CLEAN run replaces it. Don't ship the first attempt; ship the one that passes the bar.
 
-**Readiness turns on blocking findings, not the score.** `READY` means step 4 is done — zero errors, zero warnings, zero cliché tells — nothing more. The score (aim for **> 95**) is always reported alongside the directive and is still the quality bar you're climbing toward, but it no longer withholds readiness by itself: a design with nothing left to resolve is `READY` even sitting at or below the bar, and the directive says so explicitly, pointing at the remaining advisory findings as the lever. (Before Phase 29 slice D, readiness also required score > 95, which could strand a design with every real problem fixed and no honest move left to raise the number — a gate that can't be satisfied by improving the design isn't a gate.)
+**Readiness turns on blocking findings, not the score.** `READY` means step 4 is done — zero errors, zero warnings, zero cliché tells — and no unresolved `FRAGILE` stress verdict; nothing more. The score (aim for **> 95**) is always reported alongside the directive and is still the quality bar you're climbing toward, but it no longer withholds readiness by itself: a design with nothing left to resolve is `READY` even sitting at or below the bar, and the directive says so explicitly, pointing at the remaining advisory findings as the lever. (Before Phase 29 slice D, readiness also required score > 95, which could strand a design with every real problem fixed and no honest move left to raise the number — a gate that can't be satisfied by improving the design isn't a gate.)
 
 **Which number is the gate?** The heuristic directive (fast mode) is the presentation gate — always available, no API key. `mode: "llm"` adds a vision-model rubric critique (composition, hierarchy, polish) on top; it needs `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and degrades gracefully without one — when it's unavailable, the heuristic directive alone decides. With a key the heuristic directive still decides, and a `needsRevision: true` verdict never blocks presenting. Run the critique loop as the standard last step (judge, `canvas_revise`, re-judge). If `canvas_revise` stops (`max-iterations` or `no-improvement`) with axes still failing, present the design and tell the user which axes fail rather than looping. And calibrate the evaluator to what the screen *is*: a data-dense product screen evaluated without `genre: "dashboard"` — or a checkout without `genre: "commerce"` — will flag its own figures as fabricated and pin the score below the bar with no path up — that's a miscalibrated gate, not a bad design (see Cliché & craft below).
 

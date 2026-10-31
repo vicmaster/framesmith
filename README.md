@@ -182,7 +182,7 @@ Create a new canvas. If `projectId` is omitted, it lands in the built-in `Untitl
 | `width` | number? | Artboard width in px, a positive integer (default 1440). A phone screen is `width: 390, height: 844`. |
 | `height` | number? | Artboard height in px, a positive integer (default 900). Each dimension defaults on its own. |
 
-The response also carries a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
+The response also carries the artboard `width`/`height` and a `diversification` signal for the target project: the recently-built structures (newest first) and a hint to differ on at least one taxonomy axis, so successive canvases don't converge on the same layout. It's advisory — never blocking.
 
 ### `canvas_list`
 
@@ -302,7 +302,7 @@ M("nodeId", "newParentId", 0)
 R("nodeId", { type: "text", content: "Replaced" })
 ```
 
-**Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order. If the call wrote a `fontFamily` nothing can serve yet (not cached, registered, or system/generic), a `Font warnings` content item names it — a cache-only check with no network call, so it's a heads-up, not exhaustive.
+**Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order; an op that succeeded but will not fully take effect carries a `warning` (a `shadow` beside an active `shadows`, a chart `highlight` entry outside the series data). If the call wrote a `fontFamily` nothing can serve yet (not cached, registered, or system/generic), a `Font warnings` content item names it — a cache-only check with no network call, so it's a heads-up, not exhaustive.
 
 **Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out)
 
@@ -336,7 +336,7 @@ I(panel, { type: "chart", kind: "donut", width: 176, height: 176, centerValue: "
   ] })
 ```
 
-A **bar chart with a selected day** is `highlight: [11]` (or `highlight: 11`) on the series (selected bar solid, the rest muted; `barGradient: true` fades the muted bars inside the SVG, invisible to the gradient-overuse tell). A **sparkline** is `kind: "sparkline"` — axis-free, latest point emphasized by default, sized for a KPI card corner. `segments[].color` and series `stroke` both take `$chart-1`…`$chart-6` refs.
+A **bar chart with a selected day** is `highlight: [11]` (or `highlight: 11`; `null` clears it) on the series (selected bar solid, the rest muted; `barGradient: true` fades the muted bars inside the SVG, invisible to the gradient-overuse tell). An entry that isn't an index within the series `data` emphasizes nothing, and the `batch_design` op result warns about it. A **sparkline** is `kind: "sparkline"` — axis-free, latest point emphasized by default, sized for a KPI card corner. `segments[].color` and series `stroke` both take `$chart-1`…`$chart-6` refs.
 
 Multi-series in one node; x positions are data indexes (a shorter series stops early against a longer one — booked months vs a full-year target); `xDomain`/`yDomain` default from the data (bars floor at 0); `kind: "bar"` renders grouped bars from the same series model. Dash the projected series, solid the actuals. Editing one value is a one-prop edit — never hand-compute path `d` strings for a chart.
 
@@ -408,8 +408,8 @@ Render canvas to PNG (returned as base64 image).
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID |
 | `nodeId` | string? | Specific node to capture |
-| `width` | number? | Viewport width (default 1440) |
-| `height` | number? | Viewport height (default 900) |
+| `width` | number? | Viewport width (default: the canvas's artboard width) |
+| `height` | number? | Viewport height (default: the canvas's artboard height) |
 | `fullPage` | boolean? | Capture the whole design instead of one viewport — default false, so existing captures (diffs, responsive sets, the pattern gate) are byte-identical. A canvas taller than its artboard otherwise cuts off at the artboard height. `export` takes the same option (ignored for PDF, which paginates) |
 | `scale` | number? | Device scale (default 2) |
 | `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
@@ -569,8 +569,8 @@ Export a canvas or specific nodes to files on disk.
 | `format` | string | `"png"`, `"jpeg"`, `"webp"`, or `"pdf"` |
 | `outputPath` | string | Directory to save files |
 | `nodeIds` | string[]? | Specific nodes to export (default: full canvas) |
-| `width` | number? | Viewport width (default 1440) |
-| `height` | number? | Viewport height (default 900) |
+| `width` | number? | Viewport width (default: the canvas's artboard width) |
+| `height` | number? | Viewport height (default: the canvas's artboard height) |
 | `scale` | number? | Device scale (default 2) |
 | `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
 
@@ -801,7 +801,7 @@ Returns `{ canvasId, genre, previous, relaxes, note?, versionHashUnchanged }` �
 
 Auto-score a design against quality heuristics. Returns an overall score (0–100), per-category scores, per-node actionable issues, and a **`directive`** — a present/keep-working verdict. Designed for generator-evaluator loops: build with `batch_design`, score with `canvas_evaluate`, fix the issues targeting the returned `nodeId`s, repeat until the directive says `READY`.
 
-The **`directive`** is the operating contract that keeps unfinished work off the user's screen. Readiness turns on **blocking findings, not the score**: it reads `READY TO PRESENT` when there are zero errors, zero warnings, **and** zero cliché tells; otherwise `NOT READY` with what to resolve. (Cliché tells block even at info severity — they're the slop signal; pure advisories like "consider extracting components" are optional.) The score is always reported alongside the directive and remains the quality bar to aim for (**> 95**) — but it no longer withholds readiness on its own: once nothing blocking is left, a design at or below the bar still reads `READY`, and the directive says so explicitly, naming the advisory findings as the remaining lever. Resolve everything blocking and re-evaluate until it says `READY` before showing the design to the user.
+The **`directive`** is the operating contract that keeps unfinished work off the user's screen. Readiness turns on **blocking findings, not the score**: it reads `READY TO PRESENT` when there are zero errors, zero warnings, **and** zero cliché tells (and no `FRAGILE` stress verdict, see below); otherwise `NOT READY` with what to resolve. (Cliché tells block even at info severity — they're the slop signal; pure advisories like "consider extracting components" are optional.) The score is always reported alongside the directive and remains the quality bar to aim for (**> 95**) — but it no longer withholds readiness on its own: once nothing blocking is left, a design at or below the bar still reads `READY`, and the directive says so explicitly, naming the advisory findings as the remaining lever. Resolve everything blocking and re-evaluate until it says `READY` before showing the design to the user.
 
 Open point-and-tell comments block too: when the canvas has any, the result carries `openFeedback: n` and the directive stays blocking even at a READY score — the human's note outranks the heuristics. Read them with `get_feedback`, address each, close them with `resolve_feedback`.
 
@@ -814,7 +814,7 @@ Whenever the `coverage` category runs on a **base** canvas, the result also carr
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | Canvas ID to evaluate |
-| `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
+| `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks, laid out at the canvas's artboard size. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`, `cliche`, `coverage`, `usability`. Defaults to all. |
 | `genre` | string? | Style that relaxes specific `cliche` gates — `"material"` allows purple and white elevated surfaces; `"dashboard"` (alias `"data"`) allows realistic figures on data-dense screens; `"commerce"` (alias `"checkout"`) allows the money on a transactional screen — cart, checkout, order confirmation, billing history. Defaults to the canvas's provenance preset if stamped (`canvas_set_genre` stamps it durably, no token churn). Pick by what the screen is *for* (read screens with published figures → `dashboard`; a screen you complete a purchase on → `commerce`; editors/admin forms → `material`; a pricing page is marketing and gets none of them), not what it contains — the result's `genre` field audits the choice. |
 
@@ -822,7 +822,7 @@ Whenever the `coverage` category runs on a **base** canvas, the result also carr
 
 | Category | Weight | Checks |
 |----------|--------|--------|
-| `spacing` | 20 | Off-scale padding/gap values, plus spacing variety measured against the canvas's **declared** scale (`set_variables`/`generate_scale` spacing tokens) — only values *not* on that scale count toward sprawl, so a design built entirely from its own multi-step scale (framesmith's generated scale ships nine: `space-3xs`…`space-3xl`) isn't penalized for using it. No declared scale falls back to the old total-unique-values count, with a suggestion to declare one |
+| `spacing` | 20 | Off-scale padding/gap values (`gap: 0`, a flush stack, is never flagged), plus spacing variety measured against the canvas's **declared** scale (`set_variables`/`generate_scale` spacing tokens) — only values *not* on that scale count toward sprawl, so a design built entirely from its own multi-step scale (framesmith's generated scale ships nine: `space-3xs`…`space-3xl`) isn't penalized for using it. No declared scale falls back to the old total-unique-values count, with a suggestion to declare one |
 | `color` | 25 | WCAG AA contrast ratios for text against nearest background — checked in BOTH themes when a `dark` token layer exists (dark-run issues carry `theme: "dark"`, score takes the worse theme, and dark failures point at the dark layer instead of carrying a literal fix). WCAG-passing pairs that are perceptually weak by **APCA** get an info advisory (Lc vs ~75 body / ~60 large) — APCA is a candidate method, not a standard; it never blocks |
 | `typography` | 20 | Type-scale ratios (1.1–2.0; adjacent sizes both declared as typography tokens are pinned and skip the check), font-family count, weight variation — plus score-neutral craft advisories: measure (prose past ~75 characters per line; warning past 90), tracking (display text ≥28px without negative letter-spacing, autofixable), and tabular numerals (numeric table columns without `tabularNums`, autofixable) |
 | `structure` | 15 | Tree depth, naming coverage, design-token usage %, component reuse, unknown icon names (an icon that resolves in neither set renders an empty slot: a directive-blocking warning, −10 structure score each; autofixable when one spelling resolves) |
