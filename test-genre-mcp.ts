@@ -6,7 +6,7 @@
 //
 // Usage: npx tsx test-genre-mcp.ts
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -78,6 +78,20 @@ try {
   await tool('canvas_set_genre', { canvasId: b, genre: 'data' });
   const e5 = await tool('canvas_evaluate', { canvasId: b });
   check('AC12: set_genre after an imported preset reads data', e5.genre?.active === 'data');
+
+  // A hand-edit / git pull on disk is picked up before apply_preset writes
+  // (ensureFresh), and a legacy genre found there is migrated, not clobbered.
+  const d = await canvasWithFigures('mcp-fresh');
+  await tool('canvas_set_genre', { canvasId: d, genre: 'material' });
+  const file = join(home, 'canvases', `${d}.json`);
+  const onDisk = JSON.parse(readFileSync(file, 'utf-8'));
+  onDisk.metadata.provenance = { preset: 'commerce', at: '2026-01-01T00:00:00.000Z' }; // what an older framesmith wrote
+  writeFileSync(file, JSON.stringify(onDisk, null, 2));
+  const later = new Date(Date.now() + 5000);
+  utimesSync(file, later, later);
+  await tool('apply_preset', { canvasId: d, preset: 'dark' });
+  const saved = JSON.parse(readFileSync(file, 'utf-8')).metadata.provenance;
+  check('apply_preset reloads from disk and migrates the legacy genre there', saved.genre === 'commerce' && saved.preset === 'dark', JSON.stringify(saved));
 } finally {
   await client.close();
 }
