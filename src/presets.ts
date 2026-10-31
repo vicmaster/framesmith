@@ -143,6 +143,11 @@ const presetMap = new Map<string, Preset>([
   ['minimal', minimal],
 ]);
 
+/** The presets that ship with framesmith, captured before any
+ * import_design_md registration. Phase 30 reads genre against this FIXED set
+ * (never the runtime registry, whose contents differ per process). */
+export const BUILTIN_PRESET_NAMES: ReadonlySet<string> = new Set(presetMap.keys());
+
 export function listPresets(): { name: string; description: string }[] {
   return Array.from(presetMap.values()).map(({ name, description }) => ({ name, description }));
 }

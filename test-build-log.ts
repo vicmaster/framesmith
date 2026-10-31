@@ -23,6 +23,7 @@ process.env.FRAMESMITH_HOME = globalHome;
 const { createCanvas, getCanvas, touchCanvas, loadPersistedCanvases } = await import('./src/scene-graph.js');
 const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, createProject, listProjects, getCanvasTokens, loadRepoWorkspace } = await import('./src/workspaces.js');
 const { applyStructure } = await import('./src/structures.js');
+const { stampPreset } = await import('./src/genre.js');
 const { bindRepo } = await import('./src/bind.js');
 const { appendBuildLog, readBuildLog, recordPresetInBuildLog, detectBinding, readWorkspaceFile, setRepoBackend, resetRepoState, stableStringify } = await import('./src/repo-store.js');
 
@@ -45,10 +46,7 @@ function applyStructureLikeHandler(canvasId: string, structure: string) {
 /** Mirror the apply_preset handler: stamp the preset + update the build log. */
 function applyPresetLikeHandler(canvasId: string, preset: string) {
   const canvas = getCanvas(canvasId)!;
-  canvas.metadata = {
-    ...canvas.metadata,
-    provenance: { ...canvas.metadata?.provenance, preset, at: new Date().toISOString() },
-  };
+  canvas.metadata = { ...canvas.metadata, provenance: stampPreset(canvas.metadata?.provenance, preset) };
   recordPresetInBuildLog(canvas.projectId, canvas.id, canvas.name, preset);
   touchCanvas(canvasId);
 }

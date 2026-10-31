@@ -339,7 +339,7 @@ Authoring intent: structures are scene-graph data, not prompt text — the agent
 - [x] Detectable tells (scene-graph + render): default purple / indigo accent hue, gradient / glow overuse, fake browser / phone / IDE chrome (traffic-light-dot frames), the hanging "tag-left / heading-right" header
 - [x] Honest-content check — flag fabricated-looking metrics / testimonials / logos in placeholder copy; suggest a labeled placeholder convention ("metric to confirm" + neutral block) instead
 - [x] Auto-fix ops where mechanical (swap a *known-default* purple accent → neutral, delete a fake-chrome strip), consistent with Phase 6 `canvas_autofix`; taste tells (gradient/glow, hanging header, fabricated copy) are suggestion-only
-- [x] Genre-aware loosening — `RELAXED_BY_GENRE` map; genre from `provenance.preset` or an explicit `genre` option (today `material` relaxes the purple gate)
+- [x] Genre-aware loosening — `RELAXED_BY_GENRE` map; genre from `provenance.genre` (Phase 30; originally `provenance.preset`) or an explicit `genre` option (today `material` relaxes the purple gate)
 - [x] Guidelines update — `docs/GUIDELINES.md` "Cliché & craft" section + `canvas_evaluate` / `canvas_autofix` tool descriptions steer authoring away from the tells up front
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-12-SPEC.md`](docs/specs/PHASE-12-SPEC.md). Phase 12 complete._
@@ -451,7 +451,7 @@ Eight issues from one dogfooding session (a financial dashboard: #129–#136) sh
 
 - [x] Slice A — rendering primitives: per-side borders (`borderTop`…, style solid/dashed/dotted) + `strokeDasharray` on paths (#131, #132)
 - [x] Slice B — query + autofix: `find_nodes` (property/text/name → ids + paths), `canvas_autofix apply: true` + array-padding fixes (#136, #133)
-- [x] Slice C — evaluator calibration: `dashboard` genre relaxes honest-content; type-scale pinning from typography tokens; directive/llm-gate docs (#135)
+- [x] Slice C — evaluator calibration: `dashboard` genre (now `data`, with `dashboard` kept as its alias) relaxes honest-content; type-scale pinning from typography tokens; directive/llm-gate docs (#135)
 - [x] Slice D — fonts: generic aliases (mono/sans → CSS generics), stylesheet-URL family label honored, authoring-time unresolved-family warning (#134)
 - [x] Slice E — components: `create_component` (promote subtree) + `copy_nodes` (cross-canvas, defs travel) (#130)
 - [x] Slice F — charts: data-driven `chart` node (line + bar, multi-series, domains, gridlines/labels); dashboard pattern refresh (#129)
@@ -545,7 +545,7 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-29-SPEC.md`](docs/specs/PHASE-
 
 The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and got 100/100, READY TO PRESENT, without a single mobile check running: the touch-target rule only looks at form controls, and the screen had none. Mobile today is a screen size, not a surface. This phase gives a canvas a declared `type` (`web` or `mobile`), separates it from genre and preset so the three declarations stop colliding, and builds the three layers a surface needs: rules that judge a phone, vocabulary to build one, and starting points. Acceptance is literal: the attempt screen rebuilt from a mobile archetype, CLEAN with every tap target a primitive.
 
-- [ ] Slice A — untangle the declarations: genre gets its own field so `apply_preset` stops overwriting it, every stored canvas keeps its verdict through a legacy read, and `data` becomes the canonical purpose genre with `dashboard` as its alias
+- [x] Slice A — untangle the declarations: genre gets its own field so `apply_preset` stops overwriting it, every stored canvas keeps its verdict through a legacy read, and `data` becomes the canonical purpose genre with `dashboard` as its alias
 - [ ] Slice B — the type axis: `metadata.surface` with one device profile (`iphone-390`), `canvas_create({ type })` and `canvas_set_type`, a ruleset table keyed by type, genre and preset that composes by union and can turn rules on, a `surface` report on every evaluation, and a mobile type scale from `generate_design_system`
 - [ ] Slice C — the mobile ruleset: 44px targets as an error on every tappable primitive, safe areas, a type floor, undeclared phone-width canvases told to declare, hand-built tap targets and multi-column prose named as advisories, and stress that knows the type
 - [ ] Slice D — vocabulary: `fixed` / `sticky` positioning, `safeArea` on the root, and the `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row` and `sheet` primitives
@@ -567,7 +567,7 @@ _Full breakdown in [`docs/specs/CI-SPEC.md`](docs/specs/CI-SPEC.md). Deliberatel
 ### Issue-driven improvements (post-v1.8)
 
 - [x] `replace_matching_properties` — bulk property edit: apply one `set` to every node matching a property/value predicate (AND across keys, token refs match literally, structured values by shape) with `scope`/`type` filters and a `dryRun` preview; ends the one-`U()`-per-node grind for wide changes (issue #127)
-- [x] `canvas_set_genre` — stamp (or clear) `metadata.provenance.preset` directly, without `apply_preset`'s token/component churn, so an already-styled canvas can be calibrated for cliché-tell relaxation in one call; never moves `versionHash` (issue #162)
+- [x] `canvas_set_genre` — stamp (or clear) `metadata.provenance.genre` directly (originally the `preset` field; Phase 30 split them), without `apply_preset`'s token/component churn, so an already-styled canvas can be calibrated for cliché-tell relaxation in one call; never moves `versionHash` (issue #162)
 
 ---
 

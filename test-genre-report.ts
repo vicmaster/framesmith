@@ -41,35 +41,38 @@ t=I(card, { type: "text", content: "Revenue targets", fontSize: 20, fontWeight: 
 // notRelaxed with the genre that would relax them.
 {
   const r = await evaluateCanvas(makeCanvas(), { mode: 'fast', genre: 'dashboard' });
-  check('explicit dashboard → active/source', r.genre!.active === 'dashboard' && r.genre!.source === 'explicit');
+  check('explicit dashboard → reported as canonical data, explicit', r.genre!.active === 'data' && r.genre!.source === 'explicit');
   check('dashboard relaxes honest-content', r.genre!.relaxed.join(',') === 'honest-content');
   const byTell = Object.fromEntries(r.genre!.notRelaxed.map((n) => [n.tell, n.relaxedBy]));
   check('accent-hue not relaxed, material would', (byTell['accent-hue'] ?? []).join(',') === 'material');
   check('pure-black-white not relaxed, material would', (byTell['pure-black-white'] ?? []).join(',') === 'material');
   check('relaxed tells absent from notRelaxed', !('honest-content' in byTell));
-  check('alias "data" not offered as a separate genre', JSON.stringify(r.genre!.notRelaxed).indexOf('"data"') === -1);
+  const offered = JSON.stringify(r.genre!.notRelaxed);
+  check('aliases "dashboard"/"checkout" never offered as genres', !offered.includes('"dashboard"') && !offered.includes('"checkout"'));
 }
 
 // Provenance stamp drives the genre when no explicit option is passed.
 {
   const canvas = makeCanvas();
-  canvas.metadata = { ...canvas.metadata, provenance: { preset: 'material', at: new Date().toISOString() } };
+  canvas.metadata = { ...canvas.metadata, provenance: { genre: 'material', at: new Date().toISOString() } };
   const r = await evaluateCanvas(canvas, { mode: 'fast' });
   check('provenance material → active/source', r.genre!.active === 'material' && r.genre!.source === 'provenance');
   check('material relaxes accent-hue + pure-black-white', r.genre!.relaxed.sort().join(',') === 'accent-hue,pure-black-white');
+  check('a genre stamp is not a preset → no byPreset', r.genre!.byPreset === undefined);
   const byTell = Object.fromEntries(r.genre!.notRelaxed.map((n) => [n.tell, n.relaxedBy]));
   // Phase 29 slice A — two genres now relax honest-content, and the report
   // offers both canonical names (never the `data` / `checkout` aliases).
-  check('honest-content not relaxed; dashboard and commerce would',
-    (byTell['honest-content'] ?? []).slice().sort().join(',') === 'commerce,dashboard');
+  check('honest-content not relaxed; data and commerce would',
+    (byTell['honest-content'] ?? []).slice().sort().join(',') === 'commerce,data');
 }
 
 // An explicit genre overrides the stamp.
 {
   const canvas = makeCanvas();
-  canvas.metadata = { ...canvas.metadata, provenance: { preset: 'material', at: new Date().toISOString() } };
+  canvas.metadata = { ...canvas.metadata, provenance: { genre: 'material', at: new Date().toISOString() } };
   const r = await evaluateCanvas(canvas, { mode: 'fast', genre: 'dashboard' });
-  check('explicit beats provenance', r.genre!.active === 'dashboard' && r.genre!.source === 'explicit');
+  check('explicit beats provenance', r.genre!.active === 'data' && r.genre!.source === 'explicit');
+  check('explicit replaces the genre stamp entirely', !r.genre!.relaxed.includes('accent-hue'));
 }
 
 // A genre the relaxation table doesn't know → active is reported but relaxes
@@ -78,6 +81,33 @@ t=I(card, { type: "text", content: "Revenue targets", fontSize: 20, fontWeight: 
   const r = await evaluateCanvas(makeCanvas(), { mode: 'fast', genre: 'minimal' });
   check('unknown genre → active reported, nothing relaxed', r.genre!.active === 'minimal' && r.genre!.relaxed.length === 0);
   check('unknown genre → full table in notRelaxed', r.genre!.notRelaxed.length === 3);
+}
+
+// Phase 30 — the material PRESET relaxes on its own and the report says so;
+// a legacy genre stored in preset still reads as a genre; aliases fold.
+{
+  const canvas = makeCanvas();
+  canvas.metadata = { ...canvas.metadata, provenance: { preset: 'material', at: new Date().toISOString() } };
+  const r = await evaluateCanvas(canvas, { mode: 'fast' });
+  check('preset material → no genre, but relaxed + byPreset', r.genre!.active === null && r.genre!.source === null
+    && r.genre!.relaxed.slice().sort().join(',') === 'accent-hue,pure-black-white'
+    && r.genre!.byPreset?.preset === 'material' && r.genre!.byPreset.relaxed.length === 2, JSON.stringify(r.genre));
+  const e = await evaluateCanvas(canvas, { mode: 'fast', genre: 'commerce' });
+  check('explicit genre keeps the preset relaxation', e.genre!.active === 'commerce'
+    && e.genre!.relaxed.slice().sort().join(',') === 'accent-hue,honest-content,pure-black-white');
+}
+{
+  const canvas = makeCanvas();
+  canvas.metadata = { ...canvas.metadata, provenance: { preset: 'checkout', at: new Date().toISOString() } };
+  const r = await evaluateCanvas(canvas, { mode: 'fast' });
+  check('legacy preset "checkout" → canonical commerce from provenance', r.genre!.active === 'commerce' && r.genre!.source === 'provenance');
+  check('a non-preset legacy value carries no byPreset', r.genre!.byPreset === undefined);
+}
+{
+  const canvas = makeCanvas();
+  canvas.metadata = { ...canvas.metadata, provenance: { preset: 'dark', genre: null, at: new Date().toISOString() } };
+  const r = await evaluateCanvas(canvas, { mode: 'fast' });
+  check('migrated canvas, genre null + preset dark → no genre', r.genre!.active === null && r.genre!.relaxed.length === 0);
 }
 
 // Cliche not in the category list → no genre field at all.
