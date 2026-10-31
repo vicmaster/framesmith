@@ -215,7 +215,8 @@ export function setCanvasType(
   const metadata = { ...canvas.metadata };
   if (surface === null) delete metadata.surface;
   else metadata.surface = { ...surface };
-  canvas.metadata = metadata;
+  if (Object.keys(metadata).length) canvas.metadata = metadata;
+  else delete canvas.metadata;
   touchCanvas(canvasId);
   return { previous };
 }

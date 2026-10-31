@@ -1,6 +1,7 @@
 import type { Canvas, FontFace, SceneNode } from './types.js';
 import { getIconSvg } from './icons.js';
 import { aliasFamilyStack } from './fonts.js';
+import { usableSafeArea } from './surfaces.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
  *
@@ -1042,13 +1043,11 @@ function findNearestContainer(ancestors: SceneNode[]): SceneNode | undefined {
  * top/bottom padding, at exact px (insets never scale fluidly). Each side is
  * honoured only when it is a finite non-negative number. */
 function safeAreaPadding(node: SceneNode): string[] {
-  const insets = node.safeArea;
-  if (!insets || typeof insets !== 'object') return [];
-  const valid = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+  const insets = usableSafeArea(node.safeArea);
   const sides = paddingSides(node.padding);
   const out: string[] = [];
-  if (valid(insets.top)) out.push(`padding-top: calc(${sides.top} + ${insets.top}px)`);
-  if (valid(insets.bottom)) out.push(`padding-bottom: calc(${sides.bottom} + ${insets.bottom}px)`);
+  if (insets.top !== undefined) out.push(`padding-top: calc(${sides.top} + ${insets.top}px)`);
+  if (insets.bottom !== undefined) out.push(`padding-bottom: calc(${sides.bottom} + ${insets.bottom}px)`);
   return out;
 }
 

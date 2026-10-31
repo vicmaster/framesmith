@@ -9,7 +9,7 @@
 // Usage: npx tsx test-surface.ts
 
 import './test-env.js';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -59,6 +59,17 @@ function rootStyle(canvas: Canvas): string {
   const sized = createCanvas('Phone wide', undefined, { width: 393 }, { type: 'mobile' });
   check('explicit width wins, height from the profile', sized.root.width === 393 && sized.root.height === 844);
   check('explicit size still gets the insets', sized.root.safeArea?.top === 47);
+  const tall = createCanvas('Phone tall', undefined, { height: 700 }, { type: 'mobile' });
+  check('explicit height wins, width from the profile', tall.root.width === 390 && tall.root.height === 700);
+  mobile.root.safeArea!.top = 99;
+  check('root.safeArea is a copy, never the profile object', p.safeArea.top === 47 && sized.root.safeArea?.top === 47);
+  mobile.root.safeArea!.top = 47;
+  check('profile row is exactly the spec table', JSON.stringify(p) === JSON.stringify({
+    id: 'iphone-390', width: 390, height: 844, safeArea: { top: 47, bottom: 34 }, touchTarget: 44,
+    navBarHeight: 44, navBarLargeHeight: 96, tabBarHeight: 49, tabCount: { min: 2, max: 5 },
+    bodySize: 17, bodyFloor: 16, smallestText: 11, listRowHeight: 44, listRowSubtitleHeight: 56,
+    sideMargin: 16, homeIndicator: { width: 134, height: 5 },
+  }));
 
   const web = createCanvas('Web', undefined, {}, { type: 'web' });
   check('declared web: 1440×900, no safeArea', web.root.width === 1440 && web.root.height === 900 && web.root.safeArea === undefined);
@@ -99,10 +110,24 @@ function rootStyle(canvas: Canvas): string {
   setCanvasType(c.id, null);
   check('clearing a clear canvas does not dirty it', c.lastModified === lm);
   check('unknown canvas → undefined', setCanvasType('nope', { type: 'web' }) === undefined);
+  check('clearing the only metadata leaves no empty bag', c.metadata === undefined, JSON.stringify(c.metadata));
+
+  // Persisted, and stamped on top of what's on disk (ensureFresh).
+  const file = join(process.env.FRAMESMITH_HOME!, 'canvases', `${c.id}.json`);
+  setCanvasType(c.id, { type: 'mobile', device: 'iphone-390' });
+  check('set-type is written to disk', JSON.parse(readFileSync(file, 'utf-8')).metadata?.surface?.type === 'mobile');
+  const onDisk = JSON.parse(readFileSync(file, 'utf-8'));
+  onDisk.metadata.surface = { type: 'web' };
+  writeFileSync(file, JSON.stringify(onDisk));
+  const later = new Date(Date.now() + 5000);
+  utimesSync(file, later, later);
+  const rFresh = setCanvasType(c.id, null);
+  check('set-type reads a hand-edit first (previous is the on-disk web)', rFresh?.previous?.type === 'web', JSON.stringify(rFresh?.previous));
 
   setCanvasGenre(c.id, 'commerce');
   setCanvasType(c.id, { type: 'mobile', device: 'iphone-390' });
-  check('set-type leaves the genre alone', c.metadata?.provenance?.genre === 'commerce');
+  // getCanvas: the hand-edit reload above replaced the store's object.
+  check('set-type leaves the genre alone', getCanvas(c.id)?.metadata?.provenance?.genre === 'commerce');
 }
 
 // ── variants ──────────────────────────────────────────────────────────────
@@ -169,6 +194,7 @@ function rootStyle(canvas: Canvas): string {
   m.metadata = { ...m.metadata, provenance: { preset: 'material', genre: 'commerce' } as never };
   const evMat = await evaluateCanvas(m, { mode: 'fast' });
   check('material preset + commerce genre relax all three', ['accent-hue', 'pure-black-white', 'honest-content'].every((t) => evMat.genre?.relaxed.includes(t as never)), evMat.genre?.relaxed.join(','));
+  check('relaxed keeps ruleset order: genre, then preset (build decision D1)', JSON.stringify(evMat.genre?.relaxed) === JSON.stringify(['honest-content', 'accent-hue', 'pure-black-white']), JSON.stringify(evMat.genre?.relaxed));
   const evExplicit = await evaluateCanvas(m, { mode: 'fast', genre: 'commerce' });
   check('explicit genre keeps the preset relaxation', evExplicit.genre?.relaxed.includes('accent-hue') === true);
 }
@@ -232,6 +258,12 @@ function rootStyle(canvas: Canvas): string {
   setCanvasGenre(c.id, 'data');
   check('set-genre still changes it', evalCacheKey(c, []) !== k1);
   check('the canvas in the store is the one keyed', getCanvas(c.id) === c);
+  DEVICE_PROFILES['test-phone'] = { ...DEVICE_PROFILES[DEFAULT_DEVICE], id: 'test-phone' };
+  setCanvasType(c.id, { type: 'mobile', device: 'iphone-390' });
+  const kA = evalCacheKey(c, []);
+  setCanvasType(c.id, { type: 'mobile', device: 'test-phone' });
+  check('a device change alone changes the score cache key', evalCacheKey(c, []) !== kA);
+  delete DEVICE_PROFILES['test-phone'];
 }
 
 // ── the real tool handlers over MCP stdio ─────────────────────────────────
@@ -280,6 +312,23 @@ function rootStyle(canvas: Canvas): string {
     check('canvas_set_type: device with null errors', nullDev.isError === true);
     const missing = await tool('canvas_set_type', { canvasId: 'nope', type: 'web' });
     check('canvas_set_type: unknown canvas errors', missing.isError === true);
+    const badSetDev = await tool('canvas_set_type', { canvasId: w.canvasId, type: 'mobile', device: 'pixel-9' });
+    check('canvas_set_type: unknown device errors with the known list', badSetDev.isError === true && badSetDev.text.includes('iphone-390'));
+    const webSetDev = await tool('canvas_set_type', { canvasId: w.canvasId, type: 'web', device: 'iphone-390' });
+    check('canvas_set_type: device with web errors', webSetDev.isError === true);
+
+    // The hint names exactly what is missing.
+    const sizeOnly = await tool('canvas_create', { name: 'Odd size', type: 'mobile', width: 400 });
+    const hSize = await tool('canvas_set_type', { canvasId: sizeOnly.canvasId, type: 'mobile' });
+    check('hint: safeArea present, size wrong → size step only', typeof hSize.hint === 'string' && hSize.hint.includes('390×844') && !hSize.hint.includes('safeArea'), hSize.hint);
+    const bare = await tool('canvas_create', { name: 'Bare phone', width: 390, height: 844 });
+    const hBare = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'mobile' });
+    check('hint: size right, no safeArea → safeArea step only', typeof hBare.hint === 'string' && hBare.hint.includes('safeArea') && !hBare.hint.includes('resize'), hBare.hint);
+    await tool('batch_design', { canvasId: bare.canvasId, operations: 'U("document", { safeArea: "abc" })' });
+    const hJunk = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'mobile' });
+    check('hint: a safeArea the renderer ignores still gets the hint', typeof hJunk.hint === 'string' && hJunk.hint.includes('safeArea'), hJunk.hint);
+    const hWeb = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'web' });
+    check('hint: never on a web result', hWeb.hint === undefined);
 
     await tool('batch_design', { canvasId: m.canvasId, operations: `
 f=I("document", { type: "frame", layout: "vertical", gap: 16, padding: 16 })
@@ -289,6 +338,20 @@ I(f, { type: "text", content: "Today", fontSize: 28 })
     check('canvas_evaluate returns the surface report', ev.surface?.type === 'mobile' && Array.isArray(ev.surface?.rulesOn) && Array.isArray(ev.surface?.conflicts));
     const fix = await tool('canvas_autofix', { canvasId: m.canvasId });
     check('canvas_autofix returns the surface report', fix.surface?.type === 'mobile' && fix.surface?.source === 'declared');
+    await tool('batch_design', { canvasId: m.canvasId, operations: 'g=I("document", { type: "frame", layout: "vertical", gap: 13, padding: 16 })\nI(g, { type: "text", content: "Off-scale gap", fontSize: 16 })\nI(g, { type: "text", content: "Second line", fontSize: 16 })' });
+    const applied = await tool('canvas_autofix', { canvasId: m.canvasId, apply: true });
+    check('canvas_autofix apply: true returns the surface report', applied.appliedCount > 0 && applied.surface?.type === 'mobile', JSON.stringify({ n: applied.appliedCount, s: applied.surface }));
+
+    // Propose mode reads a hand-edit first, like canvas_evaluate.
+    const mFile = join(home, 'canvases', `${m.canvasId}.json`);
+    const mDisk = JSON.parse(readFileSync(mFile, 'utf-8'));
+    mDisk.metadata.surface = { type: 'web' };
+    writeFileSync(mFile, JSON.stringify(mDisk));
+    const t = new Date(Date.now() + 5000);
+    utimesSync(mFile, t, t);
+    const proposeFresh = await tool('canvas_autofix', { canvasId: m.canvasId });
+    check('canvas_autofix propose mode sees an on-disk edit', proposeFresh.surface?.type === 'web', JSON.stringify(proposeFresh.surface));
+    await tool('canvas_set_type', { canvasId: m.canvasId, type: 'mobile' });
 
     const gen = await tool('generate_design_system', { seed: '#0E7490', personality: 'technical', canvasId: m.canvasId });
     check('generate_design_system on mobile: body 17, source mobile', gen.typographyRoles?.body?.fontSize === 17 && gen.baseSize === 17 && gen.baseSizeSource === 'mobile', JSON.stringify(gen.typographyRoles?.body));

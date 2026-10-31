@@ -8,7 +8,7 @@ Canvases live inside a `Workspace > Project > Canvas` hierarchy. The built-in `P
 
 - **`workspace_create({ name })`** — top-level container (e.g. "Client work", "Personal").
 - **`project_create({ workspaceId, name })`** — group related canvases inside a workspace.
-- **`canvas_create({ name, projectId, width?, height? })`** — drops the canvas in the given project (defaults to Untitled). The artboard is 1440×900 unless you pass `width`/`height` (positive integers, each defaulting on its own) — e.g. `width: 390, height: 844` for a phone screen.
+- **`canvas_create({ name, projectId, width?, height?, type?, device? })`** — drops the canvas in the given project (defaults to Untitled). The artboard is 1440×900 unless you pass `width`/`height` (positive integers, each defaulting on its own). For a phone app screen pass `type: "mobile"` instead of sizing it by hand (see [Declaring the medium](#declaring-the-medium-web-or-mobile)).
 - **`canvas_move({ canvasId, projectId })`** — reassign a canvas between projects.
 - **`canvas_archive` / `canvas_unarchive`** — soft-delete: canvas stays on disk but hides from default listings. Reach for this when iterating; reach for `canvas_delete` (permanent) only when sure.
 
@@ -16,7 +16,7 @@ Canvases live inside a `Workspace > Project > Canvas` hierarchy. The built-in `P
 
 ## Two-line summary
 
-1. **Author desktop-first at one design width.** Pick a width (1200 or 1440 is typical for a web page; a phone screen is its own artboard, `canvas_create({ width: 390, height: 844 })`), compose the design there.
+1. **Author desktop-first at one design width.** Pick a width (1200 or 1440 is typical for a web page; a phone app screen is its own artboard, `canvas_create({ type: "mobile" })`), compose the design there.
 2. **Adapt down with `responsive` hints + fluid widths.** The renderer derives the mobile/tablet layout from the same scene graph — you don't author it twice.
 
 ## Width strategies
@@ -38,13 +38,14 @@ Pick the right `width` per node — this is the single biggest lever for respons
 
 ## Declaring the medium (web or mobile)
 
-A canvas declares what medium it is on, separately from its genre (what it is for) and its preset (what style it uses). The type picks which rules judge the screen and which defaults the generators use. It never changes what renders.
+A canvas declares what medium it is on, separately from its genre (what it is for) and its preset (what style it uses). The declaration selects a ruleset and the defaults the generators use. The declaration itself never changes a pixel: what renders comes only from the scene, so the artboard size and `safeArea` that `canvas_create` writes into the root are what change the render.
 
-- **A phone app screen is `canvas_create({ type: "mobile" })`**, not a 390px-wide web canvas. It gets the device artboard (390×844 for the default `device: "iphone-390"`) and the root reserves the device's insets as `safeArea: { top: 47, bottom: 34 }`. The renderer adds those to the root's own top and bottom padding, at exact pixels, and the root's fill paints the bands, so in-flow content never sits under the status bar or the home indicator. `canvas_create` reports `type`, `typeSource` (`"declared"` or `"default"`), `device` and `safeArea`.
+- **A phone app screen is `canvas_create({ type: "mobile" })`**, not a 390px-wide web canvas. It gets the device artboard (390×844 for the default `device: "iphone-390"`, the only profile today) and the root reserves the device's insets as `safeArea: { top: 47, bottom: 34 }`. An explicit `width` or `height` wins for that side; the insets and the device stay the profile's. Passing `device` without `type: "mobile"`, or an unknown device, is an error. `canvas_create` reports `type`, `typeSource` (`"declared"` or `"default"`), `device` and `safeArea`.
+- **The renderer adds the insets to the root's own top and bottom padding**, at exact pixels even when the authored padding scales fluidly (padding of 32px or more), and the root's fill paints the bands, so in-flow content never sits under the status bar or the home indicator. A root with `padding: 24` starts its first child 71px down (24 + 47). `safeArea` is part of the root, so changing it moves the `versionHash`.
 - **`type: "web"` is the default.** An undeclared canvas is judged as web and its evaluate result says `source: "default"`.
-- **`canvas_set_type` re-declares an existing canvas** (`"web"`, `"mobile"`, or `null` to clear). It writes the declaration only. It never resizes the artboard and never writes `safeArea`, because either would reflow what you placed. When the result has a `hint`, follow it: `U("document", { safeArea: { top: 47, bottom: 34 } })` reserves the insets, and the hint names the device size if the root differs.
-- **`generate_design_system` on a mobile canvas** pivots the type scale on the device body size: 17px for every personality except `data-dense`, which uses 16px. An explicit `baseSize` wins. The result reports `baseSize` and `baseSizeSource`.
-- **Every evaluate result carries a `surface` report**: `{ type, device, source, rulesOn, rulesOff, conflicts }`. Each axis value (type, genre, preset) contributes a ruleset, and the active rules are their union. `rulesOn` and `rulesOff` name the rule ids the rulesets turned on and off; a rule both enabled and disabled stays on and is listed in `conflicts`, so composing declarations can never switch a guardrail off.
+- **`canvas_set_type` re-declares an existing canvas** (`"web"`, `"mobile"`, or `null` to clear). It writes the declaration only, so it never moves the `versionHash`. It never resizes the artboard and never writes or removes `safeArea`, because either would reflow what you placed; clearing the type leaves the root as it is. When a mobile result has a `hint`, follow it: it names `U("document", { safeArea: { top: 47, bottom: 34 } })` when the root reserves no insets, and `U("document", { width: 390, height: 844 })` when the root is another size. Both ops change the render, so re-check the layout after them.
+- **`generate_design_system` on a mobile canvas** pivots the type scale on the device body size: 17px for every personality except `data-dense`, which uses 16px. An explicit `baseSize` wins. The result reports the generated pivot as `baseSize` and `baseSizeSource` (`"mobile"` for both mobile pivots, `"explicit"`, or `"personality"` on web). A `$body` inherited from a workspace or project design system is preserved by default and listed in `designSystemConflicts`; pass `preserveInherited: false` to take the mobile body.
+- **Every evaluate result carries a `surface` report**: `{ type, device, source, rulesOn, rulesOff, conflicts }`. Each axis value (type, genre, preset) contributes a ruleset, and the active rules are their union. `rulesOn` and `rulesOff` name the rule ids the rulesets turned on and off. A rule both enabled and disabled stays on: it is listed in `rulesOn` and in `conflicts`, so composing declarations can never switch a guardrail off. No rule ids are registered yet, so both lists are empty today; the mobile checks register theirs as they land.
 
 ## Responsive hints
 

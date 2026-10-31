@@ -80,6 +80,16 @@ export function resolveSurface(canvas: Canvas): SurfaceDeclaration {
   return { type: 'mobile', device: typeof stored.device === 'string' ? stored.device : DEFAULT_DEVICE, source: 'declared' };
 }
 
+/** The root safeArea sides the renderer honours: each side only when it is a
+ * finite non-negative number. One reader for the renderer and for
+ * canvas_set_type's hint, so the hint never calls an ignored value reserved. */
+export function usableSafeArea(value: unknown): { top?: number; bottom?: number } {
+  if (!value || typeof value !== 'object') return {};
+  const valid = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
+  const { top, bottom } = value as Record<string, unknown>;
+  return { ...(valid(top) ? { top } : {}), ...(valid(bottom) ? { bottom } : {}) };
+}
+
 /** Validate a type + device pair for canvas_create / canvas_set_type. Returns
  * the metadata to store, or an error message. */
 export function surfaceFor(type: SurfaceType, device?: string): { surface: { type: SurfaceType; device?: string } } | { error: string } {

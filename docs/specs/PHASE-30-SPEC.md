@@ -184,7 +184,9 @@ Slice B re-checked every value against the HIG through developer.apple.com's JSO
   - *`surface` is always on the evaluate result*, every mode and category filter, the empty-canvas result included; `canvas_autofix` returns it too.
   - *`safeArea` renders as `padding-top: calc(<authored top> + <inset>px)`* (and bottom likewise) on the document root only, at exact pixels even when the authored padding is fluid. A side that is not a finite non-negative number is ignored. `safeArea` is part of the root, so it is in the `versionHash`.
   - *`canvas_create`* errors on `device` without `type: "mobile"` and on an unknown device, and reports `type`, `typeSource`, `device` and `safeArea`. *`canvas_set_type`* reports `previous`, the unchanged `artboard`, and a `hint` naming the `safeArea` op and the device size when a mobile result lacks them.
-  - *`generate_design_system`* reports its pivot as `baseSize` + `baseSizeSource` (`explicit` / `personality` / `mobile`). Project and workspace scope have no type, so they stay web.
+  - *`generate_design_system`* reports its GENERATED pivot as `baseSize` + `baseSizeSource` (`explicit` / `personality` / `mobile`). Project and workspace scope have no type, so they stay web. A `$body` inherited from a workspace or project design system is still preserved by default (it appears in `designSystemConflicts`), so FR-B4's "body ≥ 16" holds for what the canvas renders only without one or with `preserveInherited: false`.
+  - *One reader for `safeArea`.* `usableSafeArea` (a side counts only as a finite non-negative number) serves both the renderer and `canvas_set_type`'s hint, so the hint never treats a value the renderer ignores as reserved.
+  - *`canvas_autofix` reads fresh in propose mode too* (it called `ensureFresh` only with `apply: true`), so its proposals and its `genre` / `surface` reports describe what is on disk.
 
 **Slice C — the mobile ruleset (FR-C1..C8)**
 - Each check is registered by rule id in the ruleset table and runs only when on, except `mobile-artboard`, which is in the base ruleset (FR-C6).
