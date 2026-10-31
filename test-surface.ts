@@ -327,6 +327,9 @@ function rootStyle(canvas: Canvas): string {
     await tool('batch_design', { canvasId: bare.canvasId, operations: 'U("document", { safeArea: "abc" })' });
     const hJunk = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'mobile' });
     check('hint: a safeArea the renderer ignores still gets the hint', typeof hJunk.hint === 'string' && hJunk.hint.includes('safeArea'), hJunk.hint);
+    await tool('batch_design', { canvasId: bare.canvasId, operations: 'U("document", { safeArea: { top: 47 } })' });
+    const hHalf = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'mobile' });
+    check('hint: one usable side still gets the safeArea step', typeof hHalf.hint === 'string' && hHalf.hint.includes('safeArea'), hHalf.hint);
     const hWeb = await tool('canvas_set_type', { canvasId: bare.canvasId, type: 'web' });
     check('hint: never on a web result', hWeb.hint === undefined);
 
