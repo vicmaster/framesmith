@@ -547,7 +547,7 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 
 - [x] Slice A — untangle the declarations: genre gets its own field so `apply_preset` stops overwriting it, every stored canvas keeps its verdict through a legacy read, and `data` becomes the canonical purpose genre with `dashboard` as its alias
 - [x] Slice B — the type axis: `metadata.surface` with one device profile (`iphone-390`), `canvas_create({ type })` and `canvas_set_type`, a ruleset table keyed by type, genre and preset that composes by union and can turn rules on, a `surface` report on every evaluation, and a mobile type scale from `generate_design_system`
-- [ ] Slice C — the mobile ruleset: 44px targets as an error on every tappable primitive, safe areas, a type floor, undeclared phone-width canvases told to declare, hand-built tap targets and multi-column prose named as advisories, and stress that knows the type
+- [x] Slice C — the mobile ruleset: 44px targets as an error on every control (the slice D primitives join the set as they land), safe areas, a type floor, undeclared phone-width canvases told to declare, hand-built tap targets and multi-column prose named as advisories, and stress that knows the type
 - [ ] Slice D — vocabulary: `fixed` / `sticky` positioning, `safeArea` on the root, and the `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row` and `sheet` primitives
 - [ ] Slice E — starting points: anatomy and realisation on structures, resolution by canvas type, six mobile realisations, and the pattern gate extended to them
 - [ ] Slice F — the viewer: thumbnails at the artboard's real proportions and a device frame with a safe-area overlay

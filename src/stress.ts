@@ -11,6 +11,7 @@
 
 import type { SceneNode } from './types.js';
 import type { LayoutRect } from './screenshot.js';
+import type { SurfaceType } from './surfaces.js';
 import { extractInventory, isDataLike } from './drift.js';
 
 export type PerturbationName = 'long-text' | 'i18n' | 'big-numbers' | 'empty' | 'many';
@@ -35,9 +36,75 @@ export interface StressFinding {
 /** A long unbroken token — the classic wrap-breaker (German compound). */
 const LONG_TOKEN = 'Rindfleischetikettierungsüberwachung';
 
-function walkTexts(root: SceneNode, visit: (node: SceneNode) => void): void {
-  if (root.type === 'text' && typeof root.content === 'string' && root.content.trim()) visit(root);
+/** Phase 30 slice C — the text props of primitives that carry their own copy,
+ * as paths into the node (`[]` walks an array). `fixed` marks a fixed
+ * vocabulary (tab and nav action labels): on mobile, long-text leaves it alone
+ * while i18n still perturbs it, since those labels really are localised. Read
+ * generically, so a new primitive is one row. */
+export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean }[] = [
+  { type: 'button', path: 'label' },
+  { type: 'list-row', path: 'title' },
+  { type: 'list-row', path: 'subtitle' },
+  { type: 'list-row', path: 'trailing.text' },
+  { type: 'tab-bar', path: 'items[].label', fixed: true },
+  { type: 'nav-bar', path: 'title' },
+  { type: 'nav-bar', path: 'leading.label', fixed: true },
+  { type: 'nav-bar', path: 'trailing[].label', fixed: true },
+];
+
+/** One perturbable string: a text node's content or a primitive's prop. */
+interface TextSlot {
+  node: SceneNode;
+  value: string;
+  fixed: boolean;
+  set: (value: string) => void;
+}
+
+/** Every non-blank string at `path` under `obj` (`a.b`, `items[].label`). */
+function propSlots(obj: unknown, path: string[], out: Array<{ value: string; set: (v: string) => void }>): void {
+  if (!obj || typeof obj !== 'object' || path.length === 0) return;
+  const [head, ...rest] = path;
+  const isArray = head.endsWith('[]');
+  const key = isArray ? head.slice(0, -2) : head;
+  const record = obj as Record<string, unknown>;
+  const value = record[key];
+  if (isArray) {
+    if (Array.isArray(value)) value.forEach((item) => propSlots(item, rest, out));
+    return;
+  }
+  if (rest.length > 0) { propSlots(value, rest, out); return; }
+  if (typeof value === 'string' && value.trim()) out.push({ value, set: (v) => { record[key] = v; } });
+}
+
+function walkTexts(root: SceneNode, visit: (slot: TextSlot) => void): void {
+  if (root.type === 'text' && typeof root.content === 'string' && root.content.trim()) {
+    visit({ node: root, value: root.content, fixed: false, set: (v) => { root.content = v; } });
+  }
+  for (const prop of PRIMITIVE_TEXT_PROPS) {
+    if (prop.type !== root.type) continue;
+    const found: Array<{ value: string; set: (v: string) => void }> = [];
+    propSlots(root, prop.path.split('.'), found);
+    for (const f of found) visit({ node: root, value: f.value, fixed: prop.fixed === true, set: f.set });
+  }
   root.children?.forEach((c) => walkTexts(c, visit));
+}
+
+/** Runs of two or more consecutive sibling `list-row`s — a list, for the
+ * empty and many perturbations. Lives here, not in the drift inventory, which
+ * coverage, typography and drift share and which must not change. */
+function listRuns(root: SceneNode): Array<{ container: SceneNode; start: number; length: number }> {
+  const runs: Array<{ container: SceneNode; start: number; length: number }> = [];
+  (function walk(n: SceneNode) {
+    const kids = n.children ?? [];
+    for (let i = 0; i < kids.length;) {
+      let j = i;
+      while (j < kids.length && (kids[j].type as string) === 'list-row') j++; // slice D adds the node type
+      if (j - i >= 2) runs.push({ container: n, start: i, length: j - i });
+      i = j > i ? j : i + 1;
+    }
+    kids.forEach(walk);
+  })(root);
+  return runs;
 }
 
 /** Repeat `base` (space-joined) until it reaches `factor` × its own length. */
@@ -70,32 +137,37 @@ function cloneWithSuffix(node: SceneNode, suffix: string): SceneNode {
 }
 
 /** Apply one named perturbation to a COPY of the tree. A perturbation that
- * finds nothing to touch returns touched: [] — the caller skips rendering it. */
-export function applyPerturbation(name: PerturbationName, root: SceneNode): PerturbationResult {
+ * finds nothing to touch returns touched: [] — the caller skips rendering it.
+ * On a `mobile` canvas long-text leaves alone strings of three characters or
+ * fewer (monograms, short labels) and fixed-vocabulary primitive labels. */
+export function applyPerturbation(name: PerturbationName, root: SceneNode, opts: { type?: SurfaceType } = {}): PerturbationResult {
   const clone = structuredClone(root);
   const touched: string[] = [];
+  const touch = (id: string) => { if (!touched.includes(id)) touched.push(id); };
+  const mobile = opts.type === 'mobile';
 
   if (name === 'long-text' || name === 'i18n') {
-    walkTexts(clone, (node) => {
-      if (isDataLike(node.content as string)) return; // live figures get big-numbers instead
+    walkTexts(clone, (slot) => {
+      if (isDataLike(slot.value)) return; // live figures get big-numbers instead
       if (name === 'long-text') {
-        node.content = `${stretch(node.content as string, 2.2)} ${LONG_TOKEN}`;
+        if (mobile && (slot.fixed || slot.value.trim().length <= 3)) return;
+        slot.set(`${stretch(slot.value, 2.2)} ${LONG_TOKEN}`);
       } else {
         // ~1.4× — the German/Finnish expansion rule, no unbroken token.
-        node.content = stretch(node.content as string, 1.4);
+        slot.set(stretch(slot.value, 1.4));
       }
-      touched.push(node.id);
+      touch(slot.node.id);
     });
     return { root: clone, touched };
   }
 
   if (name === 'big-numbers') {
-    walkTexts(clone, (node) => {
-      if (!isDataLike(node.content as string)) return;
-      const widened = widenNumber(node.content as string);
-      if (widened === null || widened === node.content) return;
-      node.content = widened;
-      touched.push(node.id);
+    walkTexts(clone, (slot) => {
+      if (!isDataLike(slot.value)) return;
+      const widened = widenNumber(slot.value);
+      if (widened === null || widened === slot.value) return;
+      slot.set(widened);
+      touch(slot.node.id);
     });
     return { root: clone, touched };
   }
@@ -117,6 +189,14 @@ export function applyPerturbation(name: PerturbationName, root: SceneNode): Pert
       for (let i = 1; i <= 2; i++) container.children.push(...dataRows.map((r) => cloneWithSuffix(r, `-x${i}`)));
     }
     touched.push(container.id);
+  }
+  // Runs of list-rows, last run first so earlier indices stay valid.
+  for (const run of listRuns(clone).reverse()) {
+    const kids = run.container.children!;
+    const rows = kids.slice(run.start, run.start + run.length);
+    if (name === 'empty') kids.splice(run.start, run.length);
+    else kids.splice(run.start + run.length, 0, ...[1, 2].flatMap((i) => rows.map((r) => cloneWithSuffix(r, `-x${i}`))));
+    touch(run.container.id);
   }
   return { root: clone, touched };
 }
@@ -256,6 +336,9 @@ export function compareLayouts(
 export interface StressRecord {
   versionHash: string;
   warnings: number;
+  /** The canvas type the run used (Phase 30): a type change makes the
+   * record stale for the directive's note, never for the verdict. */
+  type: SurfaceType;
 }
 
 const lastStressRuns = new Map<string, StressRecord>();

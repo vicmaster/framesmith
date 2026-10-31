@@ -14,10 +14,13 @@ import { appendFeedbackDirective } from './feedback.js';
 export const SCORE_BAR = 95;
 
 /** The last canvas_stress verdict as the directive sees it. `current` = it ran
- * on the canvas's present versionHash. */
+ * on the canvas's present versionHash AND under its present type. */
 export interface StressState {
   warnings: number;
   current: boolean;
+  /** Set when the canvas type changed since the run (Phase 30), so the note
+   * says so instead of blaming an edit. */
+  ranAsType?: string;
 }
 
 export interface DirectiveParts {
@@ -66,7 +69,9 @@ export function buildEvaluateDirective(result: EvaluationResult, openFeedback = 
     ? ''
     : fragile.current
       ? ` The last canvas_stress run on this exact version was FRAGILE (${fragile.warnings} layout break(s)) — fix them with fluid widths / minWidth or minHeight floors / wrapping / textOverflow: "ellipsis", then re-run canvas_stress until CLEAN.`
-      : ` The last canvas_stress run was FRAGILE (${fragile.warnings} layout break(s)) on an earlier version — re-run canvas_stress to confirm your changes fixed them; only a CLEAN run clears this.`;
+      : fragile.ranAsType
+        ? ` The last canvas_stress run was FRAGILE (${fragile.warnings} layout break(s)) under the canvas's earlier type ("${fragile.ranAsType}") — re-run canvas_stress under the current type; only a CLEAN run clears this.`
+        : ` The last canvas_stress run was FRAGILE (${fragile.warnings} layout break(s)) on an earlier version — re-run canvas_stress to confirm your changes fixed them; only a CLEAN run clears this.`;
 
   let base: string;
   if (ready) {

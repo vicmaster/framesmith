@@ -117,12 +117,26 @@ export interface Ruleset {
 
 export type RulesetAxis = 'base' | 'type' | 'genre' | 'preset';
 
+/** The mobile ruleset's rule ids (Phase 30 slice C), each registered in the
+ * same change as the check that honours it. */
+export const MOBILE_RULES = [
+  'mobile-touch-target',
+  'mobile-handbuilt-target',
+  'mobile-safe-area',
+  'mobile-type-floor',
+  'mobile-one-column',
+] as const;
+
 /** Keyed by axis, then value. Genre rows are canonical names only; aliases
- * fold through GENRE_ALIASES first. The enable/disable lists start empty: a
- * rule id lands here in the same change as the check that honours it. */
+ * fold through GENRE_ALIASES first. A rule id lands here in the same change as
+ * the check that honours it. */
 export const RULESETS: Record<RulesetAxis, Record<string, Ruleset>> = {
-  base: { all: {} },
-  type: { web: {}, mobile: {} },
+  // mobile-artboard is on for every type: its job is to catch phone-shaped
+  // canvases the mobile ruleset is not on for.
+  base: { all: { enable: ['mobile-artboard'] } },
+  // The mobile disable list stays empty until a web-shaped rule is shown to
+  // misfire on a correct mobile idiom (FR-C7).
+  type: { web: {}, mobile: { enable: [...MOBILE_RULES] } },
   genre: {
     // Material Design legitimately uses a purple accent AND white elevated
     // surfaces (cards on an off-white background), so both are intentional
