@@ -10,12 +10,11 @@
 // Usage: npx tsx test-ridgeline.ts
 //   RIDGELINE_OUT=<dir> also writes light + dark screenshots there.
 
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { MOBILE_RULES } from './src/surfaces.js';
 
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
@@ -24,6 +23,12 @@ function check(name: string, cond: boolean, extra?: string) {
 }
 
 const ATTEMPT_NODES = 93;
+// Spelled out, not read from src/surfaces.ts, so dropping a rule from the
+// ruleset cannot also drop it from what this gate expects.
+const MOBILE_RULE_IDS = ['mobile-touch-target', 'mobile-handbuilt-target', 'mobile-safe-area', 'mobile-type-floor', 'mobile-one-column', 'mobile-tab-bar', 'mobile-artboard'];
+const STRESS_DEFAULTS = ['long-text', 'i18n', 'big-numbers', 'empty', 'many'];
+const out = process.env.RIDGELINE_OUT;
+if (out) mkdirSync(out, { recursive: true });
 
 const home = mkdtempSync(join(tmpdir(), 'framesmith-ridgeline-'));
 const cwd = mkdtempSync(join(tmpdir(), 'framesmith-ridgeline-cwd-'));
@@ -50,7 +55,7 @@ async function tool(name: string, args: Record<string, unknown>) {
 // The adaptation: the attempt's copy and figures, every tap target a
 // primitive. The stamp's ids are dashboard-mobile's (dm-*).
 const ADAPT = `
-U("dm-nav", { title: "Today", largeTitle: true, trailing: [{ icon: "bell" }] })
+U("dm-nav", { title: "Good morning, Fiona", largeTitle: true, trailing: [{ icon: "bell" }] })
 U("dm-hero-label", { content: "This week" })
 U("dm-hero-value", { content: "42.8 km" })
 track=I("dm-hero", { type: "frame", name: "Goal track", width: "100%", height: 8, cornerRadius: 4, fill: "$accent-tint" })
@@ -75,6 +80,7 @@ U("dm-recent-head-title", { content: "Recent runs" })
 U("dm-row-1", { title: "Cedar Ridge loop", subtitle: "Yesterday · 5:42 /km", leading: { icon: "mountain" }, trailing: { text: "12.6 km" } })
 U("dm-row-2", { title: "Riverside tempo", subtitle: "Thursday · 4:58 /km", leading: { icon: "timer" }, trailing: { text: "8.4 km" } })
 U("dm-row-3", { title: "Old Mill recovery", subtitle: "Wednesday · 6:20 /km", leading: { icon: "leaf" }, trailing: { text: "5.1 km" } })
+I("document", { type: "home-indicator" })
 U("dm-tabs", { variant: "fab", fab: { icon: "plus" }, items: [{ icon: "house", label: "Home", active: true }, { icon: "map", label: "Routes" }, { icon: "users", label: "Club" }, { icon: "user", label: "Profile" }] })
 `;
 
@@ -104,18 +110,30 @@ try {
   const opErrors = typeof b === 'string' ? [b] : (b.errors ?? []);
   check('the adaptation applies without op errors', opErrors.length === 0, JSON.stringify(opErrors).slice(0, 300));
 
+  // The verdicts below are only about the brief's fonts if they loaded: a
+  // fallback face (offline, a Google Fonts outage) has other glyph widths.
+  const shot = await call('screenshot', { canvasId: id });
+  const fontWarnings = shot.filter((x) => x.type === 'text' && x.text?.startsWith('Font warnings'));
+  check('the design system\'s fonts load (no Font warnings)', fontWarnings.length === 0, fontWarnings.map((x) => x.text).join(' '));
+
   // Stress first, so evaluate's directive reads its verdict.
   const st = await tool('canvas_stress', { canvasId: id });
-  if (process.env.RIDGELINE_OUT) writeFileSync(join(process.env.RIDGELINE_OUT, 'stress.json'), JSON.stringify(st, null, 2));
+  if (out) writeFileSync(join(out, 'stress.json'), JSON.stringify(st, null, 2));
+  const ran = (st.perturbations ?? []).map((p: { name: string }) => p.name).sort();
+  check('canvas_stress ran the full default set', JSON.stringify(ran) === JSON.stringify([...STRESS_DEFAULTS].sort()), ran.join(', '));
   const stressWarnings = (st.perturbations ?? []).flatMap((p: { findings?: Issue[] }) => p.findings ?? []).filter((f: Issue) => f.severity !== 'info');
   check('canvas_stress (full default set) is CLEAN', /^CLEAN\b/.test(st.verdict) && stressWarnings.length === 0, `${st.verdict}${stressWarnings.length ? ' — ' + describe(stressWarnings) : ''}`);
 
   const canvas = JSON.parse(readFileSync(join(home, 'canvases', `${id}.json`), 'utf-8'));
   check('the dark token layer exists, so the dark contrast run is not vacuous', Object.keys(canvas.variables?.dark?.colors ?? {}).length > 0);
+  // Ridgeline's copy never references $body, so pin the role the type floor
+  // judges: the generated phone body must be at least 16px.
+  const body = canvas.variables?.typography?.body?.fontSize;
+  check('the generated $body meets the 16px phone floor', typeof body === 'number' && body >= 16, `${body}px`);
 
   for (const mode of ['fast', 'detailed'] as const) {
     const ev = await tool('canvas_evaluate', { canvasId: id, mode });
-    if (process.env.RIDGELINE_OUT) writeFileSync(join(process.env.RIDGELINE_OUT, `evaluate-${mode}.json`), JSON.stringify(ev, null, 2));
+    if (out) writeFileSync(join(out, `evaluate-${mode}.json`), JSON.stringify(ev, null, 2));
     const issues = ev.issues as Issue[];
     const blocking = issues.filter((i) => i.severity === 'error' || i.severity === 'warning' || i.tell);
     const dark = issues.filter((i) => i.theme === 'dark' && i.severity !== 'info');
@@ -124,7 +142,7 @@ try {
     const handbuilt = issues.filter((i) => i.rule === 'mobile-handbuilt-target');
     check(`${mode}: zero mobile-handbuilt-target findings`, handbuilt.length === 0, describe(handbuilt));
     const on = new Set(ev.surface?.rulesOn ?? []);
-    const missing = [...MOBILE_RULES, 'mobile-artboard'].filter((r) => !on.has(r));
+    const missing = MOBILE_RULE_IDS.filter((r) => !on.has(r));
     check(`${mode}: the surface report has every mobile rule on`, ev.surface?.type === 'mobile' && missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : (ev.surface?.rulesOn ?? []).join(', '));
     console.log(`      ${mode} score ${ev.overallScore}/100 · ${issues.length} findings (${issues.filter((i) => i.severity === 'info').length} info)`);
   }
@@ -132,11 +150,17 @@ try {
   const nodes = walk(canvas.root);
   check(`fewer than ${ATTEMPT_NODES} nodes`, nodes.length < ATTEMPT_NODES, `${nodes.length} nodes`);
   const types = new Set(nodes.map((n) => n.type));
-  check('device chrome and navigation are the primitives', ['status-bar', 'nav-bar', 'tab-bar'].every((t) => types.has(t)));
+  check('device chrome and navigation are the primitives', ['status-bar', 'nav-bar', 'tab-bar', 'home-indicator'].every((t) => types.has(t)));
   const chromeFrames = nodes.filter((n) => n.type === 'frame' && /status bar|home indicator|tab bar|nav bar|dynamic island|indicators/i.test(n.name ?? ''));
   check('no hand-built device chrome frame', chromeFrames.length === 0, chromeFrames.map((n) => n.name).join(', '));
 
-  const out = process.env.RIDGELINE_OUT;
+  // Negative control: a dark-only contrast failure must surface, so the
+  // clean dark result above is a real pass. Last, because it edits the canvas.
+  await tool('set_variables', { canvasId: id, variables: { dark: { colors: { 'text-secondary': canvas.variables.dark.colors['bg-surface'] } } } });
+  const control = await tool('canvas_evaluate', { canvasId: id, mode: 'fast' });
+  check('control: a dark-only contrast failure is caught', (control.issues as Issue[]).some((i) => i.theme === 'dark' && i.severity !== 'info'));
+  await tool('set_variables', { canvasId: id, variables: { dark: { colors: { 'text-secondary': canvas.variables.dark.colors['text-secondary'] } } } });
+
   if (out) {
     for (const theme of ['light', 'dark']) {
       const img = (await call('screenshot', { canvasId: id, theme, fullPage: true })).find((x) => x.type === 'image');
