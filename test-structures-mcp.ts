@@ -5,7 +5,7 @@
 //
 // Usage: npx tsx test-structures-mcp.ts
 
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -68,6 +68,24 @@ try {
   // A canvas re-declared mobile resolves the same way.
   await tool('canvas_set_type', { canvasId: web, type: 'mobile' });
   check('canvas_set_type to mobile changes what settings resolves to', (await tool('apply_structure', { canvasId: web, structure: 'settings' })).data.applied === 'settings-mobile');
+
+  // The handler passes the canvas's resolved tokens: a generated phone system's
+  // colours are never overwritten by the seeded neutral defaults.
+  const themed = (await tool('canvas_create', { name: 'themed', type: 'mobile' })).data.canvasId;
+  await tool('generate_design_system', { canvasId: themed, seed: '#166534', personality: 'soft' });
+  const seeded = (await tool('apply_structure', { canvasId: themed, structure: 'settings' })).data.seededColors as string[];
+  check('a stamp after generate_design_system seeds none of the system\'s colours', !['accent', 'text-primary', 'bg-surface', 'border'].some((t) => seeded.includes(t)), seeded.join(', '));
+
+  // list_structures reads the canvas fresh: a type written to disk under the
+  // server (a git pull) is what it lists for.
+  const pulled = (await tool('canvas_create', { name: 'pulled' })).data.canvasId;
+  const file = join(home, 'canvases', `${pulled}.json`);
+  const stored = JSON.parse(readFileSync(file, 'utf-8'));
+  stored.metadata = { ...stored.metadata, surface: { type: 'mobile', device: 'iphone-390' } };
+  writeFileSync(file, JSON.stringify(stored));
+  const later = new Date(Date.now() + 5000);
+  utimesSync(file, later, later);
+  check('list_structures sees a type changed on disk', names((await tool('list_structures', { canvasId: pulled })).data).includes('feed-mobile'));
 } finally {
   await client.close();
 }

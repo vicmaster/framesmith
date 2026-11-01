@@ -100,6 +100,9 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('every mobile anatomy named (backticked) in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
   expect('apply_structure docstring names realisation', /realisation/.test(tool('apply_structure')));
   expect('list_structures docstring names canvasId', /canvasId/.test(tool('list_structures')));
+  const gotchas = /const GOTCHAS = \[([\s\S]*?)\n\];/.exec(indexSrc)?.[1] ?? '';
+  expect('GOTCHAS tell a phone agent to start from a realisation and list by canvas',
+    gotchas.includes('list_structures({ canvasId })') && anatomies.every((a) => gotchas.includes(a)));
 }
 
 // ── 6. every cliche tell is surfaced where agents look ───────────────────────

@@ -1066,7 +1066,9 @@ const formField: Structure = {
       {
         id: 'ff-input', type: 'frame', name: 'Input', width: '100%', height: 44, layout: 'horizontal', alignItems: 'center',
         padding: [SPACE.xs, SPACE.md], cornerRadius: RADIUS.sm, fill: COLOR.bgElevated, stroke: COLOR.border, strokeWidth: 1,
-        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: TYPE.body, color: COLOR.textSecondary }],
+        // One line, truncating: a 44px box can't hold a wrapped second line
+        // (a long placeholder wrapped and clipped at phone width).
+        children: [{ id: 'ff-placeholder', type: 'text', content: 'Placeholder — to confirm', fontSize: TYPE.body, color: COLOR.textSecondary, textOverflow: 'ellipsis', minWidth: 0 }],
       },
       { id: 'ff-help', type: 'text', content: 'Help text — to confirm', fontSize: TYPE.caption, color: COLOR.textSecondary },
     ],
@@ -1255,17 +1257,9 @@ const emptyState: Structure = {
       // $text-sm, not $caption: nine words of prose at 12px are below the iOS
       // Footnote floor, so the hint failed mobile-type-floor on a phone.
       { id: 'es-hint', type: 'text', content: 'Items you create will show up here — to confirm', fontSize: TYPE.textSm, color: COLOR.textSecondary },
-      {
-        id: 'es-cta', type: 'frame', name: 'CTA', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
-        padding: [SPACE.xs, SPACE.md], cornerRadius: RADIUS.sm, fill: COLOR.accent, width: 'fit-content',
-        children: [
-          // bg-primary as on-accent text is theme-adaptive: near-white on the
-          // dark accent in light mode, near-black on the light accent in dark
-          // mode (the tier() CTA convention — a literal white breaks in dark).
-          { id: 'es-cta-icon', type: 'icon', icon: 'plus', iconSize: 14, iconColor: COLOR.bgPrimary },
-          { id: 'es-cta-label', type: 'text', content: 'Create item', fontSize: TYPE.textSm, fontWeight: 600, color: COLOR.bgPrimary },
-        ],
-      },
+      // A button primitive, so the action is a real 44px target on every type
+      // (a hand-built CTA frame rendered 37px tall, below a phone's floor).
+      { id: 'es-cta', type: 'button', name: 'CTA', label: 'Create item', icon: 'plus' },
     ],
   }],
 };
@@ -1526,10 +1520,11 @@ const dashboardMobile: Structure = {
           { id: 'dm-hero-value', type: 'text', content: 'Metric — TBD', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary, tabularNums: true, textOverflow: 'ellipsis' },
           {
             id: 'dm-hero-delta', type: 'frame', name: 'Delta', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs2,
-            padding: [2, SPACE.xs], cornerRadius: 999, fill: TINT.success.bg, overflow: 'hidden',
+            // The status colour rides on the icon; the text stays secondary ink
+            // on the card, so no preset or tint pairing can drop its contrast.
             children: [
               { id: 'dm-hero-delta-icon', type: 'icon', icon: 'trending-up', iconSize: 14, iconColor: TINT.success.ink },
-              { id: 'dm-hero-delta-text', type: 'text', content: 'Change — TBD', fontSize: TYPE.caption, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis' },
+              { id: 'dm-hero-delta-text', type: 'text', content: 'Change — TBD', fontSize: TYPE.caption, fontWeight: 600, color: COLOR.textSecondary, textOverflow: 'ellipsis' },
             ],
           },
         ],
@@ -1657,7 +1652,9 @@ const onboardingMobile: Structure = {
               fill: TINT.accent.bg, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
               children: [{ id: 'om-glyph-icon', type: 'icon', icon: 'sparkles', iconSize: 40, iconColor: TINT.accent.ink }],
             },
-            { id: 'om-title', type: 'text', content: 'Page heading', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
+            // Full width so a long heading wraps in the column (auto width in a
+            // centred column grew past the artboard under a large display face).
+            { id: 'om-title', type: 'text', content: 'Page heading', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center', width: '100%' },
             { id: 'om-body', type: 'text', content: 'Body copy — what this step offers, in a sentence.', fontSize: TYPE.body, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 320 },
             {
               id: 'om-dots', type: 'frame', name: 'Page dots', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
@@ -1889,7 +1886,7 @@ export function resolveStructure(name: string, type: SurfaceType): Structure {
   const surface = structureSurface(structure);
   if (!covers(surface, type)) {
     throw new Error(
-      `"${name}" is the ${surface} realisation of "${structureAnatomy(structure)}" and this canvas is ${type}. ` +
+      `"${name}" is the ${surface} realisation of "${structureAnatomy(structure)}", not a ${type} one. ` +
       `${available(structure.kind)} Pass realisation: "${surface}" to stamp it anyway.`,
     );
   }
@@ -1974,7 +1971,28 @@ const COLOR_FIELDS = ['fill', 'color', 'stroke', 'iconColor'] as const;
  * this, an unthemed settings-mobile drew near-black row titles on the dark
  * default background. */
 const PRIMITIVE_TYPES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
-const PRIMITIVE_COLOR_TOKENS = ['text-primary', 'text-secondary', 'accent', 'border', 'bg-surface', 'danger'];
+const PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = {
+  'text-primary': [], 'text-secondary': [], border: [],
+  // The token, then the names applyControlDefaults falls back to: a canvas
+  // that resolves the fallback keeps it rather than getting a seeded default.
+  accent: ['primary'], 'bg-surface': ['surface'], danger: ['error'],
+};
+
+/** A primitive's copy fields as [path, text]: what an agent replaces. */
+function primitiveCopy(n: SceneNode): [string, string][] {
+  const out: [string, string][] = [];
+  const add = (path: string, v: unknown) => { if (typeof v === 'string' && v.trim() !== '') out.push([path, v]); };
+  add('title', n.title);
+  add('subtitle', n.subtitle);
+  add('label', n.label);
+  const leading = n.leading as Record<string, unknown> | undefined;
+  add('leading.initials', leading?.initials);
+  add('leading.label', leading?.label);
+  if (Array.isArray(n.trailing)) n.trailing.forEach((a, i) => add(`trailing[${i}].label`, (a as Record<string, unknown> | null)?.label));
+  else add('trailing.text', (n.trailing as Record<string, unknown> | undefined)?.text);
+  (n.items ?? []).forEach((item, i) => add(`items[${i}].label`, item?.label));
+  return out;
+}
 
 /** Page background token applied to the document root so a scaffold fills the
  * viewport (renderer hoists root fill to <html>) instead of leaving browser
@@ -1998,9 +2016,10 @@ export interface ApplyStructureResult {
   /** Component stamps only: template id → live (re-keyed) id, for targeting follow-up ops. */
   idMap?: Record<string, string>;
   /** Fillable placeholders (text/image) with their role label, for populating.
-   * A primitive's copy is a placeholder too; `prop` names the field to set
-   * (`title` on a list-row or nav-bar, `label` on a button). */
-  placeholders: { id: string; role: string; prop?: 'title' | 'label' }[];
+   * A primitive's copy is a placeholder too; `prop` is the path of its field
+   * (`title`, `subtitle`, `label`, `trailing.text`, `leading.initials`,
+   * `leading.label`, `items[2].label`). */
+  placeholders: { id: string; role: string; prop?: string }[];
   /** Color tokens seeded with neutral defaults because they were unresolved. */
   seededColors: string[];
   /** Phase 27 — spacing/radius/elevation/typography tokens seeded the same way. */
@@ -2122,11 +2141,16 @@ export function applyStructure(
   const referencedOther = new Set<string>();  // spacing / radius / elevation / typography refs
   for (const root of inserted) {
     walkNodes(root, (n) => {
-      if (PRIMITIVE_TYPES.has(n.type)) PRIMITIVE_COLOR_TOKENS.forEach((t) => referenced.add(t));
+      if (PRIMITIVE_TYPES.has(n.type)) {
+        for (const [token, fallbacks] of Object.entries(PRIMITIVE_COLOR_TOKENS)) {
+          if (!fallbacks.some((f) => opts.existingColors?.has(f))) referenced.add(token);
+        }
+      }
       if (n.type === 'text' && typeof n.content === 'string') placeholders.push({ id: n.id, role: n.content });
       else if (n.type === 'image') placeholders.push({ id: n.id, role: 'image' });
-      else if ((n.type === 'list-row' || n.type === 'nav-bar') && typeof n.title === 'string') placeholders.push({ id: n.id, role: n.title, prop: 'title' });
-      else if (n.type === 'button' && typeof n.label === 'string') placeholders.push({ id: n.id, role: n.label, prop: 'label' });
+      else if (PRIMITIVE_TYPES.has(n.type)) {
+        for (const [prop, role] of primitiveCopy(n)) placeholders.push({ id: n.id, role, prop });
+      }
       for (const field of COLOR_FIELDS) {
         const v = (n as unknown as Record<string, unknown>)[field];
         if (typeof v === 'string' && v.startsWith('$')) referenced.add(v.slice(1));
