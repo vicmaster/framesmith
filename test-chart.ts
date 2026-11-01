@@ -74,10 +74,14 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   check('area fill at 12% opacity', html.includes('fill-opacity="0.12"'));
   check('point markers drawn', (html.match(/<circle /g) ?? []).length === 7);
   check('gridlines drawn', (html.match(/<line /g) ?? []).length === 4);
-  check('x labels rendered, empty ticks skipped... rendered as empty', html.includes('>Jan</text>') && html.includes('>Dec</text>'));
-  // Phase 25 slice A: tick labels carry tabular-nums, so the anchor attr is
-  // no longer the last one before the text content.
-  check('y labels right-aligned at the left edge', /text-anchor="end"[^>]*>2\.7M<\/text>/.test(html));
+  check('x labels rendered, empty ticks skipped... rendered as empty', html.includes('>Jan</span>') && html.includes('>Dec</span>'));
+  // Phase 30 slice G: tick labels are HTML over the stretched plot, so they
+  // keep their size whatever width the chart renders at.
+  check('no tick label is SVG text (it would stretch with the plot)', !/<text[^>]*>(Jan|Dec|0|2\.7M)<\/text>/.test(html));
+  check('labels sit in a positioned wrapper over the svg', html.includes('<div style="position: relative; width: 100%; height: 100%"><svg'));
+  check('y labels right-aligned at the left edge', /right: [\d.]+%; transform: translateY\(-50%\); font-size: 11px[^>]*>2\.7M<\/span>/.test(html));
+  check('line x labels: first pinned left at the plot start, last pinned right at its end',
+    /top: [\d.]+%; left: 7\.33%; font-size[^>]*>Jan<\/span>/.test(html) && /top: [\d.]+%; right: 0\.67%; font-size[^>]*>Dec<\/span>/.test(html));
 
   // Smooth curve emits cubic segments.
   chart.curve = 'smooth';
@@ -90,6 +94,19 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   });
   const barHtml = render();
   check('bar chart draws a rect per value per series', (barHtml.match(/<rect /g) ?? []).length === 6);
+  const at = barHtml.indexOf('viewBox="0 0 400 160"');
+  check('a chart without labels stays a bare svg', at > 0 && !barHtml.slice(at - 120, at).includes('position: relative'));
+
+  // One label per bar: each centres under its band. 400 wide, no y labels:
+  // plot 0..396, three bands of 132 → centres 66, 198, 330 → 16.5%, 49.5%, 82.5%.
+  barChart.xLabels = ['Mon', 'Tue', 'Wed'];
+  const centred = render();
+  check('bar labels centre under their bars', ['16.5%', '49.5%', '82.5%'].every((x, i) =>
+    new RegExp(`left: ${x.replace('.', '\\.')}; transform: translateX\\(-50%\\)[^>]*>${['Mon', 'Tue', 'Wed'][i]}</span>`).test(centred)), centred.slice(centred.indexOf('Mon') - 200, centred.indexOf('Mon') + 10));
+  // A label count that differs from the bar count keeps the edge-to-edge spread.
+  barChart.xLabels = ['Q1', 'Q4'];
+  const spread = render();
+  check('bar labels not one per bar spread edge to edge', /left: 0%; font-size[^>]*>Q1<\/span>/.test(spread) && /right: 1%; font-size[^>]*>Q4<\/span>/.test(spread));
 
   // Label content is escaped.
   barChart.xLabels = ['<img onerror=x>'];

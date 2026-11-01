@@ -87,6 +87,9 @@ interface RenderCtx {
   columnWidth: number;
   insets: { top: number; bottom: number };
   reservation: { top: number; bottom: number };
+  /** The width large type is authored at: the root's own width, else 1440.
+   * Fluid font sizes render as authored at this width and shrink below it. */
+  designWidth: number;
   /** Rendering a direct child of a column document root. */
   rootChild?: boolean;
   /** Rendering a direct child of a sheet, whose panel scrolls: it never shrinks. */
@@ -97,7 +100,8 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
   const registered = registeredFamilies(canvas);
   const expand = (n: SceneNode) => (n.type === 'instance' && n.componentId && canvas ? resolveInstance(n, canvas) ?? n : n);
   const columnWidth = Math.min(typeof root.width === 'number' ? root.width : width, width);
-  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation: chromeReservation(root, expand) };
+  const designWidth = typeof root.width === 'number' && root.width > 0 ? root.width : DESIGN_WIDTH;
+  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation: chromeReservation(root, expand), designWidth };
   const body = renderNode(root, rc);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
@@ -431,20 +435,42 @@ function renderChartSvg(node: SceneNode): string {
     }
   }
 
-  // Tick labels: spread evenly along the bottom / left edges (never on sparklines).
+  // Tick labels (never on sparklines) are HTML over the plot, placed by
+  // percentage: the plot stretches to the node's box (preserveAspectRatio
+  // none), and SVG text would stretch with it — squashed on a 100%-wide chart
+  // in a phone card, widened on a desktop one. Bar labels centre under their
+  // bars when there is one per bar; otherwise they spread edge to edge.
   const labelColor = escapeAttr(node.color ?? CHART_LABEL_COLOR);
-  for (const [i, label] of ((spark ? [] : node.xLabels) ?? []).entries()) {
-    const n = node.xLabels!.length;
-    const lx = round2(geom.x0 + (n === 1 ? 0.5 : i / (n - 1)) * geom.plotW);
-    parts.push(`<text x="${lx}" y="${round2(baselineY + 16)}" font-size="${CHART_LABEL_SIZE}" fill="${labelColor}" text-anchor="${i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}" style="font-variant-numeric: tabular-nums">${escapeHtml(label)}</text>`);
+  const labels: string[] = [];
+  const pct = (v: number, of: number) => `${round2((v / of) * 100)}%`;
+  const label = (pos: string, text: string) =>
+    labels.push(`<span style="position: absolute; ${pos}; font-size: ${CHART_LABEL_SIZE}px; line-height: 1; color: ${labelColor}; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none">${escapeHtml(text)}</span>`);
+  const xLabels = (spark ? [] : node.xLabels) ?? [];
+  const maxLen = Math.max(...series.map((s) => s.data.length));
+  const underBars = barForm && xLabels.length === maxLen;
+  for (const [i, text] of xLabels.entries()) {
+    const n = xLabels.length;
+    const top = `top: ${pct(baselineY + 6, boxH)}`;
+    if (underBars) {
+      label(`${top}; left: ${pct(geom.x0 + (i + 0.5) * (geom.plotW / n), boxW)}; transform: translateX(-50%)`, text);
+    } else if (n === 1) {
+      label(`${top}; left: ${pct(geom.x0 + 0.5 * geom.plotW, boxW)}; transform: translateX(-50%)`, text);
+    } else if (i === 0) {
+      label(`${top}; left: ${pct(geom.x0, boxW)}`, text);
+    } else if (i === n - 1) {
+      label(`${top}; right: ${pct(boxW - (geom.x0 + geom.plotW), boxW)}`, text);
+    } else {
+      label(`${top}; left: ${pct(geom.x0 + (i / (n - 1)) * geom.plotW, boxW)}; transform: translateX(-50%)`, text);
+    }
   }
-  for (const [i, label] of ((spark ? [] : node.yLabels) ?? []).entries()) {
+  for (const [i, text] of ((spark ? [] : node.yLabels) ?? []).entries()) {
     const n = node.yLabels!.length;
-    const ly = round2(geom.y0 + geom.plotH - (n === 1 ? 0.5 : i / (n - 1)) * geom.plotH);
-    parts.push(`<text x="${geom.x0 - 8}" y="${ly + 4}" font-size="${CHART_LABEL_SIZE}" fill="${labelColor}" text-anchor="end" style="font-variant-numeric: tabular-nums">${escapeHtml(label)}</text>`);
+    const ly = geom.y0 + geom.plotH - (n === 1 ? 0.5 : i / (n - 1)) * geom.plotH;
+    label(`top: ${pct(ly, boxH)}; right: ${pct(boxW - (geom.x0 - 8), boxW)}; transform: translateY(-50%)`, text);
   }
 
-  return `<svg width="100%" height="100%" viewBox="0 0 ${boxW} ${boxH}" xmlns="http://www.w3.org/2000/svg" style="display: block" preserveAspectRatio="none">${parts.join('')}</svg>`;
+  const svg = `<svg width="100%" height="100%" viewBox="0 0 ${boxW} ${boxH}" xmlns="http://www.w3.org/2000/svg" style="display: block" preserveAspectRatio="none">${parts.join('')}</svg>`;
+  return labels.length ? `<div style="position: relative; width: 100%; height: 100%">${svg}${labels.join('')}</div>` : svg;
 }
 
 function escapeAttr(value: string): string {
@@ -806,7 +832,7 @@ function buildStyles(node: SceneNode, rc: RenderCtx): string {
   }
 
   // Text
-  if (node.fontSize) s.push(`font-size: ${responsiveFontSize(node.fontSize)}`);
+  if (node.fontSize) s.push(`font-size: ${responsiveFontSize(node.fontSize, rc.designWidth)}`);
   if (node.fontFamily) s.push(`font-family: ${aliasFamilyStack(node.fontFamily, registered)}`); // "mono"/"sans" → CSS generics unless registered under that label (#134)
   if (node.fontWeight) s.push(`font-weight: ${node.fontWeight}`);
   if (node.color) s.push(`color: ${node.color}`);
@@ -1229,8 +1255,9 @@ function cssLength(v: number | string): string {
 }
 
 // Canonical design width — matches the default screenshot viewport.
-// Used to express padding/font as a fraction of viewport so narrower
-// breakpoints shrink the value proportionally.
+// Padding is expressed as a fraction of the viewport against it, so narrower
+// breakpoints shrink the value proportionally. Font sizes use the root's own
+// width instead (RenderCtx.designWidth), falling back to this one.
 const DESIGN_WIDTH = 1440;
 const PADDING_SCALE_MIN = 32;
 const FONT_SCALE_MIN = 24;
@@ -1452,13 +1479,18 @@ function responsivePadding(value: number): string {
 // pass through when they match a safe character set; anything else is dropped.
 const SAFE_CSS_LENGTH = /^[a-zA-Z0-9\s().,%*+\/-]+$/;
 
-function responsiveFontSize(value: number | string): string {
+/** Large type is fluid: it renders as authored on a viewport as wide as the
+ * artboard it was authored on (`designWidth`) and shrinks on narrower ones,
+ * down to 60% (16px floor). Phase 30 slice G: the reference used to be a fixed
+ * 1440, so a 33px title on a 390 phone artboard rendered at 20px — under the
+ * 21px card title and every heading under the 17px body. */
+function responsiveFontSize(value: number | string, designWidth: number): string {
   if (typeof value === 'string') {
     return SAFE_CSS_LENGTH.test(value) ? value : '14px';
   }
   if (value < FONT_SCALE_MIN) return `${value}px`;
   const min = Math.max(16, Math.round(value * 0.6));
-  const fluid = ((value / DESIGN_WIDTH) * 100).toFixed(2);
+  const fluid = ((value / designWidth) * 100).toFixed(2);
   return `clamp(${min}px, ${fluid}vw, ${value}px)`;
 }
 
