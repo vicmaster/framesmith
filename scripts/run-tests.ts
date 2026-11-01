@@ -16,7 +16,7 @@
 //
 // Pass names or substrings to run a subset: `npx tsx scripts/run-tests.ts cliche`
 import { readdirSync, readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 /** Tests that never terminate on their own and are not batch-runnable. */
 const INTERACTIVE = new Set([
@@ -44,7 +44,8 @@ const CHROME_ANYWAY = new Set([
  * in screenshot.ts that every browser-driven test reaches for. */
 const CHROME_MARKERS = /takeScreenshot|computeLayout|withPage|withIsolatedPage|puppeteer|from '\.\/src\/screenshot\.js'/;
 
-const TIMEOUT_MS = 180_000;
+// FRAMESMITH_TEST_TIMEOUT_MS overrides it (test-runner-timeout.ts uses 3s).
+const TIMEOUT_MS = Number(process.env.FRAMESMITH_TEST_TIMEOUT_MS) || 180_000;
 
 type Tier = 'fast' | 'full';
 const tier: Tier = process.argv.includes('--full') ? 'full' : 'fast';
@@ -62,14 +63,28 @@ const selected = all
   .filter((f) => tier === 'full' || !needsChrome(f))
   .filter((f) => filters.length === 0 || filters.some((q) => f.includes(q)));
 
+/** The test running now. Its own process group doesn't get the terminal's
+ * Ctrl-C, so the runner passes an interrupt on before exiting. */
+let current: ChildProcess | undefined;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (current?.pid) { try { process.kill(-current.pid, 'SIGKILL'); } catch { /* already gone */ } }
+    process.exit(130);
+  });
+}
+
 function run(file: string): Promise<{ file: string; ok: boolean; why: string; ms: number }> {
   return new Promise((resolve) => {
     const started = Date.now();
-    const child = spawn('npx', ['tsx', file], { stdio: ['ignore', 'pipe', 'pipe'] });
+    // Its own process group, so a timeout kills npx AND the tsx under it.
+    // Killing npx alone orphaned tsx, which kept the pipes open, and 'close'
+    // never fired: one hung test stalled the whole run.
+    const child = spawn('npx', ['tsx', file], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    current = child;
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
     child.stderr.on('data', (d) => { out += d; });
-    const timer = setTimeout(() => child.kill('SIGKILL'), TIMEOUT_MS);
+    const timer = setTimeout(() => process.kill(-child.pid!, 'SIGKILL'), TIMEOUT_MS);
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       const ms = Date.now() - started;
