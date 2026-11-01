@@ -271,5 +271,28 @@ I("document", { type: "button", name: "Fab", icon: "plus", position: "fixed", ri
   check('a narrow fixed button on the right never covers left-side lines', !nw.some((i) => i.message.includes('under pinned')), show(nw));
 }
 
+// ── slice D: post-3b regressions (detailed) ───────────────────────────────
+{
+  console.log('\n── slice D: post-3b regressions (detailed) ──');
+  const card = phone(`c=I("document", { type: "frame", layout: "vertical", overflow: "hidden", cornerRadius: 12 })
+${Array.from({ length: 60 }, (_, i) => `I(c, { type: "text", name: "Line ${i}", content: "Line ${i}" })`).join('\n')}`, { bare: true });
+  const cd = await safeArea(card, 'detailed');
+  check('an auto-height overflow:hidden card clips nothing: its last line still ends in the inset', cd.some((i) => i.message.includes('Line 59') && i.message.includes('end of the scroll')), show(cd));
+
+  const topBar = phone(`I("document", { type: "frame", name: "Header", height: 80, fill: "#EEE" })
+I("document", { type: "frame", name: "Pinned", position: "fixed", y: 0, height: 60, fill: "#333" })`);
+  const tb = (await evaluateCanvas(topBar, { mode: 'detailed' })).issues.filter((i) => i.message.includes('overlaps'));
+  check('a frame pinned to the top over in-flow content is still an overlap error', tb.length === 1, show(tb));
+  const bottomBar = phone(`I("document", { type: "frame", name: "Body", height: 900, fill: "#EEE" })
+I("document", { type: "frame", name: "Pinned", position: "fixed", bottom: 0, height: 60, fill: "#333" })`);
+  check('…a bar pinned to the bottom (content scrolls under it) is not', !(await evaluateCanvas(bottomBar, { mode: 'detailed' })).issues.some((i) => i.message.includes('overlaps')));
+
+  const tokens = phone('I("document", { type: "instance", componentId: "pad", name: "Padded" })', { bare: true });
+  tokens.variables = { ...tokens.variables, spacing: { 'space-12': 60 } };
+  tokens.components = { pad: { id: 'pad', type: 'component', layout: 'vertical', children: [{ id: 'pad-sp', type: 'frame', height: '$space-12' }, { id: 'pad-t', type: 'text', content: 'Inside' }] } };
+  const tk = await safeArea(tokens, 'detailed');
+  check('detailed reads a component as the screenshot draws it (its own $refs unresolved)', tk.some((i) => i.message.includes('top')), show(tk));
+}
+
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');
 process.exit(allPass ? 0 : 1);

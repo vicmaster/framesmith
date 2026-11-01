@@ -178,5 +178,24 @@ const SAFE = { safeArea: { top: 47, bottom: 34 } };
   check('the FAB rises 16px above the band', fab === 16, String(fab));
 }
 
+// ── post-3b regressions ───────────────────────────────────────────────────
+{
+  console.log('\n── post-3b regressions ──');
+  const nav = await withPage(async (page) => {
+    await page.setViewport({ width: 390, height: 844 });
+    await page.setContent(renderToHtml(resolveVariables(doc([{ id: 'nb', type: 'nav-bar', title: 'Conversation with Alexander Hamilton', leading: { label: 'Back' }, trailing: [{ icon: 'search' }, { icon: 'plus' }] }]), LIGHT), 390, 844));
+    return page.evaluate(() => {
+      const bar = document.querySelector('[data-node-id="nb"]') as HTMLElement;
+      const row = bar.firstElementChild as HTMLElement;
+      const [left, title, right] = [...row.children].map((c) => c.getBoundingClientRect());
+      return { leftEnd: left.right, titleStart: title.left, titleEnd: title.right, rightStart: right.left + (right.width - [...row.children[2].children].reduce((w, c) => w + c.getBoundingClientRect().width, 0)) };
+    });
+  });
+  check('a long nav-bar title truncates between its actions, overlapping neither', nav.titleStart >= nav.leftEnd - 1 && nav.titleEnd <= nav.rightStart + 1, JSON.stringify(nav));
+  const right = await computeLayout(renderToHtml(doc([{ id: 'r', type: 'frame', position: 'fixed', right: 0, width: 60, height: 40, y: 100 }]), 1440, 844), undefined, 5, { width: 1440, height: 844 });
+  const rr = (function find(list: LayoutRect[]): LayoutRect | undefined { for (const r of list) { if (r.nodeId === 'r') return r; const f = r.children && find(r.children); if (f) return f; } return undefined; })(right)!;
+  check('a right-pinned node on a 390 root captured at 1440 sits at the root\'s right edge', rr.x === 330, JSON.stringify(rr));
+}
+
 console.log(allPass ? '\nAll positioning checks passed.' : '\nSome positioning checks FAILED.');
 process.exit(allPass ? 0 : 1);

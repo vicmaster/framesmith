@@ -663,7 +663,7 @@ I("document", { type: "status-bar", time: 930 })`);
   const html = renderToHtml(weird.root, 390, 844, weird);
   check('numeric labels render as text', html.includes('>2024<') && html.includes('>930<') && html.includes('>5<'));
   const numLabel = await issues(weird, 'mobile-tab-bar');
-  check('a numeric tab label counts as a label; the null entry does not', numLabel.length === 1 && numLabel[0].message.includes('tab 1 has no label'), show(numLabel));
+  check('a numeric tab label counts as a label (and the unrendered null entry is ignored)', numLabel.length === 0, show(numLabel));
   const zero = renderToHtml(phone('I("document", { type: "list-row", title: "Inbox", trailing: { badge: 0 } })').root, 390, 844);
   check('a zero badge renders no bubble', !zero.includes('>0</span>'));
 
@@ -700,6 +700,13 @@ I(bar, { type: "frame", height: 34 })`), 'mobile-safe-area');
 I("document", { type: "nav-bar", title: "T", trailing: [{ icon: "nope-two" }] })
 I("document", { type: "tab-bar", variant: "fab", fab: { icon: "nope-three" }, items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })`), { mode: 'fast', categories: ['structure'] });
   check('list-row leading, nav trailing and FAB icons are checked', ['nope-one', 'nope-two', 'nope-three'].every((n) => icons.issues.some((i) => i.message.includes(n))), JSON.stringify(icons.issues.map((i) => i.message)));
+}
+
+// ── slice D: post-3b regressions ──────────────────────────────────────────
+{
+  console.log('\n── slice D: post-3b regressions ──');
+  const nulls = await issues(phone('I("document", { type: "tab-bar", items: [null, { icon: "house", label: "A" }, { icon: "user", label: "B" }] })'), 'mobile-tab-bar');
+  check('a null tab entry (not rendered) is neither counted nor called unlabeled', nulls.length === 0, show(nulls));
 }
 
 // ── the real tool handlers over MCP stdio ─────────────────────────────────

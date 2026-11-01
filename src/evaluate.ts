@@ -8,7 +8,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, effectivePosition, listRowMinHeight, navActions, tabItemBox, tabItems } from './primitives.js';
+import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -1052,11 +1052,13 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
     if (childRects.length < 2) continue;
 
     // Check if in-flow siblings overlap. Positioned nodes overlap by design:
-    // absolute, and (Phase 30 slice D) pinned ones — a tab bar over the
-    // scrolling list, the home indicator over the tab bar, a sheet over all.
+    // absolute, and (Phase 30 slice D) what content scrolls under — sticky
+    // nodes, pinned chrome, a sheet, a bar pinned to the bottom. A bar pinned
+    // to the top still hides what sits under it at scroll position 0.
     const layered = (n: SceneNode) => {
       const position = effectivePosition(n);
-      return position === 'absolute' || position === 'fixed' || position === 'sticky';
+      return position === 'absolute' || position === 'sticky' || n.type === 'sheet' || Object.hasOwn(CHROME_EDGE, n.type)
+        || (position === 'fixed' && pinsBottom(n));
     };
     for (let i = 0; i < childRects.length; i++) {
       for (let j = i + 1; j < childRects.length; j++) {
@@ -2250,8 +2252,10 @@ export async function evaluateCanvas(
   // Phase 30 slice D — the mobile rules judge what the renderer draws, so they
   // read the tree with instances expanded (a tab bar inside a component is
   // still a tab bar). Findings inside an instance report the instance.
-  const { root: expandedRaw, owners } = expandForRules(canvas.root, canvas);
-  const mobileRoot = resolveVariables(expandedRaw, mergedTokens);
+  // Expanded after resolution, as the renderer does it: a component's own
+  // $refs stay as the screenshot draws them.
+  const { root: mobileRoot, owners } = expandForRules(resolvedRoot, canvas);
+  const expandedRaw = expandForRules(canvas.root, canvas).root;
   const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
   const mobile: MobileContext = {
     root: mobileRoot,
@@ -2315,9 +2319,9 @@ export async function evaluateCanvas(
   if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed)) {
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-    // On a mobile canvas render the tree the mobile rules read: instances
-    // expanded with their own ids (so the rects are unambiguous) and their
-    // tokens resolved. Web keeps the canvas render.
+    // On a mobile canvas render the tree the mobile rules read: the same
+    // pixels as the canvas render, with every node inside an instance under
+    // its own id, so the rects are unambiguous. Web keeps the canvas render.
     const html = mobileTypeRules ? renderToHtml(mobileRoot, w, h, canvas) : renderToHtml(resolvedRoot, w, h, canvas);
     detailedLayout = await computeLayout(html, undefined, ruleOn.has('mobile-safe-area') ? 25 : 10, { width: w, height: h });
   }

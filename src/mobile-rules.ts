@@ -12,7 +12,7 @@ import { renderedPaddingPx } from './renderer.js';
 import { usableSafeArea, type DeviceProfile, type SurfaceDeclaration } from './surfaces.js';
 import {
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, pinsBottom, pinsTop,
-  rootInsets, unpinsFixed,
+  rootInsets, tabItems, unpinsFixed,
 } from './primitives.js';
 
 /** Fixed-vocabulary mobile chrome primitives. */
@@ -464,9 +464,10 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
       const cr = rects.get(c.id);
       const own = position === 'sticky' && cr ? { node: c, rect: cr, content: [] } : undefined;
       if (own) sticky.push(own);
-      // Below a frame that clips or scrolls its overflow, content can't reach
-      // the end of the document's scroll.
-      const clips = n !== ctx.root && n.overflow !== undefined && n.overflow !== 'visible';
+      // Below a fixed-height frame that clips or scrolls its overflow, content
+      // can't reach the end of the document's scroll (an auto-height card with
+      // overflow hidden clips nothing vertically).
+      const clips = n !== ctx.root && n.overflow !== undefined && n.overflow !== 'visible' && isNum(n.height);
       visit(c, positioned || position === 'absolute' || position === 'fixed', own ?? stuck, clipped || clips);
     }
   };
@@ -625,15 +626,16 @@ export function checkTabBars(ctx: MobileContext): EvaluationIssue[] {
   (function walk(n: SceneNode) {
     if (n.type === 'tab-bar') {
       const name = n.name ?? n.id;
-      const items = Array.isArray(n.items) ? n.items : undefined;
-      const count = items?.length ?? 0;
+      // Only the items that render count (a null entry is skipped by the renderer).
+      const items = tabItems(n);
+      const count = items.length;
       if (count < min || count > max) {
         issues.push(issue('usability', rule, 'warning', n,
           `Tab bar "${name}" has ${count} tab${count === 1 ? '' : 's'} — a phone tab bar holds ${min}–${max} (3–5 recommended).`,
           count > max ? 'Move the extra destinations into a "More" tab or a screen of their own.' : 'Give it at least two destinations, or drop the tab bar.'));
       }
       const labeled = (v: unknown) => (typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && Number.isFinite(v));
-      const unlabeled = (items ?? []).flatMap((it, i) => (labeled(it?.label) ? [] : [i + 1]));
+      const unlabeled = items.flatMap((it, i) => (labeled(it.label) ? [] : [i + 1]));
       if (unlabeled.length) {
         issues.push(issue('usability', rule, 'warning', n,
           `Tab bar "${name}": tab${unlabeled.length === 1 ? '' : 's'} ${unlabeled.join(', ')} ${unlabeled.length === 1 ? 'has' : 'have'} no label — every tab needs one (an icon alone is a guess).`,

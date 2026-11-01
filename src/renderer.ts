@@ -1046,10 +1046,10 @@ function renderNavBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string 
     `height: ${navBarHeight(node)}px`, 'display: flex', 'flex-direction: column',
     `color: ${node.color ?? FALLBACK.text}`, node.fill ? `background-color: ${node.fill}` : undefined,
   ]);
-  // Equal-flex sides keep the title centred; it truncates before it can
-  // collide with a wide action.
+  // Equal-flex sides keep the title centred; they never shrink below their
+  // actions, so a long title truncates instead of running under them.
   const side = (justify: string, inner: string) =>
-    `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'align-items: center', `justify-content: ${justify}`])}">${inner}</div>`;
+    `<div style="${css(['flex: 1 1 0', 'display: flex', 'align-items: center', `justify-content: ${justify}`])}">${inner}</div>`;
   const centred = !node.largeTitle && title
     ? `<div style="${css(['flex: 0 1 auto', 'min-width: 0', 'display: flex', 'justify-content: center', 'padding: 0 4px'])}">${labelHtml(title, 'font-size: 17px; font-weight: 600')}</div>`
     : '';
@@ -1398,7 +1398,9 @@ function positionStyles(node: SceneNode, rc: RenderCtx): string[] {
     // With no horizontal offset and no width, span the root's column — like an
     // in-flow frame stretching — instead of shrinking to fit.
     const span = node.x === undefined && node.right === undefined && node.width === undefined;
-    if (node.right !== undefined || span) s.push(`right: calc(${edge} + ${node.right ?? 0}px)`);
+    // The root sits at the body's left, so its right edge is (body − column)
+    // in from the body's.
+    if (node.right !== undefined || span) s.push(`right: calc(${edge} + ${rc.bodyWidth - rc.columnWidth + (node.right ?? 0)}px)`);
     if (node.maxWidth === undefined) s.push(`max-width: ${rc.columnWidth}px`);
   } else {
     if (node.x !== undefined) s.push(`left: ${node.x}px`);
