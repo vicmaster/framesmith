@@ -6,7 +6,7 @@ import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDe
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { evaluateCanvas, resolveGenre, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
-import { resolveSurface } from './surfaces.js';
+import { resolveSurface, usableSafeArea, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, type DeviceProfile } from './surfaces.js';
 import { isPresetName } from './genre.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
 
@@ -475,6 +475,57 @@ function renderSidebar(active: string): string {
     </aside>`;
 }
 
+/** The root's artboard size, defaulting the way every render path does. */
+function artboardSize(canvas: Canvas): { w: number; h: number } {
+  const { width, height } = canvas.root;
+  return {
+    w: typeof width === 'number' && width > 0 ? width : 1440,
+    h: typeof height === 'number' && height > 0 ? height : 900,
+  };
+}
+
+// Phase 30 slice F — card thumbnails at the artboard's real proportions. The
+// box takes the artboard's aspect ratio, clamped between a phone held upright
+// and 2:1 (a long landing page shows its top instead of becoming a 1,300px
+// card). The iframe renders at the artboard size; the server writes a scale
+// that makes it 0.222 × 1440 wide, and THUMB_FIT_JS refits it to the card.
+const PHONE = DEVICE_PROFILES[DEFAULT_DEVICE];
+const THUMB_WIDTH = 0.222 * 1440;
+const THUMB_MAX_ASPECT = 2;
+
+function thumbAspect(w: number, h: number): string {
+  if (w / h < PHONE.width / PHONE.height) return `${PHONE.width} / ${PHONE.height}`;
+  if (w / h > THUMB_MAX_ASPECT) return `${THUMB_MAX_ASPECT} / 1`;
+  return `${w} / ${h}`;
+}
+
+function renderThumb(canvas: Canvas, badge = ''): string {
+  const { w, h } = artboardSize(canvas);
+  const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
+  const body = isEmpty
+    ? `<div class="thumb-empty">
+            <div class="thumb-empty-back" aria-hidden="true"></div>
+            <div class="thumb-empty-front" aria-hidden="true"></div>
+            <span class="thumb-empty-icon" hidden>Empty canvas</span>
+          </div>`
+    : `<iframe src="/canvas/${canvas.id}/html" scrolling="no" loading="lazy" style="width: ${w}px; height: ${h}px;"></iframe>`;
+  const scale = Number((THUMB_WIDTH / w).toFixed(4));
+  return `<div class="thumb${isEmpty ? ' thumb--empty' : ''}" data-artboard-w="${w}" style="aspect-ratio: ${thumbAspect(w, h)}; --thumb-scale: ${scale};">${badge}${body}</div>`;
+}
+
+const THUMB_FIT_JS = `
+    // Scale each thumbnail's artboard to its card's width, and keep it there.
+    (() => {
+      const fit = (thumb) => {
+        const w = Number(thumb.dataset.artboardW);
+        if (w > 0 && thumb.clientWidth > 0) thumb.style.setProperty('--thumb-scale', String(thumb.clientWidth / w));
+      };
+      const thumbs = document.querySelectorAll('.thumb[data-artboard-w]');
+      if (typeof ResizeObserver !== 'function') { thumbs.forEach(fit); return; }
+      const observer = new ResizeObserver((entries) => entries.forEach((e) => fit(e.target)));
+      thumbs.forEach((t) => observer.observe(t));
+    })();`;
+
 /** Project-scoped main page. Sidebar on left, breadcrumb + canvas grid on right.
  *  Returns null when the project doesn't exist so the route handler can 404. */
 export async function renderProjectPage(projectId: string, port: number): Promise<string | null> {
@@ -499,22 +550,13 @@ export async function renderProjectPage(projectId: string, port: number): Promis
   const shown = canvases.filter((c) => !(c.variant && present.has(c.variant.of)));
   const cards = (await Promise.all(shown.map(async (c) => {
     const canvas = getCanvas(c.id)!;
-    const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
-    const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+    const { w, h } = artboardSize(canvas);
     const date = new Date(c.createdAt).toLocaleString();
-    const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
     // Phase 19 Slice A — gallery score badge (fast eval, cached; empty → none).
     const ev = await evalFor(canvas, statesById.get(c.id) ?? []);
     const scoreBadge = ev
       ? `<div class="card-score" style="color:${scoreColor(ev.overallScore)}" title="Heuristic quality score">${ev.overallScore}</div>`
       : '';
-    const thumbBody = isEmpty
-      ? `<div class="thumb-empty">
-            <div class="thumb-empty-back" aria-hidden="true"></div>
-            <div class="thumb-empty-front" aria-hidden="true"></div>
-            <span class="thumb-empty-icon" hidden>Empty canvas</span>
-          </div>`
-      : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
     const stateChips = c.variants?.length
       ? `<div class="state-chips card-states">
           <span class="state-chip state-chip--active">default</span>
@@ -525,7 +567,7 @@ export async function renderProjectPage(projectId: string, port: number): Promis
       ? `
       <div class="card">
         <a href="/canvas/${c.id}" class="card-link">
-          <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${scoreBadge}${thumbBody}</div>
+          ${renderThumb(canvas, scoreBadge)}
           <div class="info">
             <div class="name">${esc(c.name)}</div>
             <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
@@ -535,7 +577,7 @@ export async function renderProjectPage(projectId: string, port: number): Promis
       </div>`
       : `
       <a href="/canvas/${c.id}" class="card">
-        <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${scoreBadge}${thumbBody}</div>
+        ${renderThumb(canvas, scoreBadge)}
         <div class="info">
           <div class="name">${esc(c.name)}</div>
           <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
@@ -597,13 +639,13 @@ ${FAVICON_HTML}
   .project-meta { font-size: 13px; font-weight: 500; color: var(--text-tertiary); margin-top: 8px; }
 
   /* Card grid */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 20px; padding: 28px 36px 36px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 20px; align-items: start; padding: 28px 36px 36px; }
   .card { background: var(--surface); border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.18s ease, box-shadow 0.18s ease; box-shadow: 0 0 0 1px var(--border-rim) inset, 0 4px 12px -2px rgba(0,0,0,0.4); }
   .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(245,158,11,0.30) inset, 0 8px 20px -4px rgba(0,0,0,0.5); }
   .card-link { display: block; text-decoration: none; color: inherit; }
   .card-states { padding: 0 14px 12px; }
   .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: var(--bg-0); position: relative; }
-  .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
+  .thumb iframe { border: none; transform-origin: 0 0; transform: scale(var(--thumb-scale, 0.222)); pointer-events: none; position: absolute; top: 0; left: 0; }
   .thumb--empty { background: #15110b; }
   /* Phase 19 Slice A — heuristic quality score badge on each card thumbnail. */
   .card-score { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(9,7,10,0.78); backdrop-filter: blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; line-height: 1; }
@@ -636,6 +678,7 @@ ${FAVICON_HTML}
   </div>
   <script>
     ${MOBILE_TOGGLE_JS}
+    ${THUMB_FIT_JS}
 
     // Auto-refresh: poll the canvas count for this project, reload if it changes.
     let lastCount = ${canvases.length};
@@ -668,21 +711,12 @@ export function renderArchivePage(port: number): string {
 
   const cards = archived.map((c) => {
     const canvas = getCanvas(c.id)!;
-    const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
-    const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+    const { w, h } = artboardSize(canvas);
     const archivedDate = c.lastModified ? new Date(c.lastModified).toLocaleString() : '';
-    const isEmpty = !canvas.root.children || canvas.root.children.length === 0;
-    const thumbBody = isEmpty
-      ? `<div class="thumb-empty">
-            <div class="thumb-empty-back" aria-hidden="true"></div>
-            <div class="thumb-empty-front" aria-hidden="true"></div>
-            <span class="thumb-empty-icon" hidden>Empty canvas</span>
-          </div>`
-      : `<iframe src="/canvas/${c.id}/html" scrolling="no" loading="lazy"></iframe>`;
     return `
       <div class="card card--archived" data-canvas-id="${c.id}">
         <a href="/canvas/${c.id}" class="card-link">
-          <div class="thumb${isEmpty ? ' thumb--empty' : ''}">${thumbBody}</div>
+          ${renderThumb(canvas)}
           <div class="info">
             <div class="name">${esc(c.name)}</div>
             <div class="meta">${esc(projectName(c.projectId))} &middot; ${w} x ${h}</div>
@@ -748,14 +782,14 @@ ${FAVICON_HTML}
   .project-title { font-size: 36px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.6px; line-height: 1.1; }
   .project-meta { font-size: 13px; font-weight: 500; color: var(--text-tertiary); margin-top: 8px; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 20px; padding: 28px 36px 36px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 20px; align-items: start; padding: 28px 36px 36px; }
   .card { position: relative; background: var(--surface); border-radius: 12px; overflow: hidden; transition: transform 0.18s ease, box-shadow 0.18s ease; box-shadow: 0 0 0 1px var(--border-rim) inset, 0 4px 12px -2px rgba(0,0,0,0.4); }
   .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(245,158,11,0.30) inset, 0 8px 20px -4px rgba(0,0,0,0.5); }
   .card--archived { opacity: 0.72; }
   .card--archived:hover { opacity: 1; }
   .card-link { display: block; text-decoration: none; color: inherit; }
   .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: var(--bg-0); position: relative; }
-  .thumb iframe { width: 1440px; height: 900px; border: none; transform-origin: 0 0; transform: scale(0.222); pointer-events: none; position: absolute; top: 0; left: 0; }
+  .thumb iframe { border: none; transform-origin: 0 0; transform: scale(var(--thumb-scale, 0.222)); pointer-events: none; position: absolute; top: 0; left: 0; }
   .thumb--empty { background: #15110b; }
   /* Phase 19 Slice A — heuristic quality score badge on each card thumbnail. */
   .card-score { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; background: rgba(9,7,10,0.78); backdrop-filter: blur(4px); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; line-height: 1; }
@@ -796,6 +830,7 @@ ${FAVICON_HTML}
   </div>
   <script>
     ${MOBILE_TOGGLE_JS}
+    ${THUMB_FIT_JS}
 
     // Lifecycle actions: restore / permanent delete. Both call JSON endpoints
     // and reload on success. Delete prompts to confirm — it's irreversible.
@@ -1109,9 +1144,34 @@ function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
   </aside>`;
 }
 
+/** The detail view's device presentation: the canvas at 1:1 inside a bezel,
+ *  with the safe-area bands (the root's `safeArea`, else the profile's insets,
+ *  per side — the hardware intrudes there either way) hidden until toggled. */
+function renderDevice(canvas: Canvas, w: number, h: number, deviceId: string, profile: DeviceProfile): string {
+  const reserved = canvas.root.type === 'document' ? usableSafeArea(canvas.root.safeArea) : {};
+  const top = reserved.top ?? profile.safeArea.top;
+  const bottom = reserved.bottom ?? profile.safeArea.bottom;
+  return `<div class="viewport viewport--device" id="viewport">
+    <div class="device" data-device="${esc(deviceId)}">
+      <div class="device-screen" style="width: ${w}px; height: ${h}px;">
+        <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
+        <div class="safe-overlay" id="safe-overlay" hidden>
+          <div class="safe-band safe-band--top" style="height: ${top}px;"><span>${top}</span></div>
+          <div class="safe-band safe-band--bottom" style="height: ${bottom}px;"><span>${bottom}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 export async function renderDetailPage(canvas: Canvas, port: number): Promise<string> {
-  const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
-  const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
+  const { w, h } = artboardSize(canvas);
+  // Phase 30 slice F — a mobile canvas opens 1:1 in a device frame; a web
+  // canvas keeps the breakpoint buttons, sized from the device profile table.
+  const surface = resolveSurface(canvas);
+  const isMobile = surface.type === 'mobile';
+  const deviceId = surface.device ?? DEFAULT_DEVICE;
+  const profile = deviceProfile(deviceId) ?? PHONE;
 
   // Provenance chip (Phase 11) — structure · genre · preset · alignment/density. Shows
   // only the parts that exist; hidden entirely when a canvas has no provenance.
@@ -1219,6 +1279,18 @@ ${FAVICON_HTML}
   .viewport.compare #frame { display: none; }
   .viewport.compare .compare-grid { display: flex; }
   .viewport.compare #btn-fit { pointer-events: none; opacity: 0.4; }
+  /* Phase 30 slice F — a mobile canvas at 1:1 in a CSS device frame. The
+   * iframe scrolls inside the screen, so fixed chrome stays pinned. */
+  .viewport--device { padding: 32px 24px 48px; }
+  .device { flex-shrink: 0; padding: 12px; border-radius: 59px; background: #0b0b0d; box-shadow: 0 0 0 1px rgba(255,255,255,0.10), 0 24px 48px -16px rgba(0,0,0,0.6); }
+  .device-screen { position: relative; overflow: hidden; border-radius: 47px; background: #fff; }
+  .device-screen iframe { display: block; border: 0; }
+  .safe-overlay { position: absolute; inset: 0; pointer-events: none; }
+  .safe-overlay[hidden] { display: none; }
+  .safe-band { position: absolute; left: 0; right: 0; display: flex; align-items: center; justify-content: center; background: rgba(245,158,11,0.22); }
+  .safe-band--top { top: 0; border-bottom: 1px dashed rgba(245,158,11,0.9); }
+  .safe-band--bottom { bottom: 0; border-top: 1px dashed rgba(245,158,11,0.9); justify-content: flex-end; padding-right: 64px; } /* the label clears the home-indicator pill */
+  .safe-band span { font-size: 10px; font-weight: 600; line-height: 1; color: #fde68a; background: rgba(9,7,10,0.82); border-radius: 4px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
   .compare-grid { display: none; gap: 24px; padding: 24px; align-items: flex-start; --scale: 0.35; }
   .compare-cell { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
   .bp-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
@@ -1348,21 +1420,23 @@ ${FAVICON_HTML}
   <div class="toolbar">
     <a href="/project/${canvas.projectId}">&larr; Back</a>
     <span class="title">${esc(canvas.name)}</span>
-    <span class="dim">${w} x ${h}</span>
+    <span class="dim">${w} x ${h}${isMobile ? ` &middot; ${esc(deviceId)}` : ''}</span>
     ${stateChips}
     ${provChip}
     ${verdictChip}
     <div class="spacer"></div>
     <div class="toolbar-cluster">
       ${hasDark ? '<button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Render the dark token layer">Dark</button>' : ''}
-      <button class="btn" onclick="setViewport(390, 844)" id="bp-mobile">Mobile</button>
-      <button class="btn" onclick="setViewport(768, 1024)" id="bp-tablet">Tablet</button>
-      <button class="btn active" onclick="setViewport(${w}, ${h})" id="bp-desktop">Desktop</button>
-      <button class="btn" onclick="setCompareMode()" id="bp-compare">Compare</button>
+      ${isMobile
+        ? '<button class="btn" onclick="toggleSafeArea()" id="btn-safe" title="Show where the status bar and home indicator sit">Safe area</button>'
+        : `<button class="btn bp-btn" onclick="setViewport(${PHONE.width}, ${PHONE.height}, 'mobile')" id="bp-mobile">Mobile</button>
+      <button class="btn bp-btn" onclick="setViewport(768, 1024, 'tablet')" id="bp-tablet">Tablet</button>
+      <button class="btn bp-btn active" onclick="setViewport(${w}, ${h}, 'desktop')" id="bp-desktop">Desktop</button>
+      <button class="btn bp-btn" onclick="setCompareMode()" id="bp-compare">Compare</button>`}
     </div>
     <span class="toolbar-divider" aria-hidden="true"></span>
     <div class="toolbar-cluster">
-      <button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>
+      ${isMobile ? '' : '<button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>'}
       <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
       <button class="btn" onclick="toggleComment()" id="btn-comment" title="Click any element in the preview to leave a note for the agent">Comment</button>
     </div>
@@ -1377,12 +1451,12 @@ ${FAVICON_HTML}
     <div class="status" id="status" title="Auto-refresh active"></div>
   </div>
   <div class="detail-main">
-  <div class="viewport" id="viewport">
+  ${isMobile ? renderDevice(canvas, w, h, deviceId, profile) : `<div class="viewport" id="viewport">
     <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
     <div class="compare-grid" id="compare-grid">
-      <div class="compare-cell" style="--bp-w: 390; --bp-h: 844;">
-        <div class="bp-label">Mobile · 390×844</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=390&h=844" data-bp="mobile"></iframe></div>
+      <div class="compare-cell" style="--bp-w: ${PHONE.width}; --bp-h: ${PHONE.height};">
+        <div class="bp-label">Mobile · ${PHONE.width}×${PHONE.height}</div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile"></iframe></div>
       </div>
       <div class="compare-cell" style="--bp-w: 768; --bp-h: 1024;">
         <div class="bp-label">Tablet · 768×1024</div>
@@ -1393,7 +1467,7 @@ ${FAVICON_HTML}
         <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
       </div>
     </div>
-  </div>
+  </div>`}
   ${inspectorHtml}
   </div>
   <div class="json-panel" id="json-panel">
@@ -1460,7 +1534,7 @@ ${FAVICON_HTML}
     const canvasW = ${w};
     const canvasH = ${h};
 
-    function setViewport(w, h) {
+    function setViewport(w, h, bp) {
       const frame = document.getElementById('frame');
       const vp = document.getElementById('viewport');
       vp.classList.remove('fit', 'compare');
@@ -1477,11 +1551,10 @@ ${FAVICON_HTML}
       frame.style.overflow = '';
       frame.src = '/canvas/' + canvasId + '/html?w=' + w + '&h=' + h + '&t=' + Date.now();
 
-      // Update active button
-      document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-      if (w === 390) { document.getElementById('bp-mobile').classList.add('active'); currentBp = 'mobile'; }
-      else if (w === 768) { document.getElementById('bp-tablet').classList.add('active'); currentBp = 'tablet'; }
-      else { document.getElementById('bp-desktop').classList.add('active'); currentBp = 'desktop'; }
+      // The pressed button is the active breakpoint; other toolbar state stays.
+      document.querySelectorAll('.bp-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('bp-' + bp).classList.add('active');
+      currentBp = bp;
     }
 
     function setCompareMode() {
@@ -1489,9 +1562,15 @@ ${FAVICON_HTML}
       vp.classList.remove('fit');
       vp.classList.add('compare');
       document.getElementById('btn-fit').classList.remove('active');
-      document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.bp-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('bp-compare').classList.add('active');
       currentBp = 'compare';
+    }
+
+    function toggleSafeArea() {
+      const overlay = document.getElementById('safe-overlay');
+      overlay.hidden = !overlay.hidden;
+      document.getElementById('btn-safe').classList.toggle('active', !overlay.hidden);
     }
 
     function toggleFit() {

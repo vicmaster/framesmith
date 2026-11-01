@@ -550,7 +550,7 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 - [x] Slice C — the mobile ruleset: 44px targets as an error on every control (the slice D primitives joined it), safe areas, a type floor, undeclared phone-width canvases told to declare, hand-built tap targets and multi-column prose named as advisories, and stress that knows the type
 - [x] Slice D — vocabulary: `fixed` / `sticky` positioning with the renderer reserving room for pinned chrome, a root that grows with long content (closing slice C's long-screen gap), the `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row` and `sheet` primitives, the primitives joining the 44px target rule, `mobile-tab-bar`, and pinned bars in the safe-area rule (`safeArea` on the root landed in slice B)
 - [x] Slice E — starting points: anatomy and realisation on structures, resolution by canvas type, six mobile realisations, and the pattern gate extended to them
-- [ ] Slice F — the viewer: thumbnails at the artboard's real proportions and a device frame with a safe-area overlay
+- [x] Slice F — the viewer: thumbnails at the artboard's real proportions and a device frame with a safe-area overlay
 - [ ] Slice G — the acceptance re-run
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
