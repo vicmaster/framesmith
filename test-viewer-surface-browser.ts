@@ -143,6 +143,14 @@ try {
   const live = await page.evaluate(() => ({ device: !!document.querySelector('.device'), bp: !!document.getElementById('bp-mobile') }));
   check('type change: an open page switches to the device frame', live.device && !live.bp, JSON.stringify(live));
 
+  // A safeArea edit redraws the bands on the open page.
+  const now = sg.getCanvas(desktop.id)!;
+  now.root.safeArea = { top: 20, bottom: 10 };
+  sg.touchCanvas(desktop.id);
+  await page.waitForFunction(() => (document.querySelector('.safe-band--top') as HTMLElement | null)?.style.height === '20px', { timeout: 6000 }).catch(() => null);
+  const bandTop = await page.evaluate(() => (document.querySelector('.safe-band--top') as HTMLElement | null)?.style.height ?? null);
+  check('safeArea edit: an open page redraws the bands', bandTop === '20px', String(bandTop));
+
   // An overflowing device (this one is 1440 wide) can scroll to its left edge.
   await page.setViewport({ width: 1100, height: 900, deviceScaleFactor: 1 });
   const left = await page.evaluate(() => {

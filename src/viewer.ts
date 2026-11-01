@@ -107,6 +107,7 @@ export async function startViewer(port: number): Promise<number> {
           width: canvas.root.width,
           height: canvas.root.height,
           type: resolveSurface(canvas).type,
+          safeArea: canvas.root.safeArea,
         }));
         return;
       }
@@ -1480,9 +1481,10 @@ ${FAVICON_HTML}
     const canvasId = '${canvas.id}';
     let lastModified = '${canvas.lastModified}';
     let contentKey = '${evalCacheKey(canvas)}';
-    // The layout (device frame or breakpoints, artboard size) is server-rendered,
-    // so a change to the type or the root size reloads the page.
-    const pageShape = ${scriptJson({ type: surface.type, width: canvas.root.width ?? null, height: canvas.root.height ?? null })};
+    // The layout (device frame or breakpoints, artboard size, safe-area bands)
+    // is server-rendered, so a change to the type, the root size or its
+    // safeArea reloads the page.
+    const pageShape = ${scriptJson({ type: surface.type, width: canvas.root.width ?? null, height: canvas.root.height ?? null, safeArea: JSON.stringify(canvas.root.safeArea ?? null) })};
     let currentBp = 'desktop';
 
     // Phase 21 — point-and-tell: initial feedback entries + node labels for
@@ -1498,7 +1500,7 @@ ${FAVICON_HTML}
         document.getElementById('status').className = 'status';
         // contentKey catches edits that never bump lastModified (issue #150).
         if (meta.lastModified !== lastModified || (meta.contentKey && meta.contentKey !== contentKey)) {
-          if (meta.type !== pageShape.type || (meta.width ?? null) !== pageShape.width || (meta.height ?? null) !== pageShape.height) {
+          if (meta.type !== pageShape.type || (meta.width ?? null) !== pageShape.width || (meta.height ?? null) !== pageShape.height || JSON.stringify(meta.safeArea ?? null) !== pageShape.safeArea) {
             location.reload();
             return;
           }

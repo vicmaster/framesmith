@@ -128,7 +128,7 @@ for (const bad of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
 }
 
 // The open detail page reloads when its type or artboard changes.
-check('detail page: reloads on a type or size change', phoneDetail.includes('const pageShape = {"type":"mobile","width":390,"height":844}') && phoneDetail.includes('location.reload()'));
+check('detail page: reloads on a type, size or safeArea change', phoneDetail.includes('const pageShape = {"type":"mobile","width":390,"height":844,"safeArea":"{\\"top\\":47,\\"bottom\\":34}"}') && phoneDetail.includes('location.reload()'));
 check('detail page: breakpoint switch keeps the dark render', phoneDetail.includes("(themeMode === 'dark' ? '&theme=dark' : '')"));
 check('preview: overflow stays scrollable to the left edge', /\.viewport \{[^}]*justify-content: safe center/.test(phoneDetail));
 
