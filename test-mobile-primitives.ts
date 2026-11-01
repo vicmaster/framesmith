@@ -148,6 +148,9 @@ function styleOf(html: string, id: string): string {
   check('icon-only button is square', iconOnly.includes('width: 44px') && iconOnly.includes('height: 44px') && iconOnly.includes('padding: 0'), iconOnly);
   const floor = styleOf(render(doc([{ id: 'b', type: 'button', label: 'Go', size: 'sm', minHeight: 44 }])), 'b');
   check('minHeight raises a button (height = min-height)', floor.includes('height: 44px; min-height: 44px'), floor);
+  const capped = styleOf(render(doc([{ id: 'b', type: 'button', label: 'See all', maxWidth: '50%' }])), 'b');
+  check('maxWidth caps a labelled button (the label truncates inside it)', capped.includes('max-width: 50%'), capped);
+  check('a labelled button without maxWidth stays inside its column', sizes[1].includes('max-width: 100%'), sizes[1]);
   check('buttonBox matches: sm 32×32, icon-only square, never narrower than tall',
     buttonBox({ id: 'x', type: 'button', label: 'Go', size: 'sm' }).h === 32
     && buttonBox({ id: 'x', type: 'button', icon: 'plus', width: 200 }).w === 44

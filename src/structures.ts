@@ -1,4 +1,5 @@
 import type { BuildLogEntry, Canvas, SceneNode, Structure, StructureAxes } from './types.js';
+import { resolveSurface, SURFACE_TYPES, type SurfaceType } from './surfaces.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -1056,6 +1057,7 @@ const onboarding: Structure = {
 const formField: Structure = {
   name: 'form-field',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'A labeled form field: label, input box, and help text. Stamp once per field; set the label/help via the returned id map.',
   nodes: [{
     id: 'ff', type: 'frame', name: 'Form field', width: '100%', layout: 'vertical', gap: SPACE.xs,
@@ -1095,6 +1097,7 @@ const toggleRow: Structure = {
 const statCard: Structure = {
   name: 'stat-card',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'The original name for the KPI-card anatomy (tinted icon tile, uppercase metric label, big tabular value, sparkline, tinted delta pill) — kept as an alias for existing callers. Prefer kpi-card for new work; the two stamp the same structure. Stamp several in a horizontal frame for a stat band.',
   nodes: [stat('sc')],
 };
@@ -1241,6 +1244,7 @@ const dataTable: Structure = {
 const emptyState: Structure = {
   name: 'empty-state',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'A designed empty state: icon, title, one-line hint, primary action. Stamp it where the data would be — an empty screen is a first-run experience, never a bare void.',
   nodes: [{
     id: 'es', type: 'frame', name: 'Empty state', width: '100%', layout: 'vertical', alignItems: 'center',
@@ -1248,7 +1252,9 @@ const emptyState: Structure = {
     children: [
       { id: 'es-icon', type: 'icon', icon: 'inbox', iconSize: 28, iconColor: COLOR.textSecondary },
       { id: 'es-title', type: 'text', content: 'Nothing here yet', fontSize: TYPE.body, fontWeight: 600, color: COLOR.textPrimary },
-      { id: 'es-hint', type: 'text', content: 'Items you create will show up here — to confirm', fontSize: TYPE.caption, color: COLOR.textSecondary },
+      // $text-sm, not $caption: nine words of prose at 12px are below the iOS
+      // Footnote floor, so the hint failed mobile-type-floor on a phone.
+      { id: 'es-hint', type: 'text', content: 'Items you create will show up here — to confirm', fontSize: TYPE.textSm, color: COLOR.textSecondary },
       {
         id: 'es-cta', type: 'frame', name: 'CTA', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
         padding: [SPACE.xs, SPACE.md], cornerRadius: RADIUS.sm, fill: COLOR.accent, width: 'fit-content',
@@ -1317,6 +1323,7 @@ const skeletonTable: Structure = {
 const skeletonCard: Structure = {
   name: 'skeleton-card',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'Loading state for a card: media block, title bar, and two text lines as skeletons — same silhouette as the loaded card.',
   nodes: [{
     id: 'skc', type: 'frame', name: 'Skeleton card', width: '100%', layout: 'vertical', gap: SPACE.sm,
@@ -1333,6 +1340,7 @@ const skeletonCard: Structure = {
 const skeletonStatCard: Structure = {
   name: 'skeleton-stat-card',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'Loading state for a stat card: label bar, value bar, and delta bar as skeletons — same silhouette as the loaded stat. Stamp one per stat in the row so a loading dashboard skeletons EVERY data surface, not just the table.',
   nodes: [{
     id: 'sks', type: 'frame', name: 'Skeleton stat', width: 300, layout: 'vertical', gap: SPACE.sm,
@@ -1364,6 +1372,7 @@ const skeletonStatCard: Structure = {
 const kpiCard: Structure = {
   name: 'kpi-card',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'A reference-grade KPI card: tinted icon tile + uppercase metric label, big tabular value with inline context, a live sparkline, and a tinted delta pill. The dashboard structure stamps these; customize copy/data via the idMap.',
   nodes: [stat('kpi')],
 };
@@ -1371,6 +1380,7 @@ const kpiCard: Structure = {
 const statusChip: Structure = {
   name: 'status-chip',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'A status chip on the tint pair: soft tinted pill + icon + label in the matching ink (fill "$success-tint" + color "$success" — AA by construction both themes). Swap the tint/ink pair and icon per status via the idMap.',
   nodes: [{
     id: 'chip', type: 'frame', name: 'Status chip', layout: 'horizontal', alignItems: 'center',
@@ -1424,12 +1434,321 @@ const breadcrumb: Structure = {
 const initialsAvatar: Structure = {
   name: 'initials-avatar',
   kind: 'component',
+  surface: 'any', // passes the mobile gate (FR-E4) on a phone canvas
   description: 'An initials avatar on the tint pair: tinted circle + two-letter monogram in the matching ink. Size/tint/initials via the idMap.',
   nodes: [{
     id: 'av', type: 'frame', name: 'Avatar', width: 32, height: 32, cornerRadius: 999, overflow: 'hidden',
     fill: TINT.accent.bg, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
     children: [{ id: 'av-initials', type: 'text', content: 'AB', fontSize: TYPE.caption, fontWeight: 700, color: TINT.accent.ink, textOverflow: 'ellipsis', minWidth: 0 }],
   }],
+};
+
+// ── mobile realisations (Phase 30 slice E) ─────────────────────────────────
+// One per anatomy, for a phone canvas. Every tap target and every piece of
+// device chrome is a primitive (status-bar, nav-bar, list-row, button,
+// tab-bar, home-indicator), so the 44px target, safe-area and tab-bar rules
+// hold by construction; frames, text and icons only lay out and label. None
+// writes `safeArea`: pinned chrome makes the renderer reserve the insets on
+// any root, so a stamp on a canvas re-declared mobile is still correct.
+
+const statusBar = (id: string): SceneNode => ({ id, type: 'status-bar', name: 'Status bar' });
+const homeIndicator = (id: string): SceneNode => ({ id, type: 'home-indicator', name: 'Home indicator' });
+
+/** The phone content column: full width, the 16px side margin. */
+function mobileContent(id: string, children: SceneNode[], extra: Partial<SceneNode> = {}): SceneNode {
+  return {
+    id, type: 'frame', name: 'Content', width: '100%', layout: 'vertical', gap: SPACE.lg,
+    padding: [SPACE.xs, SPACE.md, SPACE.lg, SPACE.md], children, ...extra,
+  };
+}
+
+/** A grouped list: an optional caption over a rounded card of list rows. */
+function rowGroup(id: string, title: string | undefined, rows: SceneNode[]): SceneNode {
+  return {
+    id, type: 'frame', name: title ?? 'Group', width: '100%', layout: 'vertical', gap: SPACE.xs,
+    children: [
+      ...(title ? [{ id: `${id}-title`, type: 'text' as const, content: title, fontSize: TYPE.label, fontWeight: 600, color: COLOR.textSecondary }] : []),
+      {
+        id: `${id}-card`, type: 'frame', name: 'Card', width: '100%', layout: 'vertical',
+        cornerRadius: RADIUS.lg, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1, overflow: 'hidden',
+        children: rows.map((r, i) => (i < rows.length - 1 ? { ...r, divider: true } : r)),
+      },
+    ],
+  };
+}
+
+/** A section header row: a title and a trailing ghost action. */
+function sectionHead(id: string, title: string, action: string): SceneNode {
+  return {
+    id, type: 'frame', name: 'Section header', width: '100%', layout: 'horizontal',
+    alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm,
+    children: [
+      { id: `${id}-title`, type: 'text', content: title, fontSize: TYPE.textLg, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis', minWidth: 0 },
+      { id: `${id}-action`, type: 'button', label: action, variant: 'ghost', maxWidth: '50%' },
+    ],
+  };
+}
+
+/** A compact metric tile for the phone summary row. */
+function mobileStat(id: string, icon: string): SceneNode {
+  return {
+    id, type: 'frame', name: 'Stat', width: '100%', minWidth: 0, layout: 'vertical', gap: SPACE.xs,
+    padding: SPACE.md, cornerRadius: RADIUS.lg, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1,
+    children: [
+      {
+        id: `${id}-head`, type: 'frame', name: 'Label row', width: '100%', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
+        children: [
+          { id: `${id}-icon`, type: 'icon', icon, iconSize: 16, iconColor: COLOR.accent },
+          { id: `${id}-label`, type: 'text', content: 'Stat label', fontSize: TYPE.caption, color: COLOR.textSecondary, textOverflow: 'ellipsis', minWidth: 0 },
+        ],
+      },
+      { id: `${id}-value`, type: 'text', content: 'Value — TBD', fontSize: TYPE.textLg, fontWeight: 700, color: COLOR.textPrimary, tabularNums: true, textOverflow: 'ellipsis', minWidth: 0 },
+    ],
+  };
+}
+
+const dashboardMobile: Structure = {
+  name: 'dashboard-mobile',
+  anatomy: 'dashboard',
+  surface: 'mobile',
+  description:
+    'Phone summary home — large-title nav bar, a headline metric card, a two-up stat row, a recent-items list of rows, and a pinned four-tab bar. The mobile realisation of dashboard. No fabricated numbers.',
+  axes: { heroTreatment: 'stat-led', density: 'balanced', rhythm: 'uniform', alignment: 'left' },
+  nodes: [
+    statusBar('dm-status'),
+    { id: 'dm-nav', type: 'nav-bar', name: 'Nav bar', title: 'Today', largeTitle: true, trailing: [{ icon: 'bell' }] },
+    mobileContent('dm-content', [
+      {
+        id: 'dm-hero', type: 'frame', name: 'Headline metric', width: '100%', layout: 'vertical', gap: SPACE.xs,
+        padding: SPACE.lg, cornerRadius: RADIUS.lg, fill: COLOR.bgSurface, stroke: COLOR.border, strokeWidth: 1, shadow: ELEV.flat,
+        children: [
+          { id: 'dm-hero-label', type: 'text', content: 'Metric label', fontSize: TYPE.label, fontWeight: 600, color: COLOR.textSecondary, textOverflow: 'ellipsis' },
+          { id: 'dm-hero-value', type: 'text', content: 'Metric — TBD', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary, tabularNums: true, textOverflow: 'ellipsis' },
+          {
+            id: 'dm-hero-delta', type: 'frame', name: 'Delta', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs2,
+            padding: [2, SPACE.xs], cornerRadius: 999, fill: TINT.success.bg, overflow: 'hidden',
+            children: [
+              { id: 'dm-hero-delta-icon', type: 'icon', icon: 'trending-up', iconSize: 14, iconColor: TINT.success.ink },
+              { id: 'dm-hero-delta-text', type: 'text', content: 'Change — TBD', fontSize: TYPE.caption, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'dm-stats', type: 'frame', name: 'Stat row', width: '100%', layout: 'horizontal', gap: SPACE.sm,
+        children: [mobileStat('dm-stat-1', 'activity'), mobileStat('dm-stat-2', 'calendar')],
+      },
+      {
+        id: 'dm-recent', type: 'frame', name: 'Recent', width: '100%', layout: 'vertical', gap: SPACE.xs,
+        children: [
+          sectionHead('dm-recent-head', 'Recent', 'See all'),
+          rowGroup('dm-recent-list', undefined, [1, 2, 3].map((i) => ({
+            id: `dm-row-${i}`, type: 'list-row' as const, title: 'Item title', subtitle: 'Supporting detail',
+            leading: { icon: ['activity', 'heart', 'compass'][i - 1] }, trailing: { text: 'Meta' },
+          }))),
+        ],
+      },
+    ]),
+    {
+      id: 'dm-tabs', type: 'tab-bar', name: 'Tab bar',
+      items: [
+        { icon: 'house', label: 'Home', active: true },
+        { icon: 'activity', label: 'Activity' },
+        { icon: 'chart-column', label: 'Insights' },
+        { icon: 'user', label: 'Profile' },
+      ],
+    },
+  ],
+};
+
+const settingsMobile: Structure = {
+  name: 'settings-mobile',
+  anatomy: 'settings',
+  surface: 'mobile',
+  description:
+    'Phone settings — large-title nav bar over grouped list rows (toggles, values, disclosure chevrons), an account group, and a destructive sign-out button. The mobile realisation of settings.',
+  axes: { heroTreatment: 'none', density: 'balanced', rhythm: 'uniform', alignment: 'left' },
+  nodes: [
+    statusBar('sm-status'),
+    { id: 'sm-nav', type: 'nav-bar', name: 'Nav bar', title: 'Settings', largeTitle: true },
+    mobileContent('sm-content', [
+      rowGroup('sm-general', 'General', [
+        { id: 'sm-row-1', type: 'list-row', title: 'Preference label', leading: { icon: 'bell' }, trailing: { toggle: true } },
+        { id: 'sm-row-2', type: 'list-row', title: 'Preference label', leading: { icon: 'moon' }, trailing: { toggle: false } },
+        { id: 'sm-row-3', type: 'list-row', title: 'Preference label', leading: { icon: 'globe' }, trailing: { text: 'Value' } },
+      ]),
+      rowGroup('sm-account', 'Account', [
+        { id: 'sm-row-4', type: 'list-row', title: 'Account detail', subtitle: 'Current value — to confirm', leading: { icon: 'user' }, trailing: { chevron: true } },
+        { id: 'sm-row-5', type: 'list-row', title: 'Account detail', leading: { icon: 'lock' }, trailing: { chevron: true } },
+        { id: 'sm-row-6', type: 'list-row', title: 'Account detail', leading: { icon: 'credit-card' }, trailing: { chevron: true } },
+      ]),
+      { id: 'sm-signout', type: 'button', name: 'Sign out', label: 'Sign out', variant: 'destructive', width: '100%' },
+      { id: 'sm-version', type: 'text', content: 'Version — TBD', fontSize: TYPE.caption, color: COLOR.textSecondary, textAlign: 'center', width: '100%' },
+    ]),
+    homeIndicator('sm-home'),
+  ],
+};
+
+const authMobile: Structure = {
+  name: 'auth-mobile',
+  anatomy: 'auth',
+  surface: 'mobile',
+  description:
+    'Phone sign-in — a title and supporting line, two form fields, and a full-width primary button with a secondary action held at the bottom of the screen. The mobile realisation of auth.',
+  axes: { heroTreatment: 'none', density: 'airy', rhythm: 'uniform', alignment: 'left' },
+  nodes: [
+    statusBar('amb-status'),
+    {
+      id: 'amb-content', type: 'frame', name: 'Content', width: '100%', height: '100%', layout: 'vertical',
+      justifyContent: 'space-between', gap: SPACE.xl, padding: [SPACE.lg, SPACE.md],
+      children: [
+        {
+          id: 'amb-form', type: 'frame', name: 'Form', width: '100%', layout: 'vertical', gap: SPACE.lg,
+          children: [
+            {
+              id: 'amb-head', type: 'frame', width: '100%', layout: 'vertical', gap: SPACE.xs,
+              children: [
+                { id: 'amb-title', type: 'text', content: 'Sign in', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary },
+                { id: 'amb-sub', type: 'text', content: 'Body copy — one supporting line.', fontSize: TYPE.body, color: COLOR.textSecondary, lineHeight: 1.5 },
+              ],
+            },
+            {
+              id: 'amb-fields', type: 'frame', width: '100%', layout: 'vertical', gap: SPACE.md,
+              children: [field('amb-email', 'Email'), field('amb-password', 'Password')],
+            },
+          ],
+        },
+        {
+          id: 'amb-actions', type: 'frame', name: 'Actions', width: '100%', layout: 'vertical', gap: SPACE.xs,
+          children: [
+            { id: 'amb-submit', type: 'button', name: 'Submit', label: 'Continue', size: 'lg', width: '100%' },
+            { id: 'amb-alt', type: 'button', name: 'Secondary action', label: 'Secondary action', variant: 'ghost', width: '100%' },
+          ],
+        },
+      ],
+    },
+    homeIndicator('amb-home'),
+  ],
+};
+
+const onboardingMobile: Structure = {
+  name: 'onboarding-mobile',
+  anatomy: 'onboarding',
+  surface: 'mobile',
+  description:
+    'Phone onboarding page — a skip action, a centred glyph, heading and body line, page dots, and a full-width continue button at the bottom. One page of a paged first-run flow. The mobile realisation of onboarding.',
+  axes: { heroTreatment: 'none', density: 'airy', rhythm: 'uniform', alignment: 'centered' },
+  nodes: [
+    statusBar('om-status'),
+    {
+      id: 'om-content', type: 'frame', name: 'Content', width: '100%', height: '100%', layout: 'vertical',
+      gap: SPACE.lg, padding: [SPACE.xs, SPACE.md, SPACE.lg, SPACE.md],
+      children: [
+        {
+          id: 'om-top', type: 'frame', name: 'Top bar', width: '100%', layout: 'horizontal', justifyContent: 'end',
+          children: [{ id: 'om-skip', type: 'button', name: 'Skip', label: 'Skip', variant: 'ghost' }],
+        },
+        {
+          id: 'om-page', type: 'frame', name: 'Page', width: '100%', height: '100%', layout: 'vertical',
+          alignItems: 'center', justifyContent: 'center', gap: SPACE.md,
+          children: [
+            {
+              id: 'om-glyph', type: 'frame', name: 'Glyph', width: 96, height: 96, cornerRadius: RADIUS.lg,
+              fill: TINT.accent.bg, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+              children: [{ id: 'om-glyph-icon', type: 'icon', icon: 'sparkles', iconSize: 40, iconColor: TINT.accent.ink }],
+            },
+            { id: 'om-title', type: 'text', content: 'Page heading', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary, textAlign: 'center' },
+            { id: 'om-body', type: 'text', content: 'Body copy — what this step offers, in a sentence.', fontSize: TYPE.body, color: COLOR.textSecondary, textAlign: 'center', lineHeight: 1.5, maxWidth: 320 },
+            {
+              id: 'om-dots', type: 'frame', name: 'Page dots', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
+              children: [
+                { id: 'om-dot-1', type: 'frame', width: 24, height: 8, cornerRadius: 999, fill: COLOR.accent },
+                { id: 'om-dot-2', type: 'frame', width: 8, height: 8, cornerRadius: 999, fill: COLOR.border },
+                { id: 'om-dot-3', type: 'frame', width: 8, height: 8, cornerRadius: 999, fill: COLOR.border },
+              ],
+            },
+          ],
+        },
+        { id: 'om-next', type: 'button', name: 'Continue', label: 'Continue', size: 'lg', width: '100%' },
+      ],
+    },
+    homeIndicator('om-home'),
+  ],
+};
+
+const feedMobile: Structure = {
+  name: 'feed-mobile',
+  anatomy: 'feed',
+  surface: 'mobile',
+  description:
+    'Phone feed — large-title nav bar with search and compose actions over a full-bleed list of rows (author monogram, title, one-line preview, time), with a pinned four-tab bar. A mobile-first anatomy.',
+  axes: { heroTreatment: 'none', density: 'dense', rhythm: 'uniform', alignment: 'left' },
+  nodes: [
+    statusBar('fm-status'),
+    { id: 'fm-nav', type: 'nav-bar', name: 'Nav bar', title: 'Feed', largeTitle: true, trailing: [{ icon: 'search' }, { icon: 'square-pen' }] },
+    {
+      id: 'fm-list', type: 'frame', name: 'List', width: '100%', layout: 'vertical',
+      children: [1, 2, 3, 4, 5, 6].map((i) => ({
+        id: `fm-row-${i}`, type: 'list-row' as const, title: 'Author name', subtitle: 'Preview line — to confirm',
+        leading: { initials: 'AB' }, trailing: { text: 'Time' }, divider: i < 6,
+      })),
+    },
+    {
+      id: 'fm-tabs', type: 'tab-bar', name: 'Tab bar',
+      items: [
+        { icon: 'house', label: 'Feed', active: true },
+        { icon: 'search', label: 'Search' },
+        { icon: 'inbox', label: 'Inbox' },
+        { icon: 'user', label: 'Profile' },
+      ],
+    },
+  ],
+};
+
+const detailMobile: Structure = {
+  name: 'detail-mobile',
+  anatomy: 'detail',
+  surface: 'mobile',
+  description:
+    'Phone item detail — a back nav bar with a share action, a media slot, title and meta, a body paragraph, an attribute list of rows, and a primary action pinned over the home indicator. A mobile-first anatomy.',
+  axes: { heroTreatment: 'split', density: 'balanced', rhythm: 'asymmetric', alignment: 'left' },
+  nodes: [
+    statusBar('dtm-status'),
+    { id: 'dtm-nav', type: 'nav-bar', name: 'Nav bar', title: 'Item', leading: { label: 'Back' }, trailing: [{ icon: 'share' }] },
+    mobileContent('dtm-content', [
+      {
+        id: 'dtm-media', type: 'frame', name: 'Media slot', width: '100%', height: 220, cornerRadius: RADIUS.lg,
+        fill: TINT.neutral.bg, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+        children: [{ id: 'dtm-media-icon', type: 'icon', icon: 'image', iconSize: 32, iconColor: TINT.neutral.ink }],
+      },
+      {
+        id: 'dtm-head', type: 'frame', width: '100%', layout: 'vertical', gap: SPACE.xs,
+        children: [
+          { id: 'dtm-title', type: 'text', content: 'Item title', fontSize: TYPE.title, fontWeight: 700, color: COLOR.textPrimary },
+          { id: 'dtm-meta', type: 'text', content: 'Meta — TBD', fontSize: TYPE.label, color: COLOR.textSecondary },
+        ],
+      },
+      { id: 'dtm-body', type: 'text', content: 'Body copy — describe the item in two or three sentences so the reader knows what acting on it means.', fontSize: TYPE.body, color: COLOR.textSecondary, lineHeight: 1.5 },
+      rowGroup('dtm-attrs', 'Details', [1, 2, 3].map((i) => ({
+        id: `dtm-attr-${i}`, type: 'list-row' as const, title: 'Attribute', trailing: { text: 'Value' },
+      }))),
+      // Clears the pinned bar at the end of the scroll: with the root's 34px
+      // inset it reaches the bar's 110px (12 + 52 + 46).
+      { id: 'dtm-end', type: 'frame', name: 'End spacer', width: '100%', height: 76 },
+    ]),
+    {
+      id: 'dtm-bar', type: 'frame', name: 'Action bar', position: 'fixed', bottom: 0, width: '100%',
+      // Vertical rhythm in spacer frames, not padding, so the bar is 110px
+      // tall on every spacing scale and the end spacer above stays exact.
+      layout: 'vertical', padding: [0, SPACE.md], fill: COLOR.bgSurface, borderTop: { width: 1, color: COLOR.border },
+      children: [
+        { id: 'dtm-bar-top', type: 'frame', name: 'Top spacer', width: '100%', height: 12 },
+        { id: 'dtm-cta', type: 'button', name: 'Primary action', label: 'Primary action', size: 'lg', width: '100%' },
+        { id: 'dtm-bar-inset', type: 'frame', name: 'Home indicator inset', width: '100%', height: 46 },
+      ],
+    },
+    homeIndicator('dtm-home'),
+  ],
 };
 
 const structureMap = new Map<string, Structure>([
@@ -1461,10 +1780,75 @@ const structureMap = new Map<string, Structure>([
   ['segmented-control', segmentedControl],
   ['breadcrumb', breadcrumb],
   ['initials-avatar', initialsAvatar],
+  // Phase 30 slice E — mobile realisations
+  ['dashboard-mobile', dashboardMobile],
+  ['settings-mobile', settingsMobile],
+  ['auth-mobile', authMobile],
+  ['onboarding-mobile', onboardingMobile],
+  ['feed-mobile', feedMobile],
+  ['detail-mobile', detailMobile],
 ]);
 
-export function listStructures(): { name: string; kind: 'page' | 'component'; description: string; axes?: StructureAxes }[] {
-  return Array.from(structureMap.values()).map(({ name, kind, description, axes }) => ({ name, kind: kind ?? 'page', description, ...(axes ? { axes } : {}) }));
+// ── anatomy and realisation (Phase 30 slice E) ──────────────────────────────
+// A structure realises an anatomy (a screen kind) for one surface. Names stay
+// unique; `apply_structure` resolves an anatomy name to the realisation for
+// the canvas's type, so `dashboard` on a phone canvas stamps `dashboard-mobile`.
+
+type StructureSurface = NonNullable<Structure['surface']>;
+
+export const structureAnatomy = (s: Structure): string => s.anatomy ?? s.name;
+export const structureSurface = (s: Structure): StructureSurface => s.surface ?? 'web';
+
+/** A realisation's surface covers a canvas type when it is that type or `any`. */
+const covers = (surface: StructureSurface, type: SurfaceType): boolean => surface === 'any' || surface === type;
+
+/** The registry invariant: (anatomy, surface) is unique, `any` overlapping
+ * both types, and no name shadows another structure's anatomy (anatomy
+ * resolution runs first, so such a structure could never be reached by name). */
+function checkRegistry(structures: Structure[]): void {
+  for (const [i, a] of structures.entries()) {
+    for (const b of structures.slice(i + 1)) {
+      const sameAnatomy = structureAnatomy(a) === structureAnatomy(b);
+      if (sameAnatomy && SURFACE_TYPES.some((t) => covers(structureSurface(a), t) && covers(structureSurface(b), t))) {
+        throw new Error(`Structures "${a.name}" and "${b.name}" both realise anatomy "${structureAnatomy(a)}" on the same surface.`);
+      }
+      for (const [x, y] of [[a, b], [b, a]]) {
+        if (x.name === structureAnatomy(y) && structureAnatomy(x) !== x.name) {
+          throw new Error(`Structure "${x.name}" is named after the anatomy of "${y.name}" but realises "${structureAnatomy(x)}".`);
+        }
+      }
+    }
+  }
+}
+checkRegistry([...structureMap.values()]);
+
+export interface StructureListing {
+  name: string;
+  kind: 'page' | 'component';
+  description: string;
+  axes?: StructureAxes;
+  anatomy: string;
+  surface: StructureSurface;
+  /** The canvas types this entry's anatomy has a realisation for. */
+  surfaces: SurfaceType[];
+}
+
+/** Every structure, or with `type` only those that stamp on that canvas type. */
+export function listStructures(opts: { type?: SurfaceType } = {}): StructureListing[] {
+  const all = Array.from(structureMap.values());
+  const realisedOn = (anatomy: string): SurfaceType[] =>
+    SURFACE_TYPES.filter((t) => all.some((s) => structureAnatomy(s) === anatomy && covers(structureSurface(s), t)));
+  return all
+    .filter((s) => opts.type === undefined || covers(structureSurface(s), opts.type))
+    .map((s) => ({
+      name: s.name,
+      kind: s.kind ?? 'page',
+      description: s.description,
+      ...(s.axes ? { axes: s.axes } : {}),
+      anatomy: structureAnatomy(s),
+      surface: structureSurface(s),
+      surfaces: realisedOn(structureAnatomy(s)),
+    }));
 }
 
 export function getStructure(name: string): Structure | undefined {
@@ -1472,7 +1856,44 @@ export function getStructure(name: string): Structure | undefined {
 }
 
 export function registerStructure(structure: Structure): void {
+  checkRegistry([...[...structureMap.values()].filter((s) => s.name !== structure.name), structure]);
   structureMap.set(structure.name, structure);
+}
+
+/** The structure a name stamps on a canvas of `type`: an anatomy name picks
+ * its realisation for the type; any other name must cover the type itself.
+ * @throws naming what is available when nothing fits. */
+export function resolveStructure(name: string, type: SurfaceType): Structure {
+  const all = Array.from(structureMap.values());
+  const other: SurfaceType = type === 'web' ? 'mobile' : 'web';
+  const available = (kind: Structure['kind']): string => {
+    const k = kind ?? 'page';
+    const names = [...new Set(all.filter((s) => (s.kind ?? 'page') === k && covers(structureSurface(s), type)).map(structureAnatomy))];
+    return names.length > 0
+      ? `${k === 'page' ? 'Page' : 'Component'} anatomies with a ${type} realisation: ${names.join(', ')}.`
+      : `No ${k} structure has a ${type} realisation.`;
+  };
+
+  const realisations = all.filter((s) => structureAnatomy(s) === name);
+  if (realisations.length > 0) {
+    const fit = realisations.find((s) => covers(structureSurface(s), type));
+    if (fit) return fit;
+    // Every realisation of it covers the other type, or one would fit.
+    throw new Error(`"${name}" has no ${type} realisation. ${available(realisations[0].kind)} Pass realisation: "${other}" to stamp its ${other} realisation anyway.`);
+  }
+
+  const structure = structureMap.get(name);
+  if (!structure) {
+    throw new Error(`Structure "${name}" not found. Use list_structures to see available structures.`);
+  }
+  const surface = structureSurface(structure);
+  if (!covers(surface, type)) {
+    throw new Error(
+      `"${name}" is the ${surface} realisation of "${structureAnatomy(structure)}" and this canvas is ${type}. ` +
+      `${available(structure.kind)} Pass realisation: "${surface}" to stamp it anyway.`,
+    );
+  }
+  return structure;
 }
 
 // ── apply ────────────────────────────────────────────────────────────────
@@ -1547,6 +1968,14 @@ const DEFAULT_SCAFFOLD_TYPOGRAPHY: Record<string, { fontSize: number; fontWeight
 /** Node fields that may carry a `$color` token ref (the theming split). */
 const COLOR_FIELDS = ['fill', 'color', 'stroke', 'iconColor'] as const;
 
+/** Colour tokens the mobile primitives read through their defaults
+ * (`applyControlDefaults`). A stamp holding a primitive references them even
+ * though no prop names them, so they seed like any other reference — without
+ * this, an unthemed settings-mobile drew near-black row titles on the dark
+ * default background. */
+const PRIMITIVE_TYPES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
+const PRIMITIVE_COLOR_TOKENS = ['text-primary', 'text-secondary', 'accent', 'border', 'bg-surface', 'danger'];
+
 /** Page background token applied to the document root so a scaffold fills the
  * viewport (renderer hoists root fill to <html>) instead of leaving browser
  * white below/around the content. */
@@ -1560,13 +1989,18 @@ function walkNodes(node: SceneNode, visit: (n: SceneNode) => void): void {
 export interface ApplyStructureResult {
   applied: string;
   kind: 'page' | 'component';
+  /** Phase 30 — the anatomy stamped and the surface of its realisation. */
+  anatomy: string;
+  surface: 'web' | 'mobile' | 'any';
   axes?: StructureAxes;
   /** Top-level node ids inserted under the canvas root (page) or target (component). */
   insertedNodeIds: string[];
   /** Component stamps only: template id → live (re-keyed) id, for targeting follow-up ops. */
   idMap?: Record<string, string>;
-  /** Fillable placeholders (text/image) with their role label, for populating. */
-  placeholders: { id: string; role: string }[];
+  /** Fillable placeholders (text/image) with their role label, for populating.
+   * A primitive's copy is a placeholder too; `prop` names the field to set
+   * (`title` on a list-row or nav-bar, `label` on a button). */
+  placeholders: { id: string; role: string; prop?: 'title' | 'label' }[];
   /** Color tokens seeded with neutral defaults because they were unresolved. */
   seededColors: string[];
   /** Phase 27 — spacing/radius/elevation/typography tokens seeded the same way. */
@@ -1618,12 +2052,9 @@ function rekeyComponentNodes(canvas: Canvas, structureName: string, nodes: Scene
 export function applyStructure(
   canvas: Canvas,
   structureName: string,
-  opts: { replace?: boolean; existingColors?: Set<string>; existingTokens?: Set<string>; targetId?: string } = {},
+  opts: { replace?: boolean; existingColors?: Set<string>; existingTokens?: Set<string>; targetId?: string; realisation?: SurfaceType } = {},
 ): ApplyStructureResult {
-  const structure = getStructure(structureName);
-  if (!structure) {
-    throw new Error(`Structure "${structureName}" not found. Use list_structures to see available structures.`);
-  }
+  const structure = resolveStructure(structureName, opts.realisation ?? resolveSurface(canvas).type);
   const kind = structure.kind ?? 'page';
 
   let inserted: SceneNode[];
@@ -1644,12 +2075,12 @@ export function applyStructure(
     // provenance.structure names the PAGE shape; component stamps don't shape it).
   } else {
     if (opts.targetId !== undefined && opts.targetId !== 'document' && opts.targetId !== canvas.root.id) {
-      throw new Error(`Structure "${structureName}" is a page scaffold — it stamps at the canvas root and does not take a targetId. Component structures (see list_structures kind) do.`);
+      throw new Error(`Structure "${structure.name}" is a page scaffold — it stamps at the canvas root and does not take a targetId. Component structures (see list_structures kind) do.`);
     }
     const existing = canvas.root.children ?? [];
     if (existing.length > 0 && !opts.replace) {
       throw new Error(
-        `Canvas root already has ${existing.length} child node(s). Pass replace: true to clear them and stamp "${structureName}", or use a fresh canvas.`,
+        `Canvas root already has ${existing.length} child node(s). Pass replace: true to clear them and stamp "${structure.name}", or use a fresh canvas.`,
       );
     }
 
@@ -1686,13 +2117,16 @@ export function applyStructure(
   }
 
   // One pass: collect fillable placeholders + referenced color tokens.
-  const placeholders: { id: string; role: string }[] = [];
+  const placeholders: ApplyStructureResult['placeholders'] = [];
   const referenced = new Set<string>();
   const referencedOther = new Set<string>();  // spacing / radius / elevation / typography refs
   for (const root of inserted) {
     walkNodes(root, (n) => {
+      if (PRIMITIVE_TYPES.has(n.type)) PRIMITIVE_COLOR_TOKENS.forEach((t) => referenced.add(t));
       if (n.type === 'text' && typeof n.content === 'string') placeholders.push({ id: n.id, role: n.content });
       else if (n.type === 'image') placeholders.push({ id: n.id, role: 'image' });
+      else if ((n.type === 'list-row' || n.type === 'nav-bar') && typeof n.title === 'string') placeholders.push({ id: n.id, role: n.title, prop: 'title' });
+      else if (n.type === 'button' && typeof n.label === 'string') placeholders.push({ id: n.id, role: n.label, prop: 'label' });
       for (const field of COLOR_FIELDS) {
         const v = (n as unknown as Record<string, unknown>)[field];
         if (typeof v === 'string' && v.startsWith('$')) referenced.add(v.slice(1));
@@ -1762,6 +2196,8 @@ export function applyStructure(
   return {
     applied: structure.name,
     kind,
+    anatomy: structureAnatomy(structure),
+    surface: structureSurface(structure),
     ...(structure.axes ? { axes: structure.axes } : {}),
     insertedNodeIds: inserted.map((n) => n.id),
     ...(idMap ? { idMap } : {}),

@@ -86,6 +86,22 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('every structure named (backticked) in the README', missing.length === 0, missing.join(', '));
 }
 
+// ── 5b. Phase 30 slice E: anatomies and surfaces ─────────────────────────────
+// An agent asking for a phone screen must learn which anatomies resolve on a
+// mobile canvas, and the two parameters that steer resolution.
+{
+  const instructions = /const INSTRUCTIONS = `([\s\S]*?)`;/.exec(indexSrc)?.[1] ?? '';
+  const tool = (name: string) => new RegExp(`'${name}',\\s*\`([\\s\\S]*?)\`,`).exec(indexSrc)?.[1] ?? '';
+  const anatomies = [...new Set(listStructures({ type: 'mobile' }).filter((s) => s.kind === 'page').map((s) => s.anatomy))];
+  expect('there are mobile page anatomies to document', anatomies.length > 0);
+  const missingInstr = anatomies.filter((a) => !instructions.includes(`${a}-mobile`));
+  expect('every mobile realisation named in INSTRUCTIONS', instructions !== '' && missingInstr.length === 0, missingInstr.join(', '));
+  const missingGl = anatomies.filter((a) => !guidelines.includes(`\`${a}\``));
+  expect('every mobile anatomy named (backticked) in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
+  expect('apply_structure docstring names realisation', /realisation/.test(tool('apply_structure')));
+  expect('list_structures docstring names canvasId', /canvasId/.test(tool('list_structures')));
+}
+
 // ── 6. every cliche tell is surfaced where agents look ───────────────────────
 // Tell slugs are kebab ('accent-hue') but the agent surfaces describe them in
 // prose, so each slug maps to a phrase that MUST appear in both the index.ts

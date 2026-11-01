@@ -100,6 +100,26 @@ I(bar, { type: "frame", height: 34 })
 
 The bar is 12 + 44 + 34 + 12 = 102px tall; the root's `safeArea` reserves 34, so the content frame's spacer adds the other 68.
 
+## Starting a phone screen (mobile realisations)
+
+A structure realises an **anatomy** (a screen kind) for one canvas type. On a mobile canvas, `apply_structure` resolves an anatomy name to its mobile realisation, so `apply_structure({ canvasId, structure: "dashboard" })` stamps `dashboard-mobile`; the result's `applied`, `anatomy` and `surface` say what was stamped. Six anatomies have a mobile realisation:
+
+| Anatomy | Mobile realisation | Shape |
+|---|---|---|
+| `dashboard` | `dashboard-mobile` | Large-title nav bar, a headline metric card, a two-up stat row, a recent list of rows, a pinned four-tab bar |
+| `settings` | `settings-mobile` | Grouped list rows (toggles, values, chevrons) and a destructive sign-out button |
+| `auth` | `auth-mobile` | Title, two fields, and the primary and secondary buttons held at the bottom of the screen |
+| `onboarding` | `onboarding-mobile` | One page of a paged flow: skip, glyph, heading, body, page dots, a full-width continue |
+| `feed` | `feed-mobile` | A full-bleed list of rows (monogram, title, preview, time) and a pinned four-tab bar |
+| `detail` | `detail-mobile` | Back nav bar, media slot, title, body, an attribute list, and a primary action pinned over the home indicator |
+
+Every one starts with a `status-bar`, ends with a `home-indicator` or a pinned `tab-bar`, and builds every tap target from a primitive, so it passes the mobile ruleset in fast and detailed mode and survives `canvas_stress`. Adapt it like any scaffold: the result's `placeholders` include each primitive's copy, with `prop` naming the field (`U("dm-row-1", { title: "Morning run" })`, `U("amb-submit", { label: "Sign in" })`).
+
+- **Use `generate_design_system` for a phone's type**, then stamp. The built-in presets set a 14–15px `$body`, which `mobile-type-floor` flags on a phone whatever the layout.
+- **`list_structures({ canvasId })`** lists what stamps on that canvas: on a phone, the six realisations and the components marked for every type (`form-field`, `stat-card`, `empty-state`, `skeleton-card`, `skeleton-stat-card`, `kpi-card`, `status-chip`, `initials-avatar`). Each entry names its `anatomy`, its `surface` (`web`, `mobile` or `any`) and `surfaces`, the types its anatomy is realised on.
+- **A name with no realisation for the canvas's type is refused**, with the anatomies that have one: `pricing` on a phone, or a web-only component such as `data-table` (its 28px pager buttons are hand-built). `realisation: "web"` stamps the web one anyway, and `realisation: "mobile"` stamps a mobile one on a web canvas.
+- **The realisations never write `safeArea`.** Their pinned chrome makes the renderer reserve the insets, so they are also correct on a canvas made mobile with `canvas_set_type`.
+
 ## Responsive hints
 
 Set `responsive` on **container nodes** (frames with `layout: "horizontal"` or `layout: "grid"` and children). The renderer emits the right media-query rules — flex-wrap for horizontal containers, a single-column collapse with spans reset for grid.

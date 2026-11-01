@@ -1120,8 +1120,9 @@ function renderButton(node: SceneNode, rc: RenderCtx, attrs: string): string {
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'justify-content: center', 'gap: 8px',
     `height: ${h}px`, `min-height: ${h}px`, `min-width: ${h}px`,
     words ? (node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: fit-content') : `width: ${h}px`,
-    // A long label truncates inside the column instead of running past it.
-    words && node.maxWidth === undefined ? 'max-width: 100%' : undefined,
+    // A long label truncates inside the column, or inside an authored cap,
+    // instead of running past it.
+    words ? `max-width: ${node.maxWidth !== undefined ? cssLength(node.maxWidth) : '100%'}` : undefined,
     words ? `padding: 0 ${BUTTON_PADDING[size]}px` : 'padding: 0',
     `border-radius: ${radius}px`, `background-color: ${fill}`,
     node.stroke ? `border: 1px solid ${node.stroke}` : undefined,
