@@ -118,6 +118,7 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
     if (node.fill === undefined) node.fill = v.colors?.skeleton ?? v.colors?.border ?? 'rgba(127, 127, 127, 0.22)';
     return;
   }
+  if (MOBILE_PRIMITIVES.has(t)) { applyPrimitiveDefaults(node, v); return; }
   if (t !== 'toggle' && t !== 'checkbox' && t !== 'radio' && t !== 'select') return;
 
   const accent = v.colors?.accent ?? v.colors?.primary ?? CONTROL_FALLBACK.accent;
@@ -142,6 +143,82 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
     if (node.stroke === undefined) node.stroke = border;
     if (node.color === undefined) node.color = v.colors?.['text-primary'] ?? CONTROL_FALLBACK.text;
   }
+}
+
+// Phase 30 slice D — the mobile primitives default the same way: tokens when
+// the canvas has them, neutral fallbacks when it doesn't, explicit props win.
+const MOBILE_PRIMITIVES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
+
+function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
+  const c = v.colors ?? {};
+  const accent = c.accent ?? c.primary ?? CONTROL_FALLBACK.accent;
+  const border = c.border ?? CONTROL_FALLBACK.border;
+  const surface = c['bg-surface'] ?? c.surface ?? CONTROL_FALLBACK.surface;
+  const text = c['text-primary'] ?? CONTROL_FALLBACK.text;
+  const secondary = c['text-secondary'] ?? '#6B7280';
+  const danger = c.danger ?? c.error ?? '#DC2626';
+  const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
+  if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
+
+  switch (node.type) {
+    case 'status-bar':
+    case 'home-indicator':
+      set('color', text);
+      break;
+    case 'nav-bar':
+      set('color', text);
+      set('iconColor', accent);
+      break;
+    case 'tab-bar':
+      set('fill', surface);
+      set('stroke', border);
+      set('iconColor', accent);
+      set('color', secondary);
+      set('badgeColor', danger);
+      break;
+    case 'list-row':
+      set('color', text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      set('stroke', border);
+      break;
+    case 'sheet':
+      set('fill', surface);
+      set('stroke', border);
+      if (node.cornerRadius === undefined) node.cornerRadius = v.radius?.['radius-lg'] ?? 12;
+      break;
+    case 'button': {
+      const variant = node.variant;
+      if (variant === 'secondary') {
+        set('fill', 'transparent');
+        set('stroke', border);
+        set('color', text);
+      } else if (variant === 'ghost') {
+        set('fill', 'transparent');
+        set('color', accent);
+      } else {
+        set('fill', variant === 'destructive' ? danger : accent);
+        set('color', onFill(node.fill));
+      }
+      if (node.cornerRadius === undefined) node.cornerRadius = v.radius?.['radius-md'] ?? 8;
+      break;
+    }
+  }
+}
+
+/** White or near-black (#111827), whichever contrasts more with a hex fill. */
+function onFill(fill: string | undefined): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(fill ?? '');
+  if (!m) return '#FFFFFF';
+  const lum = (hex: string) => {
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const ch = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return ch <= 0.03928 ? ch / 12.92 : ((ch + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const l = lum(m[1]);
+  return 1.05 / (l + 0.05) >= (l + 0.05) / (lum('111827') + 0.05) ? '#FFFFFF' : '#111827';
 }
 
 function lookupToken(name: string, variables: DesignVariables): unknown {

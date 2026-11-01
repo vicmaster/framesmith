@@ -18,7 +18,7 @@ import { evaluateCanvas, type EvaluationIssue } from './src/evaluate.js';
 import { buildEvaluateDirective } from './src/directive.js';
 import { applyPerturbation } from './src/stress.js';
 import { fontPx, proseWords } from './src/mobile-rules.js';
-import { renderedPaddingPx } from './src/renderer.js';
+import { renderedPaddingPx, renderToHtml } from './src/renderer.js';
 import type { Canvas, SceneNode } from './src/types.js';
 
 let allPass = true;
@@ -478,6 +478,235 @@ check('G-S5 explicit safeArea {0,0} reserved: no walk warning (S07)', await (asy
   check('G-P5 whitespace-only label is not touched (T11)', applyPerturbation('long-text', blank, { type: 'web' }).touched.length === 0);
 }
 
+}
+
+// ── slice D: tappable primitives (FR-C1) ──────────────────────────────────
+{
+  console.log('\n── slice D: tappable primitives ──');
+  const small = `f=I("document", { type: "frame", layout: "vertical", padding: 12 })
+I(f, { type: "button", label: "Add", size: "sm" })`;
+  const m = await issues(phone(small), 'mobile-touch-target');
+  check('a 32px button in a 12px-padded frame on mobile → error', m.length === 1 && m[0].severity === 'error' && m[0].message.includes('button') && (m[0].suggestion ?? '').includes('"md"'), show(m));
+  const w = await evaluateCanvas(phone(small, { type: 'web' }), { mode: 'fast', categories: ['usability'] });
+  check('the same button declared web → READY, no target finding', !w.issues.some((i) => i.message.includes('touch target') || i.message.includes('hit target')) && buildEvaluateDirective(w).ready, JSON.stringify(w.issues.map((i) => i.message)));
+  check('a default button passes', (await issues(phone('I("document", { type: "button", label: "Continue" })'), 'mobile-touch-target')).length === 0);
+  check('an icon-only md button passes; sm errors', (await issues(phone('I("document", { type: "button", icon: "plus" })'), 'mobile-touch-target')).length === 0
+    && (await issues(phone('I("document", { type: "button", icon: "plus", size: "sm" })'), 'mobile-touch-target')).length === 1);
+  check('minHeight 44 lifts an sm button', (await issues(phone('I("document", { type: "button", label: "Go", size: "sm", minHeight: 44 })'), 'mobile-touch-target')).length === 0);
+  const items = '[{ icon: "house", label: "A" }, { icon: "map", label: "B" }, { icon: "user", label: "C" }, { icon: "bell", label: "D" }, { icon: "settings", label: "E" }]';
+  const narrow = await issues(phone(`I("document", { type: "tab-bar", width: 150, items: ${items} })`), 'mobile-touch-target');
+  check('a 150px tab bar with five tabs → five 30px tab errors', narrow.length === 5 && narrow[0].message.includes('30×49'), show(narrow));
+  check('a full-width five-tab bar with a FAB passes', (await issues(phone(`I("document", { type: "tab-bar", variant: "fab", items: ${items} })`), 'mobile-touch-target')).length === 0);
+  check('a 30px-wide list-row errors; a spanning one passes', (await issues(phone('I("document", { type: "list-row", title: "x", width: 30 })'), 'mobile-touch-target')).length === 1
+    && (await issues(phone('I("document", { type: "list-row", title: "Wi-Fi" })'), 'mobile-touch-target')).length === 0);
+  check('nav-bar actions are 44×44 by construction', (await issues(phone('I("document", { type: "nav-bar", title: "T", leading: { label: "Back" }, trailing: [{ icon: "search" }] })'), 'mobile-touch-target')).length === 0);
+  const shared = await issues(phone(`r=I("document", { type: "frame", layout: "horizontal", height: 44, width: "100%" })
+I(r, { type: "text", content: "Agree" })
+I(r, { type: "checkbox" })
+I(r, { type: "button", label: "Terms", variant: "ghost" })`), 'mobile-touch-target');
+  check('a checkbox sharing a row with a button does not inherit the row', shared.length === 1 && shared[0].message.startsWith('checkbox'), show(shared));
+}
+
+// ── slice D: instances are judged like their render ───────────────────────
+{
+  console.log('\n── slice D: instances ──');
+  const c = phone('I("document", { type: "instance", componentId: "row", name: "Consent row" })');
+  c.components = { row: { id: 'row', type: 'component', name: 'Row', layout: 'horizontal', height: 20, children: [{ id: 'row-t', type: 'text', content: 'Agree' }, { id: 'row-c', type: 'checkbox' }] } };
+  const inst = c.root.children![0].id;
+  const t = await issues(c, 'mobile-touch-target');
+  check('a small control inside an instance errors, reported on the instance', t.length === 1 && t[0].nodeId === inst && t[0].message.includes('inside instance'), show(t));
+  c.components = { row: { id: 'row', type: 'component', children: [{ id: 'row-tb', type: 'tab-bar', items: [{ icon: 'house', label: 'A' }] }] } };
+  const tb = await issues(c, 'mobile-tab-bar');
+  check('a one-tab bar inside a component warns on the instance', tb.length === 1 && tb[0].nodeId === inst, show(tb));
+}
+
+// ── slice D: mobile-handbuilt-target names the primitive ──────────────────
+{
+  console.log('\n── slice D: hand-built target ──');
+  const h = await issues(phone(`b=I("document", { type: "frame", width: 32, height: 32 })
+I(b, { type: "icon", icon: "bell" })`), 'mobile-handbuilt-target');
+  check('the suggestion names `button`', h.length === 1 && (h[0].suggestion ?? '').includes('`button`') && !(h[0].suggestion ?? '').includes('make it at least'), show(h));
+  check('a frame holding a button is not tap-shaped', (await issues(phone(`b=I("document", { type: "frame", width: 32, height: 32 })
+I(b, { type: "button", icon: "bell" })`), 'mobile-handbuilt-target')).length === 0);
+}
+
+// ── slice D: mobile-tab-bar (FR-D3) ───────────────────────────────────────
+{
+  console.log('\n── slice D: mobile-tab-bar ──');
+  const tab = (i: number) => `{ icon: "house", label: "T${i}" }`;
+  const bar = (n: number, extra = '') => phone(`I("document", { type: "tab-bar", items: [${Array.from({ length: n }, (_, i) => tab(i)).join(', ')}]${extra} })`);
+  const five = await issues(bar(5, ', variant: "fab", fab: { icon: "plus" }'), 'mobile-tab-bar');
+  check('five tabs + a FAB, pinned: nothing', five.length === 0, show(five));
+  check('two tabs pass', (await issues(bar(2), 'mobile-tab-bar')).length === 0);
+  const six = await issues(bar(6), 'mobile-tab-bar');
+  check('six tabs warn', six.length === 1 && six[0].severity === 'warning' && six[0].category === 'usability' && six[0].message.includes('6 tabs'), show(six));
+  check('one tab warns', (await issues(bar(1), 'mobile-tab-bar')).length === 1);
+  const unlabeled = await issues(phone('I("document", { type: "tab-bar", items: [{ icon: "house", label: "Home" }, { icon: "map", label: "" }, { icon: "user" }] })'), 'mobile-tab-bar');
+  check('icon-only tabs warn once, naming them', unlabeled.length === 1 && unlabeled[0].message.includes('2, 3'), show(unlabeled));
+  check('a tab bar moved into flow warns', (await issues(bar(3, ', position: "relative"'), 'mobile-tab-bar')).length === 1);
+  check('a tab bar with a y (top-pinned) warns, even with a bottom', (await issues(bar(3, ', y: 0, bottom: 0'), 'mobile-tab-bar')).length === 1);
+  const web = await evaluateCanvas(bar(6, ''), { mode: 'fast' });
+  check('mobile-tab-bar is in the mobile surface report', web.surface.rulesOn.includes('mobile-tab-bar'));
+  const declaredWeb = await issues(phone(`I("document", { type: "tab-bar", items: [${tab(1)}] })`, { type: 'web' }), 'mobile-tab-bar');
+  check('not on web', declaredWeb.length === 0);
+}
+
+// ── slice D: mobile-safe-area with pinned positioning (FR-C3) ─────────────
+{
+  console.log('\n── slice D: safe area + pinned ──');
+  const sa = (ops: string, bare = false) => issues(phone(ops, { bare }), 'mobile-safe-area');
+  check('no safeArea + a fixed status-bar + text → silent', (await sa(`I("document", { type: "status-bar" })
+I("document", { type: "text", content: "Hello" })`, true)).filter((i) => i.message.includes('top')).length === 0);
+  check('no safeArea + an in-flow status-bar is a spacer', (await sa(`I("document", { type: "status-bar", position: "relative" })
+I("document", { type: "text", content: "Hello" })`, true)).filter((i) => i.message.includes('top of the screen')).length === 0);
+  check('no safeArea + a fixed tab-bar reserves the bottom', (await sa(`I("document", { type: "text", content: "Hello" })
+I("document", { type: "tab-bar", items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })`, true)).filter((i) => i.message.includes('bottom')).length === 0);
+
+  const bareBar = await sa(`bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical" })
+I(bar, { type: "button", name: "Pay", label: "Pay" })`);
+  check('a fixed CTA at bottom 0 with no padding warns (its button sits in the inset)', bareBar.some((i) => i.severity === 'warning' && i.message.includes('Pay') && i.message.includes('inset')), show(bareBar));
+
+  const idiom = (spacer: number) => `list=I("document", { type: "frame", layout: "vertical" })
+I(list, { type: "text", content: "Order summary" })
+I(list, { type: "frame", name: "End spacer", height: ${spacer} })
+bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", padding: [12, 16, 12, 16] })
+I(bar, { type: "button", name: "Pay", label: "Pay", width: "100%" })
+I(bar, { type: "frame", name: "Inset", height: 34 })`;
+  // Bar height 12 + 44 + 34 + 12 = 102; the root reserves 34 → a 68px spacer clears it.
+  const good = await sa(idiom(68));
+  check('the pinned-bar idiom (padding < 32 + an inset spacer) with a 68px end spacer passes', good.length === 0, show(good));
+  const short = await sa(idiom(20));
+  check('…with a 20px end spacer the scroll end stays under the bar, naming a 48px spacer', short.length === 1 && short[0].message.includes('under pinned "CTA"') && (short[0].suggestion ?? '').includes('48px spacer'), show(short));
+  const offset = await sa(`list=I("document", { type: "frame", layout: "vertical" })
+I(list, { type: "text", content: "Order summary" })
+I(list, { type: "frame", height: 44 })
+I("document", { type: "button", name: "Pay", label: "Pay", position: "fixed", bottom: 34 })`);
+  check('a fixed button at bottom 34 passes condition 1, and the end spacer clears it', offset.length === 0, show(offset));
+  const textBar = await sa(`bar=I("document", { type: "frame", position: "fixed", bottom: 40, layout: "vertical", padding: 12 })
+I(bar, { type: "text", content: "Free shipping over $50" })`);
+  check('a pinned bar holding text has no resolvable height → the detailed-mode info', textBar.length === 1 && textBar[0].severity === 'info' && textBar[0].message.includes('height of a pinned bar'), show(textBar));
+
+  check('a fixed nav-bar at y 0 without safeArea warns (nav-bar is content)', (await sa('I("document", { type: "nav-bar", title: "Inbox", position: "fixed", y: 0 })', true)).some((i) => i.message.includes('inset')));
+  const topBar = (spacer: string) => sa(`I("document", { type: "nav-bar", name: "Nav", title: "Inbox", position: "fixed", y: 47 })
+${spacer}I("document", { type: "text", name: "First", content: "First message" })`);
+  const hidden = await topBar('');
+  check('a fixed nav-bar at y 47 hides the first content at scroll 0 (the mirror condition)', hidden.length === 1 && hidden[0].message.includes('start of the scroll'), show(hidden));
+  check('…a 44px spacer before the content clears it', (await topBar('I("document", { type: "frame", height: 44 })\n')).length === 0);
+
+  const blurred = await sa(`g=I("document", { type: "frame", backdropBlur: 12 })
+I(g, { type: "button", label: "Go", position: "fixed", bottom: 0 })`);
+  check('a fixed node under a blurred ancestor is unplaceable → info only', blurred.length === 1 && blurred[0].severity === 'info', show(blurred));
+  check('a sheet\'s content is never judged', (await sa(`sh=I("document", { type: "sheet" })
+I(sh, { type: "text", content: "Sheet title" })`, true)).length === 0);
+  const sticky = await sa(`h=I("document", { type: "frame", position: "sticky", y: 0, layout: "vertical" })
+I(h, { type: "text", name: "Header", content: "Header" })`);
+  check('a sticky header at y 0 warns (its stuck position is under the status bar)', sticky.some((i) => i.severity === 'warning' && i.message.includes('Header')), show(sticky));
+  check('slice C still holds: an absolute text at y 10 warns', (await sa('I("document", { type: "text", content: "x", position: "absolute", y: 10 })')).length === 1);
+}
+
+// ── slice D: reuse + unknown icons on primitives ──────────────────────────
+{
+  console.log('\n── slice D: reuse + icons ──');
+  const rows = Array.from({ length: 8 }, (_, i) => `I(l, { type: "list-row", title: "Row ${i}" })`).join('\n');
+  const many = await evaluateCanvas(phone(`l=I("document", { type: "frame", layout: "vertical" })\n${rows}\nI("document", { type: "frame" })\nI("document", { type: "frame" })\nI("document", { type: "frame" })`), { mode: 'fast', categories: ['structure'] });
+  check('eight list-rows and no components → no reuse advisory', !many.issues.some((i) => i.message.includes('No component instances')), JSON.stringify(many.issues.map((i) => i.message)));
+  const frames = Array.from({ length: 12 }, () => 'I("document", { type: "frame" })').join('\n');
+  const once = await evaluateCanvas(phone(`I("document", { type: "button", label: "Go" })\nI("document", { type: "tab-bar", items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })\n${frames}`), { mode: 'fast', categories: ['structure'] });
+  check('one button + one tab bar is not reuse → the advisory stays', once.issues.some((i) => i.message.includes('No component instances')));
+
+  const icons = await evaluateCanvas(phone(`I("document", { type: "tab-bar", items: [{ icon: "housee", label: "A" }, { icon: "nope-nope", label: "B" }, { label: "C" }] })
+I("document", { type: "button", label: "Next", icon: "Chevron-Right" })
+I("document", { type: "button", label: "Plain" })
+I("document", { type: "list-row", title: "Ada", leading: { initials: "AL" } })`), { mode: 'fast', categories: ['structure'] });
+  const iconIssues = icons.issues.filter((i) => /icon/i.test(i.message));
+  check('every bad tab icon reports, plus the missing one', iconIssues.filter((i) => i.message.includes('items[')).length === 3, JSON.stringify(iconIssues.map((i) => i.message)));
+  const btn = iconIssues.find((i) => i.message.includes('Chevron-Right'));
+  check('button.icon gets the mechanical fix', btn?.fix?.op.includes('chevron-right') === true, JSON.stringify(btn));
+  check('label-only buttons and initials rows are not flagged', iconIssues.length === 4, String(iconIssues.length));
+}
+
+// ── slice D: verify-round regressions ─────────────────────────────────────
+{
+  console.log('\n── slice D: verify-round regressions ──');
+  // Three instances of one component: one finding each, on its own instance.
+  const c = phone(`I("document", { type: "instance", componentId: "cb", name: "A" })
+I("document", { type: "instance", componentId: "cb", name: "B" })
+I("document", { type: "instance", componentId: "cb", name: "C" })`);
+  c.components = { cb: { id: 'cb', type: 'component', children: [{ id: 'cb-btn', type: 'button', name: 'Btn', label: 'Add', size: 'sm' }] } };
+  const ids = c.root.children!.map((n) => n.id);
+  const three = await issues(c, 'mobile-touch-target');
+  check('three instances of a bad component → three errors, one per instance', three.length === 3 && new Set(three.map((i) => i.nodeId)).size === 3 && three.every((i) => ids.includes(i.nodeId!)), show(three));
+  c.root.children![0].overrides = { Btn: { size: 'md' } };
+  const two = await issues(c, 'mobile-touch-target');
+  check('…an override fixing A leaves B and C, and never blames A', two.length === 2 && !two.some((i) => i.nodeId === ids[0]), show(two));
+
+  // Token census: primitive copy is not a style value.
+  const tokens = { colors: { accent: '#0B6E4F', 'bg-surface': '#FFFFFF' } };
+  const prim = await evaluateCanvas(phone(`U("document", { fill: "$bg-surface" })
+I("document", { type: "status-bar" })
+I("document", { type: "nav-bar", title: "Settings", largeTitle: true })
+${Array.from({ length: 6 }, (_, i) => `I("document", { type: "list-row", title: "Row ${i}", subtitle: "Detail ${i}", trailing: { chevron: true } })`).join('\n')}
+I("document", { type: "button", label: "Sign out", variant: "destructive" })`, { variables: tokens }), { mode: 'fast', categories: ['structure'] });
+  check('a primitive-built screen is not told it under-uses tokens', !prim.issues.some((i) => i.message.includes('use design tokens')), JSON.stringify(prim.issues.map((i) => i.message)));
+  const literal = await evaluateCanvas(phone(Array.from({ length: 8 }, () => 'I("document", { type: "frame", fill: "#F0F0F0", stroke: "#DDDDDD", height: 20 })').join('\n'), { variables: tokens }), { mode: 'fast', categories: ['structure'] });
+  check('…frames with literal colours still are (probe)', literal.issues.some((i) => i.message.includes('use design tokens')));
+
+  // Malformed props never throw.
+  const weird = phone(`I("document", { type: "nav-bar", title: 2024, trailing: [null, { icon: "search" }] })
+I("document", { type: "tab-bar", items: [null, { icon: "house", label: 5 }, { icon: "user", label: "Me" }] })
+I("document", { type: "button", label: 5 })
+I("document", { type: "list-row", title: 7, subtitle: 8, trailing: { text: 9 } })
+I("document", { type: "status-bar", time: 930 })`);
+  let threw = '';
+  try { await evaluateCanvas(weird, { mode: 'fast' }); renderToHtml(weird.root, 390, 844, weird); } catch (e) { threw = String(e); }
+  check('null entries and numeric labels neither crash evaluate nor render', threw === '', threw);
+  const html = renderToHtml(weird.root, 390, 844, weird);
+  check('numeric labels render as text', html.includes('>2024<') && html.includes('>930<') && html.includes('>5<'));
+  const numLabel = await issues(weird, 'mobile-tab-bar');
+  check('a numeric tab label counts as a label (and the unrendered null entry is ignored)', numLabel.length === 0, show(numLabel));
+  const zero = renderToHtml(phone('I("document", { type: "list-row", title: "Inbox", trailing: { badge: 0 } })').root, 390, 844);
+  check('a zero badge renders no bubble', !zero.includes('>0</span>'));
+
+  // A third trailing nav action never renders, so its icon is never judged.
+  const nav = await evaluateCanvas(phone('I("document", { type: "nav-bar", title: "T", trailing: [{ icon: "search" }, { icon: "plus" }, { icon: "nope-nope" }] })'), { mode: 'fast', categories: ['structure'] });
+  check('a third trailing nav action is not icon-checked', !nav.issues.some((i) => i.message.includes('nope-nope')));
+  const abs = await issues(phone('I("document", { type: "tab-bar", position: "absolute", items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })'), 'mobile-tab-bar');
+  check('an absolute tab bar is named by its position, not "in flow"', abs.length === 1 && abs[0].message.includes('position "absolute"') && !abs[0].message.includes('in flow'), show(abs));
+}
+
+// ── slice D: mutation-round gaps ──────────────────────────────────────────
+{
+  console.log('\n── slice D: mutation-round gaps ──');
+  const items5 = Array.from({ length: 5 }, (_, i) => `{ icon: "house", label: "T${i}" }`).join(', ');
+  const fabNarrow = await issues(phone(`I("document", { type: "tab-bar", variant: "fab", width: 250, items: [${items5}] })`), 'mobile-touch-target');
+  check('a 250px fab bar with five tabs: six slots, five 42px tab errors', fabNarrow.filter((i) => i.message.startsWith('tab')).length === 5 && fabNarrow[0].message.includes('42×49'), show(fabNarrow));
+  for (const [what, prop] of [['blur', 'blur: 8'], ['backdropFilter', 'backdropFilter: { blur: 10 }'], ['a slideUp animation', 'animation: { name: "slideUp" }'], ['a scaleIn animation', 'animation: { name: "scaleIn" }']] as const) {
+    const found = await issues(phone(`g=I("document", { type: "frame", ${prop} })
+I(g, { type: "button", label: "Go", position: "fixed", bottom: 0 })`), 'mobile-safe-area');
+    check(`a fixed node under ${what} is unplaceable → info only`, found.length === 1 && found[0].severity === 'info', show(found));
+  }
+  const grand = await issues(phone(`g=I("document", { type: "frame", blur: 4 })
+m=I(g, { type: "frame" })
+I(m, { type: "button", label: "Go", position: "fixed", bottom: 0 })`), 'mobile-safe-area');
+  check('…and under a blurred grandparent too', grand.length === 1 && grand[0].severity === 'info', show(grand));
+  const gapBar = await issues(phone(`list=I("document", { type: "frame", layout: "vertical" })
+I(list, { type: "text", content: "Order summary" })
+I(list, { type: "frame", height: 68 })
+bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", gap: 20, padding: [12, 16, 12, 16] })
+I(bar, { type: "button", label: "Pay", width: "100%" })
+I(bar, { type: "frame", height: 34 })`), 'mobile-safe-area');
+  check('a pinned bar\'s gap counts toward its height (122 > the 102 a 68px spacer clears)', gapBar.length === 1 && gapBar[0].message.includes('122px'), show(gapBar));
+  const icons = await evaluateCanvas(phone(`I("document", { type: "list-row", title: "A", leading: { icon: "nope-one" } })
+I("document", { type: "nav-bar", title: "T", trailing: [{ icon: "nope-two" }] })
+I("document", { type: "tab-bar", variant: "fab", fab: { icon: "nope-three" }, items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })`), { mode: 'fast', categories: ['structure'] });
+  check('list-row leading, nav trailing and FAB icons are checked', ['nope-one', 'nope-two', 'nope-three'].every((n) => icons.issues.some((i) => i.message.includes(n))), JSON.stringify(icons.issues.map((i) => i.message)));
+}
+
+// ── slice D: post-3b regressions ──────────────────────────────────────────
+{
+  console.log('\n── slice D: post-3b regressions ──');
+  const nulls = await issues(phone('I("document", { type: "tab-bar", items: [null, { icon: "house", label: "A" }, { icon: "user", label: "B" }] })'), 'mobile-tab-bar');
+  check('a null tab entry (not rendered) is neither counted nor called unlabeled', nulls.length === 0, show(nulls));
 }
 
 // ── the real tool handlers over MCP stdio ─────────────────────────────────

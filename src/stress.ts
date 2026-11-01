@@ -98,7 +98,7 @@ function listRuns(root: SceneNode): Array<{ container: SceneNode; start: number;
     const kids = n.children ?? [];
     for (let i = 0; i < kids.length;) {
       let j = i;
-      while (j < kids.length && (kids[j].type as string) === 'list-row') j++; // slice D adds the node type
+      while (j < kids.length && kids[j].type === 'list-row') j++;
       if (j - i >= 2) runs.push({ container: n, start: i, length: j - i });
       i = j > i ? j : i + 1;
     }
@@ -243,6 +243,7 @@ export function compareLayouts(
   const base = flatten(baseline);
   const pert = flatten(perturbed);
   const findings: StressFinding[] = [];
+  const truncations: StressFinding[] = [];
 
   // touched + every ancestor in the perturbed tree (id suffixes from `many`
   // resolve to their source rows via prefix match).
@@ -255,13 +256,21 @@ export function compareLayouts(
     }
   }
 
+  // A scrolling panel's vertical overflow is scrolling, not a clip.
   const clips = (r: FlatRect): boolean =>
     (r.scrollWidth !== undefined && r.clientWidth !== undefined && r.scrollWidth > r.clientWidth + 1) ||
-    (r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1);
+    (!r.scrolls && r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1);
 
   for (const [id, r] of pert) {
     if (findings.length >= FINDING_CAP) break;
     const b = base.get(id);
+
+    // Phase 30 slice D — a primitive's label hitting its designed ellipsis.
+    // Collected apart and added after the loop, so a long list of truncating
+    // rows can never use up the cap before a real clip is found.
+    if (r.truncated && !b?.truncated) {
+      truncations.push({ kind: 'clip', severity: 'info', nodeId: id, detail: 'A label truncates with its designed ellipsis under this content.' });
+    }
 
     // clip — content cut off that wasn't cut off at baseline.
     if (clips(r) && !(b && clips(b as FlatRect))) {
@@ -327,7 +336,7 @@ export function compareLayouts(
     }
   }
 
-  return findings;
+  return [...findings, ...truncations.slice(0, Math.max(0, FINDING_CAP - findings.length))];
 }
 
 /** The last canvas_stress verdict per canvas, kept for canvas_evaluate's

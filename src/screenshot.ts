@@ -103,8 +103,10 @@ async function expandViewportToContent(
   page: Page,
   { width, height, scale }: { width: number; height: number; scale: number },
 ): Promise<void> {
+  // The floor is !important too: the root's own inline `min-height:
+  // max-content` (Phase 30 slice D) would otherwise collapse a short design.
   await page.addStyleTag({
-    content: `body > *:first-child { height: auto !important; min-height: ${height}px; }`,
+    content: `body > *:first-child { height: auto !important; min-height: ${height}px !important; }`,
   });
   const contentHeight = await page.evaluate(() => Math.max(
     document.body.scrollHeight,
@@ -161,6 +163,12 @@ export interface LayoutRect {
   scrollHeight?: number;
   clientHeight?: number;
   ellipsis?: boolean;
+  /** Phase 30 slice D — a primitive whose label (a `data-fs-label` element)
+   * is cut off by its designed one-line ellipsis. */
+  truncated?: boolean;
+  /** Phase 30 slice D — a `data-fs-scroll` element (a sheet panel): its
+   * vertical overflow scrolls, it is not a clip. */
+  scrolls?: boolean;
   children?: LayoutRect[];
 }
 
@@ -186,6 +194,14 @@ const LAYOUT_WALKER_SOURCE = `(function (rootId, depth) {
       result.clientHeight = el.clientHeight;
       if (getComputedStyle(el).textOverflow === 'ellipsis') result.ellipsis = true;
     }
+    if (el.hasAttribute('data-fs-primitive')) {
+      var labels = el.querySelectorAll('[data-fs-label]');
+      for (var j = 0; j < labels.length; j++) {
+        if (labels[j].closest('[data-node-id]') !== el) continue;
+        if (labels[j].scrollWidth > labels[j].clientWidth + 1) { result.truncated = true; break; }
+      }
+    }
+    if (el.hasAttribute('data-fs-scroll')) result.scrolls = true;
     if (currentDepth < depth) {
       var childRects = [];
       for (var i = 0; i < el.children.length; i++) {

@@ -1,6 +1,7 @@
-// Phase 30 slice C — the mobile ruleset where it needs Chrome: mobile-safe-area
-// in detailed mode (rendered rects), and the canvas_stress record carrying the
-// canvas type through the real tool handlers.
+// Phase 30 slices C and D — the mobile ruleset where it needs Chrome:
+// mobile-safe-area in detailed mode (rendered rects, pinned bars, sticky), and
+// the canvas_stress record carrying the canvas type through the real tool
+// handlers.
 //
 // Usage: npx tsx test-mobile-rules-detailed.ts
 
@@ -68,17 +69,17 @@ I(w, { type: "text", content: "Badge", position: "absolute", x: 0, y: -80 })`);
   const nestedDetailed = await safeArea(nested, 'detailed');
   check('positioned content fast mode cannot place: fast says info, detailed places it', nestedFast.length === 1 && nestedFast[0].severity === 'info' && nestedDetailed.length === 1 && nestedDetailed[0].severity === 'warning', `${show(nestedFast)} / ${show(nestedDetailed)}`);
 
-  // The known gap until slice D: a fixed-height root does not carry its end
-  // padding past overflowing content, so a long screen ends in the inset.
+  // Slice D closed the slice C gap: the root grows to its content and keeps
+  // its end padding, so a long screen on the default path is clean in both.
   const rows = Array.from({ length: 60 }, (_, k) => `I(f, { type: "text", content: "Row ${k + 1}" })`).join('\n');
   const tall = phone(`f=I("document", { type: "frame", layout: "vertical", gap: 8, padding: [0, 16] })\n${rows}`);
   const tallFast = await safeArea(tall, 'fast');
   const tallDetailed = await safeArea(tall, 'detailed');
-  check('tall screen on the default path: detailed catches the document end in the inset', tallDetailed.length > 0 && tallDetailed.every((i) => i.message.includes('end of the scroll')), show(tallDetailed));
-  check('…which fast mode trusts the reservation for (recorded gap until slice D)', tallFast.length === 0, show(tallFast));
+  check('tall screen on the default path: detailed agrees with fast now (the root keeps its end padding)', tallDetailed.length === 0, show(tallDetailed));
+  check('…and fast mode trusts the reservation, now correctly', tallFast.length === 0, show(tallFast));
 
   console.log('\n── boundaries (detailed) ──');
-  check('G-D1 detailed + categories [usability] only still checks rendered rects (E21)', (await iss(tall, 'mobile-safe-area', 'detailed', ['usability'])).length > 0);
+  check('G-D1 detailed + categories [usability] only still checks rendered rects (E21)', (await iss(nested, 'mobile-safe-area', 'detailed', ['usability'])).some((i) => i.severity === 'warning'));
   let ops = 'p0=I("document", { type: "frame" })\n'; for (let k = 1; k < 14; k++) ops += `p${k}=I(p${k - 1}, { type: "frame" })\n`; ops += 'I(p13, { type: "text", content: "Deep" })';
   check('G-D2 text 15 levels deep in the top inset (bare root) is seen in detailed (E22)', (await iss(phone(ops, { bare: true }), 'mobile-safe-area', 'detailed')).some((i) => i.message.includes('top')));
 } finally {
@@ -149,6 +150,148 @@ I(b, { type: "text", content: "Morning run" })` });
     const aft = await tool('canvas_evaluate', { canvasId: w.canvasId });
     check('G-M3 after an edit the same-type record is no longer current (X04)', aft.stress?.current === false && aft.directive.includes('earlier version'), JSON.stringify(aft.stress));
   } finally { await client.close(); }
+}
+
+// ── slice D: pinned positioning in detailed mode ──────────────────────────
+{
+  console.log('\n── slice D: detailed ──');
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => `I(list, { type: "list-row", name: "Row ${i}", title: "Row ${i}" })`).join('\n');
+  const bareBar = phone(`bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical" })
+I(bar, { type: "button", name: "Pay", label: "Pay" })`);
+  check('a fixed CTA at bottom 0 with no padding warns in detailed mode too', (await safeArea(bareBar, 'detailed')).some((i) => i.severity === 'warning' && i.message.includes('Pay')), show(await safeArea(bareBar, 'detailed')));
+
+  const idiom = (spacer: number) => phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+I(list, { type: "frame", name: "End spacer", height: ${spacer} })
+bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", padding: [12, 16, 12, 16], fill: "#FFFFFF" })
+I(bar, { type: "button", name: "Pay", label: "Pay", width: "100%" })
+I(bar, { type: "frame", name: "Inset", height: 34 })`);
+  const goodFast = await safeArea(idiom(68), 'fast');
+  const goodDetailed = await safeArea(idiom(68), 'detailed');
+  check('the pinned-bar idiom on a long screen passes both modes', goodFast.length === 0 && goodDetailed.length === 0, `${show(goodFast)} / ${show(goodDetailed)}`);
+  const shortDetailed = await safeArea(idiom(20), 'detailed');
+  check('…a short end spacer leaves the last row under the bar at max scroll (detailed agrees with fast)', shortDetailed.some((i) => i.message.includes('under pinned "CTA"') && i.message.includes('Row 29')), show(shortDetailed));
+
+  const tabbed = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+I("document", { type: "tab-bar", variant: "fab", items: [{ icon: "house", label: "A" }, { icon: "map", label: "B" }, { icon: "user", label: "C" }, { icon: "bell", label: "D" }] })`);
+  const tb = await safeArea(tabbed, 'detailed');
+  check('a long screen with a fab tab-bar: the renderer reserves it, detailed is clean', tb.length === 0, show(tb));
+
+  const sticky = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(3)}
+h=I(list, { type: "frame", position: "sticky", y: 0, layout: "vertical" })
+I(h, { type: "text", name: "Header", content: "Header" })
+${rows(20).replace(/Row (\\d+)/g, 'Later $1')}`);
+  const st = await safeArea(sticky, 'detailed');
+  check('a sticky header at y 0 warns at its stuck position in detailed mode', st.some((i) => i.message.includes('Header') && i.message.includes('sticks')), show(st));
+
+  const nav = phone(`I("document", { type: "nav-bar", name: "Nav", title: "Inbox", position: "fixed", y: 47 })
+I("document", { type: "text", name: "First", content: "First message" })`);
+  const nv = await safeArea(nav, 'detailed');
+  check('a fixed nav-bar at y 47 over the first content warns in detailed mode', nv.some((i) => i.message.includes('First') && i.message.includes('start of the scroll')), show(nv));
+
+  const overflowRoot = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+U("document", { overflow: "auto" })`);
+  const ov = await safeArea(overflowRoot, 'detailed');
+  check('a root with overflow: auto and safeArea: no false end-of-scroll warning', ov.length === 0, show(ov));
+
+  const long = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}`);
+  const lg = await safeArea(long, 'detailed');
+  check('the slice C gap is closed: a long safeArea screen is clean in detailed mode with no spacer', lg.length === 0, show(lg));
+}
+
+// ── slice D: verify-round regressions (detailed) ──────────────────────────
+{
+  console.log('\n── slice D: verify-round regressions (detailed) ──');
+  const rows = (n: number, p = 'Row') => Array.from({ length: n }, (_, i) => `I(list, { type: "list-row", name: "${p} ${i}", title: "${p} ${i}" })`).join('\n');
+  const all = async (c: Canvas) => (await evaluateCanvas(c, { mode: 'detailed' })).issues;
+
+  const chrome = phone(`I("document", { type: "status-bar" })
+I("document", { type: "nav-bar", title: "Inbox" })
+list=I("document", { type: "frame", layout: "vertical" })
+${rows(14)}
+I("document", { type: "tab-bar", items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })
+I("document", { type: "home-indicator" })
+sh=I("document", { type: "sheet", detent: "medium" })
+I(sh, { type: "text", content: "Share" })`);
+  const overlaps = (await all(chrome)).filter((i) => i.message.includes('overlaps'));
+  check('tab-bar + home-indicator + sheet over a long list: no overlap errors', overlaps.length === 0, show(overlaps));
+  const cell = phone(`g=I("document", { type: "frame", layout: "grid", gridColumns: 1, height: 100 })
+I(g, { type: "frame", name: "One", height: 60, gridColumn: "1 / 2", gridRow: "1 / 2", fill: "#EEE" })
+I(g, { type: "frame", name: "Two", height: 60, gridColumn: "1 / 2", gridRow: "1 / 2", fill: "#DDD" })`);
+  check('…two in-flow siblings in one grid cell still overlap (probe)', (await all(cell)).some((i) => i.message.includes('overlaps')));
+
+  const inst = phone(`I("document", { type: "instance", componentId: "t", name: "Top" })
+I("document", { type: "frame", height: 300 })
+I("document", { type: "instance", componentId: "t", name: "Low" })`, { bare: true });
+  inst.components = { t: { id: 't', type: 'component', children: [{ id: 't-text', type: 'text', content: 'Label' }] } };
+  const instHits = await safeArea(inst, 'detailed');
+  check('detailed sees the top-inset hit inside the first of two instances', instHits.some((i) => i.nodeId === inst.root.children![0].id && i.message.includes('top')), show(instHits));
+
+  const cta = `bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", padding: [12, 16, 12, 16], fill: "#FFFFFF" })
+I(bar, { type: "button", label: "Pay", width: "100%" })
+I(bar, { type: "frame", height: 34 })`;
+  const withSheet = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(22)}
+${cta}
+sh=I("document", { type: "sheet", detent: "medium" })
+${Array.from({ length: 30 }, (_, i) => `I(sh, { type: "list-row", title: "Opt ${i}" })`).join('\n')}`);
+  check('a long sheet does not hide the last row under the CTA at max scroll', (await safeArea(withSheet, 'detailed')).some((i) => i.message.includes('Row 21') && i.message.includes('under pinned')));
+
+  const scroller = phone(`list=I("document", { type: "frame", layout: "vertical", height: 600, overflow: "auto" })
+${rows(22)}
+${cta}`);
+  const sc = await safeArea(scroller, 'detailed');
+  check('rows clipped inside a 600px scroller are not "at the end of the scroll"', !sc.some((i) => i.message.includes('end of the scroll')), show(sc));
+
+  const blurred = phone(`w=I("document", { type: "frame", height: 120, blur: 4 })
+b=I(w, { type: "frame", position: "fixed", bottom: 0, height: 60, layout: "vertical" })
+I(b, { type: "button", label: "Go" })
+list=I("document", { type: "frame", layout: "vertical" })
+${rows(22)}`);
+  const bl = await safeArea(blurred, 'detailed');
+  check('a fixed bar under a blurred frame is not treated as pinned at max scroll', !bl.some((i) => i.message.includes('under pinned')), show(bl));
+}
+
+// ── slice D: mutation-round gaps (detailed) ───────────────────────────────
+{
+  console.log('\n── slice D: mutation-round gaps (detailed) ──');
+  const sheet = phone(`I("document", { type: "text", content: "Behind" })
+sh=I("document", { type: "sheet", detent: "medium" })
+${Array.from({ length: 20 }, (_, i) => `I(sh, { type: "list-row", name: "Opt ${i}", title: "Opt ${i}" })`).join('\n')}`);
+  const sh = await safeArea(sheet, 'detailed');
+  check('a scrolling sheet\'s rows are never judged in detailed mode', sh.length === 0, show(sh));
+  const narrow = phone(`list=I("document", { type: "frame", layout: "vertical", padding: [0, 16] })
+${Array.from({ length: 22 }, (_, i) => `I(list, { type: "text", name: "Line ${i}", content: "Line ${i}", width: 120, height: 40 })`).join('\n')}
+I("document", { type: "button", name: "Fab", icon: "plus", position: "fixed", right: 16, bottom: 50 })`);
+  const nw = await safeArea(narrow, 'detailed');
+  check('a narrow fixed button on the right never covers left-side lines', !nw.some((i) => i.message.includes('under pinned')), show(nw));
+}
+
+// ── slice D: post-3b regressions (detailed) ───────────────────────────────
+{
+  console.log('\n── slice D: post-3b regressions (detailed) ──');
+  const card = phone(`c=I("document", { type: "frame", layout: "vertical", overflow: "hidden", cornerRadius: 12 })
+${Array.from({ length: 60 }, (_, i) => `I(c, { type: "text", name: "Line ${i}", content: "Line ${i}" })`).join('\n')}`, { bare: true });
+  const cd = await safeArea(card, 'detailed');
+  check('an auto-height overflow:hidden card clips nothing: its last line still ends in the inset', cd.some((i) => i.message.includes('Line 59') && i.message.includes('end of the scroll')), show(cd));
+
+  const topBar = phone(`I("document", { type: "frame", name: "Header", height: 80, fill: "#EEE" })
+I("document", { type: "frame", name: "Pinned", position: "fixed", y: 0, height: 60, fill: "#333" })`);
+  const tb = (await evaluateCanvas(topBar, { mode: 'detailed' })).issues.filter((i) => i.message.includes('overlaps'));
+  check('a frame pinned to the top over in-flow content is still an overlap error', tb.length === 1, show(tb));
+  const bottomBar = phone(`I("document", { type: "frame", name: "Body", height: 900, fill: "#EEE" })
+I("document", { type: "frame", name: "Pinned", position: "fixed", bottom: 0, height: 60, fill: "#333" })`);
+  check('…a bar pinned to the bottom (content scrolls under it) is not', !(await evaluateCanvas(bottomBar, { mode: 'detailed' })).issues.some((i) => i.message.includes('overlaps')));
+
+  const tokens = phone('I("document", { type: "instance", componentId: "pad", name: "Padded" })', { bare: true });
+  tokens.variables = { ...tokens.variables, spacing: { 'space-12': 60 } };
+  tokens.components = { pad: { id: 'pad', type: 'component', layout: 'vertical', children: [{ id: 'pad-sp', type: 'frame', height: '$space-12' }, { id: 'pad-t', type: 'text', content: 'Inside' }] } };
+  const tk = await safeArea(tokens, 'detailed');
+  check('detailed reads a component as the screenshot draws it (its own $refs unresolved)', tk.some((i) => i.message.includes('top')), show(tk));
 }
 
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');
