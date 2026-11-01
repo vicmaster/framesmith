@@ -50,7 +50,7 @@ function at(css: string | undefined, viewport: number): number | undefined {
 }
 
 // No numeric root width → the 1440 reference.
-for (const w of [undefined, '100%']) {
+for (const w of [undefined, '100%', 0, -5]) {
   const html = renderToHtml(doc(w, [text('h', 64)]), 1440, 900);
   check(`root width ${JSON.stringify(w)}: falls back to 1440`, fontOf(html, 'h') === 'clamp(38px, 4.44vw, 64px)', fontOf(html, 'h'));
 }
@@ -63,8 +63,9 @@ for (const w of [undefined, '100%']) {
 
 // Below the threshold and string sizes are untouched.
 {
-  const html = renderToHtml(doc(390, [text('small', 23), text('str', 'clamp(1rem, 0.9rem + 0.5vw, 1.25rem)')]), 390, 844);
+  const html = renderToHtml(doc(390, [text('small', 23), text('edge', 24), text('str', 'clamp(1rem, 0.9rem + 0.5vw, 1.25rem)')]), 390, 844);
   check('23px stays static', fontOf(html, 'small') === '23px', fontOf(html, 'small'));
+  check('24px is the first fluid size', fontOf(html, 'edge') === 'clamp(16px, 6.15vw, 24px)', fontOf(html, 'edge'));
   check('a CSS length string passes through', fontOf(html, 'str') === 'clamp(1rem, 0.9rem + 0.5vw, 1.25rem)', fontOf(html, 'str'));
 }
 

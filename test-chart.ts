@@ -80,8 +80,12 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   check('no tick label is SVG text (it would stretch with the plot)', !/<text[^>]*>(Jan|Dec|0|2\.7M)<\/text>/.test(html));
   check('labels sit in a positioned wrapper over the svg', html.includes('<div style="position: relative; width: 100%; height: 100%"><svg'));
   check('y labels right-aligned at the left edge', /right: [\d.]+%; transform: translateY\(-50%\); font-size: 11px[^>]*>2\.7M<\/span>/.test(html));
-  check('line x labels: first pinned left at the plot start, last pinned right at its end',
-    /top: [\d.]+%; left: 7\.33%; font-size[^>]*>Jan<\/span>/.test(html) && /top: [\d.]+%; right: 0\.67%; font-size[^>]*>Dec<\/span>/.test(html));
+  // Each x label owns a slot and truncates inside it. Plot 44..596 (y labels
+  // reserve 44), three ticks 276 apart: the end labels get half a step each.
+  const slotOf = (h: string, text: string) => h.match(new RegExp(`left: ([\\d.]+)%; width: ([\\d.]+)%; text-align: (\\w+)[^>]*>${text}</span>`))?.slice(1).join(' ');
+  check('line x labels: first slot starts at the plot, left-aligned', slotOf(html, 'Jan') === '7.33 23 left', slotOf(html, 'Jan'));
+  check('line x labels: last slot ends at the plot, right-aligned', slotOf(html, 'Dec') === '76.33 23 right', slotOf(html, 'Dec'));
+  check('x labels truncate inside their slot', /overflow: hidden; text-overflow: ellipsis[^>]*>Jan<\/span>/.test(html));
 
   // Smooth curve emits cubic segments.
   chart.curve = 'smooth';
@@ -101,12 +105,24 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   // plot 0..396, three bands of 132 → centres 66, 198, 330 → 16.5%, 49.5%, 82.5%.
   barChart.xLabels = ['Mon', 'Tue', 'Wed'];
   const centred = render();
-  check('bar labels centre under their bars', ['16.5%', '49.5%', '82.5%'].every((x, i) =>
-    new RegExp(`left: ${x.replace('.', '\\.')}; transform: translateX\\(-50%\\)[^>]*>${['Mon', 'Tue', 'Wed'][i]}</span>`).test(centred)), centred.slice(centred.indexOf('Mon') - 200, centred.indexOf('Mon') + 10));
+  check('bar labels centre in their bars\' bands', ['0 33 center', '33 33 center', '66 33 center'].every((x, i) => slotOf(centred, ['Mon', 'Tue', 'Wed'][i]) === x),
+    ['Mon', 'Tue', 'Wed'].map((t) => slotOf(centred, t)).join(' | '));
+  // Line charts: a lone label centres on the plot, a middle one on its tick.
+  // 600 wide, no y labels: plot 0..596.
+  const line = insertNode(root, root.id, { type: 'chart', kind: 'line', width: 600, height: 200, series: [{ data: [1, 2, 3] }], xLabels: ['Only'] });
+  check('a lone x label centres on the plot', slotOf(render(), 'Only') === '0 99.33 center', slotOf(render(), 'Only'));
+  line.xLabels = ['A', 'Mid', 'C'];
+  check('a middle x label centres on its tick, a step wide', slotOf(render(), 'Mid') === '24.83 49.67 center', slotOf(render(), 'Mid'));
+  // A zero-size box has no geometry to place labels in: none, not NaN%.
+  line.width = 0;
+  line.xLabels = ['Zero'];
+  check('a zero-width chart renders no labels', !render().includes('>Zero</span>') && !render().includes('NaN%') && !render().includes('Infinity%'));
+  line.width = 600;
+  line.xLabels = undefined;
   // A label count that differs from the bar count keeps the edge-to-edge spread.
   barChart.xLabels = ['Q1', 'Q4'];
   const spread = render();
-  check('bar labels not one per bar spread edge to edge', /left: 0%; font-size[^>]*>Q1<\/span>/.test(spread) && /right: 1%; font-size[^>]*>Q4<\/span>/.test(spread));
+  check('bar labels not one per bar spread edge to edge', slotOf(spread, 'Q1') === '0 49.5 left' && slotOf(spread, 'Q4') === '49.5 49.5 right', `${slotOf(spread, 'Q1')} | ${slotOf(spread, 'Q4')}`);
 
   // Label content is escaped.
   barChart.xLabels = ['<img onerror=x>'];

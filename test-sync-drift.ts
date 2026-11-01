@@ -38,12 +38,12 @@ const URL_ = `http://127.0.0.1:${port}/`;
 const W = 800, H = 400;
 
 /** The handler's pipeline, minus the MCP envelope. */
-async function sync(canvas: Canvas): Promise<number> {
-  const imported = await importUrl(URL_, { viewport: { width: W, height: H } });
-  const liveHtml = await renderImportedTree(imported.root, W, H);
+async function sync(canvas: Canvas, w = W): Promise<number> {
+  const imported = await importUrl(URL_, { viewport: { width: w, height: H } });
+  const liveHtml = await renderImportedTree(imported.root, w, H, canvas.root.width as number);
   const resolved = resolveVariables(canvas.root, canvas.variables);
-  const canvasHtml = renderToHtml(resolved, W, H, canvas);
-  const diff = await computeDiff(canvasHtml, liveHtml, W, H, 1);
+  const canvasHtml = renderToHtml(resolved, w, H, canvas);
+  const diff = await computeDiff(canvasHtml, liveHtml, w, H, 1);
   return diff.changePercent;
 }
 
@@ -60,6 +60,12 @@ try {
   // ── 1. in sync ≈ 0% ─────────────────────────────────────────────────────
   const inSync = await sync(canvas);
   expect('unchanged page diffs ≈ 0%', inSync < 0.5, `${inSync}%`);
+
+  // Phase 30 slice G — a viewport override narrower than the canvas: large
+  // type scales against the root's width, and the imported side shares it,
+  // so the 40px heading shrinks alike on both sides and the page stays in sync.
+  const narrow = await sync(canvas, 600);
+  expect('unchanged page at a narrower viewport diffs ≈ 0%', narrow < 0.5, `${narrow}%`);
 
   // ── 2. the app drifts → real signal ─────────────────────────────────────
   accent = '#b71421'; // someone shipped a different CTA color

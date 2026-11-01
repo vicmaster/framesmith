@@ -438,34 +438,40 @@ function renderChartSvg(node: SceneNode): string {
   // Tick labels (never on sparklines) are HTML over the plot, placed by
   // percentage: the plot stretches to the node's box (preserveAspectRatio
   // none), and SVG text would stretch with it — squashed on a 100%-wide chart
-  // in a phone card, widened on a desktop one. Bar labels centre under their
-  // bars when there is one per bar; otherwise they spread edge to edge.
+  // in a phone card, widened on a desktop one. Each x label owns a slot (its
+  // bar's band when there is one label per bar, else the span between its
+  // neighbouring ticks) and truncates with an ellipsis inside it, so dense
+  // labels never run into each other or past the plot.
   const labelColor = escapeAttr(node.color ?? CHART_LABEL_COLOR);
   const labels: string[] = [];
   const pct = (v: number, of: number) => `${round2((v / of) * 100)}%`;
   const label = (pos: string, text: string) =>
-    labels.push(`<span style="position: absolute; ${pos}; font-size: ${CHART_LABEL_SIZE}px; line-height: 1; color: ${labelColor}; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none">${escapeHtml(text)}</span>`);
+    labels.push(`<span style="position: absolute; ${pos}; font-size: ${CHART_LABEL_SIZE}px; line-height: 1.3; color: ${labelColor}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; pointer-events: none">${escapeHtml(text)}</span>`);
   const xLabels = (spark ? [] : node.xLabels) ?? [];
+  const yLabels = (spark ? [] : node.yLabels) ?? [];
+  const sized = boxW > 0 && boxH > 0;
   const maxLen = Math.max(...series.map((s) => s.data.length));
-  const underBars = barForm && xLabels.length === maxLen;
-  for (const [i, text] of xLabels.entries()) {
-    const n = xLabels.length;
-    const top = `top: ${pct(baselineY + 6, boxH)}`;
-    if (underBars) {
-      label(`${top}; left: ${pct(geom.x0 + (i + 0.5) * (geom.plotW / n), boxW)}; transform: translateX(-50%)`, text);
+  const n = xLabels.length;
+  const slot = (left: number, width: number, align: string) =>
+    `top: ${pct(baselineY + 4, boxH)}; left: ${pct(left, boxW)}; width: ${pct(width, boxW)}; text-align: ${align}`;
+  for (const [i, text] of (sized ? xLabels : []).entries()) {
+    if (barForm && n === maxLen) {
+      const band = geom.plotW / n;
+      label(slot(geom.x0 + i * band, band, 'center'), text);
     } else if (n === 1) {
-      label(`${top}; left: ${pct(geom.x0 + 0.5 * geom.plotW, boxW)}; transform: translateX(-50%)`, text);
-    } else if (i === 0) {
-      label(`${top}; left: ${pct(geom.x0, boxW)}`, text);
-    } else if (i === n - 1) {
-      label(`${top}; right: ${pct(boxW - (geom.x0 + geom.plotW), boxW)}`, text);
+      label(slot(geom.x0, geom.plotW, 'center'), text);
     } else {
-      label(`${top}; left: ${pct(geom.x0 + (i / (n - 1)) * geom.plotW, boxW)}; transform: translateX(-50%)`, text);
+      // Ticks sit at the plot's ends and evenly between: the end labels hug
+      // the edges (half a step wide), the rest centre on their tick.
+      const step = geom.plotW / (n - 1);
+      const tick = geom.x0 + i * step;
+      if (i === 0) label(slot(tick, step / 2, 'left'), text);
+      else if (i === n - 1) label(slot(tick - step / 2, step / 2, 'right'), text);
+      else label(slot(tick - step / 2, step, 'center'), text);
     }
   }
-  for (const [i, text] of ((spark ? [] : node.yLabels) ?? []).entries()) {
-    const n = node.yLabels!.length;
-    const ly = geom.y0 + geom.plotH - (n === 1 ? 0.5 : i / (n - 1)) * geom.plotH;
+  for (const [i, text] of (sized ? yLabels : []).entries()) {
+    const ly = geom.y0 + geom.plotH - (yLabels.length === 1 ? 0.5 : i / (yLabels.length - 1)) * geom.plotH;
     label(`top: ${pct(ly, boxH)}; right: ${pct(boxW - (geom.x0 - 8), boxW)}; transform: translateY(-50%)`, text);
   }
 

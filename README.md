@@ -788,7 +788,7 @@ Compatible with the 55+ design systems in [awesome-design-md](https://github.com
 
 Render a canvas at multiple viewport sizes. Defaults to mobile (390x844), tablet (768x1024), and desktop (1440x900).
 
-The renderer emits `clamp()` for paddings ≥ 32px and font sizes ≥ 24px, so headlines and large spacing shrink proportionally at narrower viewports. Font sizes render as authored at the root's own width (a 33px title on a 390 phone artboard renders 33px) and shrink below it, to 60% at most; paddings shrink against a 1440px design width. Smaller values stay static.
+The renderer emits `clamp()` for paddings ≥ 32px and font sizes ≥ 24px, so headlines and large spacing shrink proportionally at narrower viewports. Font sizes render as authored at the root's own width (a 33px title on a 390 phone artboard renders 33px; 1440 when the root has no numeric width) and shrink below it, to 60% at most (16px floor); paddings shrink against a 1440px design width. Smaller values stay static.
 
 | Param | Type | Description |
 |-------|------|-------------|
