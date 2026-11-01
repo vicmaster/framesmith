@@ -100,6 +100,26 @@ I(bar, { type: "frame", height: 34 })
 
 The bar is 12 + 44 + 34 + 12 = 102px tall; the root's `safeArea` reserves 34, so the content frame's spacer adds the other 68.
 
+## Starting a phone screen (mobile realisations)
+
+A structure realises an **anatomy** (a screen kind) for one canvas type. A canvas has the type it was declared with (`canvas_create({ type: "mobile" })` or `canvas_set_type`, see [Declaring the medium](#declaring-the-medium-web-or-mobile)); an undeclared canvas is web whatever its width, so declare first. On a mobile canvas, `apply_structure` resolves an anatomy name to its mobile realisation, so `apply_structure({ canvasId, structure: "dashboard" })` stamps `dashboard-mobile`; the result's `applied`, `anatomy` and `surface` say what was stamped. Six anatomies have a mobile realisation; the other web pages (`marquee-hero`, `bento-grid`, `stat-led`, `editorial-longform`, `split-workbench`, `catalogue`, `pricing`) have none:
+
+| Anatomy | Mobile realisation | Shape |
+|---|---|---|
+| `dashboard` | `dashboard-mobile` | Large-title nav bar, a headline metric card, a two-up stat row, a recent list of rows, a pinned four-tab bar |
+| `settings` | `settings-mobile` | Grouped list rows (toggles, values, chevrons) and a destructive sign-out button |
+| `auth` | `auth-mobile` | Title, two fields, and the primary and secondary buttons held at the bottom of the screen |
+| `onboarding` | `onboarding-mobile` | One page of a paged flow: skip, glyph, heading, body, page dots, a full-width continue |
+| `feed` | `feed-mobile` | A full-bleed list of rows (monogram, title, preview, time) and a pinned four-tab bar |
+| `detail` | `detail-mobile` | Back nav bar, media slot, title, body, an attribute list, and a primary action pinned over the home indicator |
+
+Every one starts with a `status-bar`, ends with a `home-indicator` or a pinned `tab-bar`, and builds every tap target from a primitive, so it passes the mobile ruleset in fast and detailed mode and survives `canvas_stress`, unthemed and under every personality. Adapt it like any scaffold, taking node ids and fields from the result's `placeholders` rather than guessing them: each entry is `{ id, role, prop? }`, where `role` is the placeholder copy and `prop` is the path of a primitive's copy field (`title`, `subtitle`, `label`, `trailing.text`, `leading.initials`, `leading.label`, `items[0].label`). A `prop` is a path, not an op key: set a top-level one directly, a nested one by writing its whole object or array with its siblings (a `trailing` you write replaces the old one, chevron included; a tab label means rewriting `items`): `U("dm-row-1", { title: "Morning run", subtitle: "5.2 km", trailing: { text: "7:12" } })`, `U("amb-submit", { label: "Sign in" })`.
+
+- **Use `generate_design_system` for a phone's type**, then stamp. The `dark`, `light` and `material` presets set a 14–15px `$body` (`minimal` sets 16), which `mobile-type-floor` flags on every phone screen that sets text in `$body` (`auth`, `onboarding` and `detail` do); the stamp's own neutral defaults (a 16px body) pass.
+- **`list_structures({ canvasId })`** lists what stamps on that canvas: on a phone, the six realisations and the components marked for every type (`form-field`, `stat-card`, `empty-state`, `skeleton-card`, `skeleton-stat-card`, `kpi-card`, `status-chip`, `initials-avatar`). Each entry names its `anatomy` (for a component, its own name), its `surface` (`web`, `mobile` or `any`) and `surfaces`, the types its anatomy is realised on (`["web", "mobile"]` for `dashboard`, `["mobile"]` for `feed-mobile`). Passing `canvasId` and `type` together is an error.
+- **A name with no realisation for the canvas's type is refused**, with the anatomies of the same kind that have one: `pricing` on a phone, or a web-only component such as `data-table` (its 28px pager buttons are hand-built), `toolbar` or `toggle-row`. `realisation: "web"` stamps the web one anyway, and `realisation: "mobile"` stamps a mobile one on a web canvas.
+- **The realisations never write `safeArea`.** Their pinned chrome makes the renderer reserve the insets, so they are also correct on a canvas made mobile with `canvas_set_type`.
+
 ## Responsive hints
 
 Set `responsive` on **container nodes** (frames with `layout: "horizontal"` or `layout: "grid"` and children). The renderer emits the right media-query rules — flex-wrap for horizontal containers, a single-column collapse with spans reset for grid.
@@ -175,7 +195,7 @@ The `chart` node owns the value→coordinate math — give it data and domains, 
 - **Baking uppercase into `content`.** Use `textTransform: "uppercase"` (with `letterSpacing` for tracking) so the underlying copy stays editable and case-styling lives in the design, not the data.
 - **Faking form controls from frames + ellipses.** `toggle`, `checkbox`, `radio`, and `select` are real node types: `I("parent", { type: "toggle", checked: true })`. They style themselves from `$accent`/`$border`/`$bg-surface` tokens (neutral fallbacks when unthemed) and stay pixel-consistent; `fill`/`stroke`/`color` override.
 - **Faking loading states from plain gray rectangles.** Use `{ type: "skeleton" }` — token-derived fill, correct default radius, and it pulses in the live viewer (always static in screenshots/exports so diffs stay deterministic). Stamp `skeleton-table` / `skeleton-card` / `skeleton-stat-card` instead of hand-placing bars — and skeleton EVERY data surface: the coverage check flags a loading variant that leaves live metric values beside skeletoned regions (a half-designed loading screen flashes real-looking data next to placeholders).
-- **Hand-building app furniture node by node.** A data table, form field, toolbar, stat card, or settings row is one `apply_structure` stamp: component-kind structures insert under any `targetId` with re-keyed IDs and return an `idMap` for populating. Stamp `data-table`, fill the placeholders, copy rows with `C()` — don't place ~90 nodes by hand.
+- **Hand-building app furniture node by node.** A data table, form field, toolbar, stat card, or settings row is one `apply_structure` stamp: component-kind structures insert under any `targetId` with re-keyed IDs and return an `idMap` for populating. Stamp `data-table`, fill the placeholders, copy rows with `C()` — don't place ~90 nodes by hand. On a phone canvas only the components marked for every type stamp (not `data-table`, `toolbar` or `toggle-row`), and a settings row is a `list-row`.
 
 ## Design systems (workspace + project inheritance)
 
@@ -352,7 +372,7 @@ The rhythm for a module: design each screen to its own READY directive → desig
 
 The bar is "designers say *wow*," not "competent." The cliché tells below are the *don'ts*; these are the *do's*. Apply them up front — the evaluator is the safety net, not the plan.
 
-- **Start from a pattern, don't start blank.** `list_structures` → `apply_structure` stamps a taste-vetted page scaffold (every one is regression-tested to > 95 with zero cliché tells across themes, built from type-role tokens rather than literal pixel sizes, and stress-hardened to survive hostile-length content). Adapt it — swap copy, set `$tokens`, vary the structure — rather than inventing layout from nothing. A blank canvas is where slop comes from.
+- **Start from a pattern, don't start blank.** `list_structures` → `apply_structure` stamps a taste-vetted page scaffold (on a phone canvas, the mobile realisation of the same name; every one is regression-tested to > 95 with zero cliché tells across themes, built from type-role tokens rather than literal pixel sizes, and stress-hardened to survive hostile-length content). Adapt it — swap copy, set `$tokens`, vary the structure — rather than inventing layout from nothing. A blank canvas is where slop comes from.
 - **Use the whole toolkit — a real UI uses these, so your design must too.** Icons (`{ type: "icon", icon: "search" }` — Lucide or `material:`), fonts by name, real controls (`toggle`/`checkbox`/`radio`/`select`), components, and `$tokens`. Never fake them (no Unicode-glyph icons, no ellipse "toggles") and never omit them where a real UI has them: nav rows get a leading icon, metrics get an icon, feature lists get check icons, empty states get a glyph, forms use real controls. Starting from a pattern gives you all of this — don't strip it out.
 - **One focal point per screen.** Decide what the eye hits first (usually the headline or the primary action) and make everything else quieter. Two competing focal points = no focal point.
 - **Build real hierarchy.** Size, weight, and color should encode importance in steps you can see — a display heading, a clearly smaller subhead, body, then muted captions. Avoid near-equal sizes (a 16→15→14 ramp reads as one blurry tier); aim for ~1.2–1.6× jumps.

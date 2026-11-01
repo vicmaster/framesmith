@@ -383,6 +383,12 @@ export interface Structure {
   /** Taxonomy tags — page structures only (the diversification signal and the
    * "variety" rubric axis read them; component stamps don't shape the page). */
   axes?: StructureAxes;
+  /** Phase 30 — the screen kind this structure realises (default `name`).
+   * Structures sharing an anatomy are realisations of it for different surfaces. */
+  anatomy?: string;
+  /** Phase 30 — the canvas type this realisation is for (default `web`);
+   * `any` stamps on every type. (anatomy, surface) is unique in the registry. */
+  surface?: 'web' | 'mobile' | 'any';
   /** Placeholder children inserted under `canvas.root` by `apply_structure`. */
   nodes: SceneNode[];
 }

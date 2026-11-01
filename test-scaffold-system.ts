@@ -68,13 +68,19 @@ function usedSizes(canvas: Canvas): Map<number, string[]> {
 }
 
 const structures = listStructures();
+
+/** A structure stamps on a canvas of its own surface (Phase 30 slice E):
+ * mobile realisations on a phone canvas, everything else on web as before. */
+const typeOf = (surface: string): 'web' | 'mobile' => (surface === 'mobile' ? 'mobile' : 'web');
+const canvasFor = (name: string, surface: string) =>
+  createCanvas(name, undefined, {}, surface === 'mobile' ? { type: 'mobile' } : undefined);
 check('structure library is non-empty', structures.length > 0, `${structures.length} structures`);
 
 // ── 1. on the generated scale ────────────────────────────────────────────────
 console.log('\n── every scaffold lands on the generated type scale ──');
-for (const { name, kind } of structures) {
-  const canvas = createCanvas(`scale-${name}`);
-  setVariables(canvas, generateDesignSystem(SEED, PERSONALITY).variables);
+for (const { name, kind, surface } of structures) {
+  const canvas = canvasFor(`scale-${name}`, surface);
+  setVariables(canvas, generateDesignSystem(SEED, PERSONALITY, { surface: typeOf(surface) }).variables);
   applyStructure(canvas, name, { targetId: 'document' });
   const cv = getCanvas(canvas.id)!;
 
@@ -86,9 +92,10 @@ for (const { name, kind } of structures) {
 
 // ── 2. stress-clean ──────────────────────────────────────────────────────────
 console.log('\n── every scaffold survives hostile content ──');
-for (const { name, kind } of structures) {
-  const canvas = createCanvas(`stress-${name}`);
-  setVariables(canvas, generateDesignSystem(SEED, PERSONALITY).variables);
+for (const { name, kind, surface } of structures) {
+  const canvas = canvasFor(`stress-${name}`, surface);
+  const type = typeOf(surface);
+  setVariables(canvas, generateDesignSystem(SEED, PERSONALITY, { surface: type }).variables);
   applyStructure(canvas, name, { targetId: 'document' });
   const cv = getCanvas(canvas.id)!;
 
@@ -101,7 +108,7 @@ for (const { name, kind } of structures) {
 
   const offenders: string[] = [];
   for (const p of PERTURBATION_NAMES as PerturbationName[]) {
-    const { root, touched } = applyPerturbation(p, base);
+    const { root, touched } = applyPerturbation(p, base, { type });
     if (touched.length === 0) continue;
     const layout = await computeLayout(
       renderToHtml(resolveVariables(structuredClone(root), merged), w, h, cv), undefined, 25, { width: w, height: h });
