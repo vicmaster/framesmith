@@ -6,7 +6,7 @@ import './test-env.js';
 
 import { renderToHtml } from './src/renderer.js';
 import { resolveVariables } from './src/variables.js';
-import { computeLayout, takeScreenshot, type LayoutRect } from './src/screenshot.js';
+import { computeLayout, takeScreenshot, withPage, type LayoutRect } from './src/screenshot.js';
 import { createCanvas } from './src/scene-graph.js';
 import type { DesignVariables, SceneNode } from './src/types.js';
 
@@ -117,6 +117,65 @@ const SAFE = { safeArea: { top: 47, bottom: 34 } };
   const png = Buffer.from(await takeScreenshot(renderToHtml(root, 390, 844), { width: 390, height: 844, scale: 1, fullPage: true }), 'base64');
   const height = png.readUInt32BE(20);
   check('fullPage grows the capture to the content (1600)', height === 1600, String(height));
+}
+
+// ── verify-round regressions ──────────────────────────────────────────────
+{
+  console.log('\n── verify-round regressions ──');
+  // A web page's main column filling the artboard keeps filling it.
+  const web = await layout(doc([{ id: 'nav', type: 'frame', height: 64 }, { id: 'main', type: 'frame', height: '100%', justifyContent: 'center', children: [{ id: 'mt', type: 'text', content: 'Centred' }] }], {}, 1440, 900));
+  check('web: nav 64 + main height:100% → root stays 900, main fills 836', web.get('doc')!.height === 900 && web.get('main')!.height === 836 && web.get('nav')!.height === 64, `${web.get('doc')!.height} / ${web.get('main')!.height}`);
+  const webTall = await layout(doc([{ id: 'nav', type: 'frame', height: 64 }, { id: 'main', type: 'frame', height: '100%', children: [{ id: 'big', type: 'frame', height: 1500 }] }], {}, 1440, 900));
+  check('…and grows with taller content', webTall.get('main')!.height === 1500 && webTall.get('doc')!.height === 1564, `${webTall.get('main')!.height} / ${webTall.get('doc')!.height}`);
+  const floor = await layout(doc([{ id: 't', type: 'text', content: 'x' }], { minHeight: 1000 }));
+  check('an authored root minHeight is honoured', floor.get('doc')!.height === 1000, String(floor.get('doc')!.height));
+
+  // A 390 root captured wider: pinned chrome stays in the root's column.
+  const tb: SceneNode = { id: 'tb', type: 'tab-bar', items: [{ icon: 'house', label: 'A' }, { icon: 'user', label: 'B' }] };
+  const wideRoot = doc([tb], SAFE);
+  const wide = await computeLayout(renderToHtml(resolveVariables(wideRoot, LIGHT), 1440, 844), undefined, 5, { width: 1440, height: 844 });
+  const wideTab = (function find(list: LayoutRect[]): LayoutRect | undefined { for (const r of list) { if (r.nodeId === 'tb') return r; const f = r.children && find(r.children); if (f) return f; } return undefined; })(wide)!;
+  check('a 390 root captured at 1440: the tab bar is 390 wide at the root\'s left edge', wideTab.width === 390 && wideTab.x === 0, JSON.stringify(wideTab));
+
+  // fullPage on a short design matches the plain capture.
+  const short = doc([{ id: 'c', type: 'frame', height: '100%', justifyContent: 'center', children: [{ id: 'ct', type: 'text', content: 'Centred' }] }]);
+  const html = renderToHtml(short, 390, 844);
+  check('fullPage of a design that fits equals the plain capture', (await takeScreenshot(html, { width: 390, height: 844, scale: 1, fullPage: true })) === (await takeScreenshot(html, { width: 390, height: 844, scale: 1 })));
+
+  // A sheet's rows keep their height and scroll.
+  const sheetRows = Array.from({ length: 12 }, (_, i) => ({ id: `s${i}`, type: 'frame' as const, height: 56, children: [{ id: `s${i}t`, type: 'text' as const, content: `Row ${i}` }] }));
+  const sheet = await layout(doc([{ id: 'sh', type: 'sheet', detent: 'medium', children: sheetRows }], SAFE));
+  check('rows in a medium sheet keep 56px (the panel scrolls)', [...Array(12).keys()].every((i) => sheet.get(`s${i}`)!.height === 56), String(sheet.get('s0')!.height));
+
+  // Labels: short trailing text survives a long title; a long button label truncates.
+  const measured = await withPage(async (page) => {
+    await page.setViewport({ width: 390, height: 844 });
+    await page.setContent(renderToHtml(resolveVariables(doc([
+      { id: 'lr', type: 'list-row', title: 'A very long title that goes on and on past the edge of the row', trailing: { text: 'ok' } },
+      { id: 'pad', type: 'frame', padding: [0, 16], children: [{ id: 'btn', type: 'button', label: 'A very long button label that would run far past the edge of a phone screen' }] },
+    ]), LIGHT), 390, 844));
+    return page.evaluate(() => {
+      const labels = [...document.querySelectorAll('[data-node-id="lr"] [data-fs-label]')] as HTMLElement[];
+      const btn = document.querySelector('[data-node-id="btn"]') as HTMLElement;
+      const btnLabel = btn.querySelector('[data-fs-label]') as HTMLElement;
+      return { okWidth: labels[1].getBoundingClientRect().width, okScroll: labels[1].scrollWidth, btnWidth: btn.getBoundingClientRect().width, btnTruncates: btnLabel.scrollWidth > btnLabel.clientWidth };
+    });
+  });
+  check('a short trailing text keeps its width beside a long title', measured.okWidth >= measured.okScroll - 1, JSON.stringify(measured));
+  check('a long button label truncates inside the column', measured.btnWidth <= 358 && measured.btnTruncates, JSON.stringify(measured));
+
+  // The FAB rises exactly 16px above the band.
+  const fab = await withPage(async (page) => {
+    await page.setViewport({ width: 390, height: 844 });
+    await page.setContent(renderToHtml(doc([{ ...tb, variant: 'fab' }], SAFE), 390, 844));
+    return page.evaluate(() => {
+      const bar = document.querySelector('[data-node-id="tb"]') as HTMLElement;
+      const band = bar.firstElementChild as HTMLElement;
+      const circle = [...bar.querySelectorAll('div')].find((d) => d.style.width === '56px') as HTMLElement;
+      return band.getBoundingClientRect().top - circle.getBoundingClientRect().top;
+    });
+  });
+  check('the FAB rises 16px above the band', fab === 16, String(fab));
 }
 
 console.log(allPass ? '\nAll positioning checks passed.' : '\nSome positioning checks FAILED.');

@@ -62,9 +62,11 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
 // ── 4. every authorable node type is in the batch_design docstring + README ──
 {
   const typesSrc = readFileSync('src/types.ts', 'utf-8');
-  const union = typesSrc.match(/export type NodeType =([\s\S]*?);/)?.[1] ?? '';
+  // Comments go first: a `;` inside one would end the union early (it hid
+  // skeleton, chart and every Phase 30 primitive from this check).
+  const union = typesSrc.replace(/\/\/[^\n]*/g, '').match(/export type NodeType =([\s\S]*?);/)?.[1] ?? '';
   const nodeTypes = [...union.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]).filter((t) => t !== 'document');
-  expect('node types found', nodeTypes.length >= 13, String(nodeTypes.length));
+  expect('node types found', nodeTypes.length >= 22 && nodeTypes.includes('tab-bar') && nodeTypes.includes('skeleton'), String(nodeTypes.length));
   const docLine = indexSrc.match(/Node types: ([^\n]+)/)?.[1] ?? '';
   const missingDoc = nodeTypes.filter((t) => !docLine.includes(t));
   expect('every node type in the batch_design docstring', missingDoc.length === 0, missingDoc.join(', '));

@@ -198,5 +198,20 @@ function styleOf(html: string, id: string): string {
     pinsTop({ id: 's', type: 'status-bar' }) && pinsTop({ id: 'f', type: 'frame', position: 'fixed' }) && !pinsTop({ id: 'f', type: 'frame', position: 'fixed', bottom: 0 }));
 }
 
+// ── mutation-round gaps ───────────────────────────────────────────────────
+{
+  console.log('\n── mutation-round gaps ──');
+  const safe = { safeArea: { top: 47, bottom: 34 } };
+  const comp = { id: 'c', name: 'c', variables: {}, components: { bar: { id: 'bar', type: 'component', children: [{ id: 'bar-tb', type: 'tab-bar', items: [{ icon: 'house', label: 'A' }, { icon: 'user', label: 'B' }] }] } } } as never;
+  const viaInstance = styleOf(renderToHtml(doc([{ id: 'i', type: 'instance', componentId: 'bar' }], safe), 390, 844, comp), 'doc');
+  check('a tab-bar inside an instance reserves the bottom too', viaInstance.includes('max(calc(0px + 34px), 83px)'), viaInstance);
+  const offsetTop = styleOf(render(doc([{ id: 'sb', type: 'status-bar', y: 10 }])), 'doc');
+  check('a status-bar at y 10 reserves 47 + 10', offsetTop.includes('padding-top: max(0px, 57px)'), offsetTop);
+  const fab = render(doc([{ id: 'tb', type: 'tab-bar', variant: 'fab', items: [{ icon: 'house', label: 'A' }, { icon: 'user', label: 'B' }] }]));
+  check('the FAB is centred in its slot and raised past the band border', fab.includes('left: 50%; top: -17px; margin-left: -28px'));
+  const back = render(doc([{ id: 'nb', type: 'nav-bar', title: 'T', leading: { label: 'Back' } }]));
+  check('a back action with no icon draws the chevron-left glyph', back.includes('lucide-chevron-left') || back.includes('m15 18-6-6 6-6'), back.slice(back.indexOf('data-node-id="nb"'), back.indexOf('data-node-id="nb"') + 400));
+}
+
 console.log(allPass ? '\nAll mobile primitive checks passed.' : '\nSome mobile primitive checks FAILED.');
 process.exit(allPass ? 0 : 1);

@@ -27,6 +27,8 @@ export const CHROME_EDGE: Record<string, 'top' | 'bottom'> = { 'status-bar': 'to
 
 const PROFILE = DEVICE_PROFILES[DEFAULT_DEVICE];
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+/** A label prop that renders: a non-blank string or a finite number. */
+const hasText = (v: unknown): boolean => (typeof v === 'string' && v.trim() !== '') || isNum(v);
 
 /** A node's position as rendered: pinned chrome defaults to `fixed`, and a
  * sheet is always `fixed`. */
@@ -59,20 +61,21 @@ export function buttonHeight(n: SceneNode): number {
  * icon-only button is square. Width is the numeric width when there is one. */
 export function buttonBox(n: SceneNode): { w: number; h: number } {
   const h = buttonHeight(n);
-  const iconOnly = !n.label?.trim();
+  const iconOnly = !hasText(n.label);
   return { w: !iconOnly && isNum(n.width) ? Math.max(n.width, h) : h, h };
 }
 
 export function listRowMinHeight(n: SceneNode): number {
-  return n.subtitle?.trim() ? LIST_ROW_SUBTITLE_HEIGHT : LIST_ROW_HEIGHT;
+  return hasText(n.subtitle) ? LIST_ROW_SUBTITLE_HEIGHT : LIST_ROW_HEIGHT;
 }
 
 export function navBarHeight(n: SceneNode): number {
   return n.largeTitle ? NAV_BAR_LARGE_HEIGHT : NAV_BAR_HEIGHT;
 }
 
-export function tabItems(n: SceneNode): SceneNode['items'] & object {
-  return Array.isArray(n.items) ? n.items : [];
+/** The tab items that render (a null entry is skipped). */
+export function tabItems(n: SceneNode): NonNullable<SceneNode['items']> {
+  return Array.isArray(n.items) ? n.items.filter((it) => !!it && typeof it === 'object') : [];
 }
 
 /** Slots across the band: one per item, plus the FAB's. */
@@ -86,9 +89,10 @@ export function tabItemBox(n: SceneNode, rootWidth: number): { w: number; h: num
   return { w: bar / Math.max(1, tabSlots(n)), h: TAB_BAND };
 }
 
+/** The nav-bar actions that render: the back action and up to two trailing. */
 export function navActions(n: SceneNode): { icon?: string; label?: string }[] {
-  const trailing = Array.isArray(n.trailing) ? n.trailing.slice(0, 2) : [];
-  return [...(n.leading ? [n.leading] : []), ...trailing];
+  const trailing = Array.isArray(n.trailing) ? n.trailing.filter((a) => !!a && typeof a === 'object').slice(0, 2) : [];
+  return [...(n.leading && typeof n.leading === 'object' ? [n.leading] : []), ...trailing];
 }
 
 /** Pinned to the bottom edge: fixed with a `bottom` (or bottom chrome with no

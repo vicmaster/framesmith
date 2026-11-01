@@ -103,8 +103,10 @@ async function expandViewportToContent(
   page: Page,
   { width, height, scale }: { width: number; height: number; scale: number },
 ): Promise<void> {
+  // The floor is !important too: the root's own inline `min-height:
+  // max-content` (Phase 30 slice D) would otherwise collapse a short design.
   await page.addStyleTag({
-    content: `body > *:first-child { height: auto !important; min-height: ${height}px; }`,
+    content: `body > *:first-child { height: auto !important; min-height: ${height}px !important; }`,
   });
   const contentHeight = await page.evaluate(() => Math.max(
     document.body.scrollHeight,

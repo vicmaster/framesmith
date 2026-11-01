@@ -8,7 +8,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, listRowMinHeight, navActions, tabItemBox, tabItems } from './primitives.js';
+import { FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, effectivePosition, listRowMinHeight, navActions, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -725,7 +725,8 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
     }
   }
 
-  // Token usage
+  // Token usage (copy and variant names on the mobile primitives are not
+  // style values — they could never be tokens)
   const hasVariables = canvas.variables && (
     Object.keys(canvas.variables.colors ?? {}).length > 0 ||
     Object.keys(canvas.variables.spacing ?? {}).length > 0
@@ -735,7 +736,7 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
     let totalProps = 0;
     for (const { node } of entries) {
       for (const [key, val] of Object.entries(node)) {
-        if (['id', 'type', 'name', 'children'].includes(key)) continue;
+        if (['id', 'type', 'name', 'children'].includes(key) || PRIMITIVE_COPY_PROPS.has(key)) continue;
         if (typeof val === 'string') {
           totalProps++;
           if (val.startsWith('$')) tokenRefs++;
@@ -797,7 +798,7 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
     else if (n.type === 'button') add(n, 'icon', n.icon, true, false);
     else if (n.type === 'list-row' || n.type === 'nav-bar') {
       add(n, 'leading.icon', n.leading?.icon, false, false);
-      if (n.type === 'nav-bar' && Array.isArray(n.trailing)) n.trailing.forEach((a, i) => add(n, `trailing[${i}].icon`, a?.icon, false, false));
+      if (n.type === 'nav-bar' && Array.isArray(n.trailing)) n.trailing.slice(0, 2).forEach((a, i) => add(n, `trailing[${i}].icon`, a?.icon, false, false));
     } else if (n.type === 'tab-bar') {
       (Array.isArray(n.items) ? n.items : []).forEach((it, i) => add(n, `items[${i}].icon`, it?.icon, false, true));
       if (n.variant === 'fab') add(n, 'fab.icon', n.fab?.icon, false, false);
@@ -806,6 +807,10 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
   })(root);
   return out;
 }
+
+/** Phase 30 slice D — the mobile primitives' copy and enum props: words and
+ * variant names, never style values, so the token census skips them. */
+const PRIMITIVE_COPY_PROPS = new Set(['title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition']);
 
 /** Spellings worth trying for an icon name that didn't resolve: Material
  * Symbols names multi-word icons with `_` (chevron_right), Lucide with `-`
@@ -1046,12 +1051,18 @@ function checkConsistencyDetailed(entries: NodeEntry[], layoutRects: LayoutRect[
 
     if (childRects.length < 2) continue;
 
-    // Check if non-absolute siblings overlap
+    // Check if in-flow siblings overlap. Positioned nodes overlap by design:
+    // absolute, and (Phase 30 slice D) pinned ones — a tab bar over the
+    // scrolling list, the home indicator over the tab bar, a sheet over all.
+    const layered = (n: SceneNode) => {
+      const position = effectivePosition(n);
+      return position === 'absolute' || position === 'fixed' || position === 'sticky';
+    };
     for (let i = 0; i < childRects.length; i++) {
       for (let j = i + 1; j < childRects.length; j++) {
         const a = childRects[i];
         const b = childRects[j];
-        if (a.node.position === 'absolute' || b.node.position === 'absolute') continue;
+        if (layered(a.node) || layered(b.node)) continue;
 
         const overlapX = Math.max(0, Math.min(a.rect.x + a.rect.width, b.rect.x + b.rect.width) - Math.max(a.rect.x, b.rect.x));
         const overlapY = Math.max(0, Math.min(a.rect.y + a.rect.height, b.rect.y + b.rect.height) - Math.max(a.rect.y, b.rect.y));
@@ -2188,28 +2199,23 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
   };
 }
 
-/** Phase 30 slice D — for every node an instance renders (its expanded
- * descendants), the outermost instance that owns it. */
-function instanceOwners(root: SceneNode, canvas: Canvas): Map<string, SceneNode> {
-  const own = new Set<string>();
-  (function walk(n: SceneNode) { own.add(n.id); n.children?.forEach(walk); })(root);
+/** Phase 30 slice D — the tree with every instance expanded into what it
+ * renders, for the mobile rules. Nodes inside an instance get ids prefixed by
+ * the instance path (`inst/child`), so two instances of one component never
+ * share an id, and `owners` maps each such id to the outermost instance. */
+function expandForRules(root: SceneNode, canvas: Canvas): { root: SceneNode; owners: Map<string, SceneNode> } {
   const owners = new Map<string, SceneNode>();
-  (function walk(n: SceneNode) {
-    if (n.type === 'instance' && n.componentId) {
-      const resolved = resolveInstance(n, canvas);
-      if (resolved) {
-        (function claim(x: SceneNode) {
-          for (const c of x.children ?? []) {
-            if (!own.has(c.id) && !owners.has(c.id)) owners.set(c.id, n);
-            claim(c.type === 'instance' && c.componentId ? resolveInstance(c, canvas) ?? c : c);
-          }
-        })(resolved);
-      }
-      return;
+  const walk = (node: SceneNode, owner: SceneNode | undefined, prefix: string): SceneNode => {
+    const id = owner ? prefix + node.id : node.id;
+    if (owner) owners.set(id, owner);
+    const resolved = node.type === 'instance' && node.componentId ? resolveInstance(node, canvas) : null;
+    if (resolved) {
+      const childPrefix = `${prefix}${node.id}/`;
+      return { ...resolved, id, children: resolved.children?.map((c) => walk(c, owner ?? node, childPrefix)) };
     }
-    n.children?.forEach(walk);
-  })(root);
-  return owners;
+    return { ...node, id, children: node.children?.map((c) => walk(c, owner, prefix)) };
+  };
+  return { root: walk(root, undefined, ''), owners };
 }
 
 /** Re-point findings on nodes inside an instance at the instance (the
@@ -2244,10 +2250,9 @@ export async function evaluateCanvas(
   // Phase 30 slice D — the mobile rules judge what the renderer draws, so they
   // read the tree with instances expanded (a tab bar inside a component is
   // still a tab bar). Findings inside an instance report the instance.
-  const expandedRaw = expandInstances(canvas.root, canvas);
+  const { root: expandedRaw, owners } = expandForRules(canvas.root, canvas);
   const mobileRoot = resolveVariables(expandedRaw, mergedTokens);
   const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
-  const owners = instanceOwners(canvas.root, canvas);
   const mobile: MobileContext = {
     root: mobileRoot,
     profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
@@ -2310,7 +2315,10 @@ export async function evaluateCanvas(
   if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed)) {
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-    const html = renderToHtml(resolvedRoot, w, h, canvas);
+    // On a mobile canvas render the tree the mobile rules read: instances
+    // expanded with their own ids (so the rects are unambiguous) and their
+    // tokens resolved. Web keeps the canvas render.
+    const html = mobileTypeRules ? renderToHtml(mobileRoot, w, h, canvas) : renderToHtml(resolvedRoot, w, h, canvas);
     detailedLayout = await computeLayout(html, undefined, ruleOn.has('mobile-safe-area') ? 25 : 10, { width: w, height: h });
   }
   if (activeCategories.includes('typography')) {
@@ -2404,7 +2412,7 @@ export async function evaluateCanvas(
   let totalStringProps = 0;
   for (const { node } of rawEntries) {
     for (const [key, val] of Object.entries(node)) {
-      if (['id', 'type', 'name', 'children'].includes(key)) continue;
+      if (['id', 'type', 'name', 'children'].includes(key) || PRIMITIVE_COPY_PROPS.has(key)) continue;
       if (typeof val === 'string') {
         totalStringProps++;
         if (val.startsWith('$')) tokenRefs++;

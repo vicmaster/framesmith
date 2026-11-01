@@ -92,6 +92,23 @@ I(c4, { type: "text", content: "paused" })
   check('table fixture: empty perturbation renders clean', !rEmpty.skipped && rEmpty.findings.filter((f) => f.severity === 'warning').length === 0, JSON.stringify(rEmpty.findings));
   const rMany = await stress(tbl, 'many');
   check('table fixture: many perturbation renders clean', !rMany.skipped && rMany.findings.filter((f) => f.severity === 'warning').length === 0, JSON.stringify(rMany.findings));
+  // Phase 30 slice D verify round — 25 truncating rows must not use up the
+  // finding cap before the real clip below them.
+  {
+    const PW = 390;
+    const PH = 844;
+    const rowsCanvas = createCanvas('stress-cap', undefined, {}, { type: 'mobile' });
+    parseAndExecute(rowsCanvas.root, `l=I("document", { type: "frame", layout: "vertical" })
+${Array.from({ length: 25 }, (_, i) => `I(l, { type: "list-row", title: "Morning run ${i}" })`).join('\n')}
+b=I("document", { type: "frame", width: 300, height: 20, overflow: "hidden" })
+I(b, { type: "text", content: "Morning run summary" })`, rowsCanvas);
+    const base = await computeLayout(renderToHtml(resolveVariables(structuredClone(rowsCanvas.root), {}), PW, PH, rowsCanvas), undefined, 25, { width: PW, height: PH });
+    const { root, touched } = applyPerturbation('long-text', rowsCanvas.root, { type: 'mobile' });
+    const pert = await computeLayout(renderToHtml(resolveVariables(structuredClone(root), {}), PW, PH, rowsCanvas), undefined, 25, { width: PW, height: PH });
+    const findings = compareLayouts(base, pert, touched, PW);
+    check('25 truncating rows + a real clip → the clip warning survives the cap', findings.some((f) => f.severity === 'warning' && f.kind === 'clip'), JSON.stringify(findings.map((f) => `${f.severity} ${f.kind}`)));
+  }
+
   // Phase 30 slice D — primitives under stress at phone width: a five-tab bar
   // under i18n truncates its labels by design (info, never a warning); a
   // list-row survives long-text with designed truncation only; a sheet's

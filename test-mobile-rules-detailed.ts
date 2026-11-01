@@ -203,5 +203,73 @@ ${rows(30)}`);
   check('the slice C gap is closed: a long safeArea screen is clean in detailed mode with no spacer', lg.length === 0, show(lg));
 }
 
+// ── slice D: verify-round regressions (detailed) ──────────────────────────
+{
+  console.log('\n── slice D: verify-round regressions (detailed) ──');
+  const rows = (n: number, p = 'Row') => Array.from({ length: n }, (_, i) => `I(list, { type: "list-row", name: "${p} ${i}", title: "${p} ${i}" })`).join('\n');
+  const all = async (c: Canvas) => (await evaluateCanvas(c, { mode: 'detailed' })).issues;
+
+  const chrome = phone(`I("document", { type: "status-bar" })
+I("document", { type: "nav-bar", title: "Inbox" })
+list=I("document", { type: "frame", layout: "vertical" })
+${rows(14)}
+I("document", { type: "tab-bar", items: [{ icon: "house", label: "A" }, { icon: "user", label: "B" }] })
+I("document", { type: "home-indicator" })
+sh=I("document", { type: "sheet", detent: "medium" })
+I(sh, { type: "text", content: "Share" })`);
+  const overlaps = (await all(chrome)).filter((i) => i.message.includes('overlaps'));
+  check('tab-bar + home-indicator + sheet over a long list: no overlap errors', overlaps.length === 0, show(overlaps));
+  const cell = phone(`g=I("document", { type: "frame", layout: "grid", gridColumns: 1, height: 100 })
+I(g, { type: "frame", name: "One", height: 60, gridColumn: "1 / 2", gridRow: "1 / 2", fill: "#EEE" })
+I(g, { type: "frame", name: "Two", height: 60, gridColumn: "1 / 2", gridRow: "1 / 2", fill: "#DDD" })`);
+  check('…two in-flow siblings in one grid cell still overlap (probe)', (await all(cell)).some((i) => i.message.includes('overlaps')));
+
+  const inst = phone(`I("document", { type: "instance", componentId: "t", name: "Top" })
+I("document", { type: "frame", height: 300 })
+I("document", { type: "instance", componentId: "t", name: "Low" })`, { bare: true });
+  inst.components = { t: { id: 't', type: 'component', children: [{ id: 't-text', type: 'text', content: 'Label' }] } };
+  const instHits = await safeArea(inst, 'detailed');
+  check('detailed sees the top-inset hit inside the first of two instances', instHits.some((i) => i.nodeId === inst.root.children![0].id && i.message.includes('top')), show(instHits));
+
+  const cta = `bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", padding: [12, 16, 12, 16], fill: "#FFFFFF" })
+I(bar, { type: "button", label: "Pay", width: "100%" })
+I(bar, { type: "frame", height: 34 })`;
+  const withSheet = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(22)}
+${cta}
+sh=I("document", { type: "sheet", detent: "medium" })
+${Array.from({ length: 30 }, (_, i) => `I(sh, { type: "list-row", title: "Opt ${i}" })`).join('\n')}`);
+  check('a long sheet does not hide the last row under the CTA at max scroll', (await safeArea(withSheet, 'detailed')).some((i) => i.message.includes('Row 21') && i.message.includes('under pinned')));
+
+  const scroller = phone(`list=I("document", { type: "frame", layout: "vertical", height: 600, overflow: "auto" })
+${rows(22)}
+${cta}`);
+  const sc = await safeArea(scroller, 'detailed');
+  check('rows clipped inside a 600px scroller are not "at the end of the scroll"', !sc.some((i) => i.message.includes('end of the scroll')), show(sc));
+
+  const blurred = phone(`w=I("document", { type: "frame", height: 120, blur: 4 })
+b=I(w, { type: "frame", position: "fixed", bottom: 0, height: 60, layout: "vertical" })
+I(b, { type: "button", label: "Go" })
+list=I("document", { type: "frame", layout: "vertical" })
+${rows(22)}`);
+  const bl = await safeArea(blurred, 'detailed');
+  check('a fixed bar under a blurred frame is not treated as pinned at max scroll', !bl.some((i) => i.message.includes('under pinned')), show(bl));
+}
+
+// ── slice D: mutation-round gaps (detailed) ───────────────────────────────
+{
+  console.log('\n── slice D: mutation-round gaps (detailed) ──');
+  const sheet = phone(`I("document", { type: "text", content: "Behind" })
+sh=I("document", { type: "sheet", detent: "medium" })
+${Array.from({ length: 20 }, (_, i) => `I(sh, { type: "list-row", name: "Opt ${i}", title: "Opt ${i}" })`).join('\n')}`);
+  const sh = await safeArea(sheet, 'detailed');
+  check('a scrolling sheet\'s rows are never judged in detailed mode', sh.length === 0, show(sh));
+  const narrow = phone(`list=I("document", { type: "frame", layout: "vertical", padding: [0, 16] })
+${Array.from({ length: 22 }, (_, i) => `I(list, { type: "text", name: "Line ${i}", content: "Line ${i}", width: 120, height: 40 })`).join('\n')}
+I("document", { type: "button", name: "Fab", icon: "plus", position: "fixed", right: 16, bottom: 50 })`);
+  const nw = await safeArea(narrow, 'detailed');
+  check('a narrow fixed button on the right never covers left-side lines', !nw.some((i) => i.message.includes('under pinned')), show(nw));
+}
+
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');
 process.exit(allPass ? 0 : 1);

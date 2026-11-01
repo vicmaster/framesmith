@@ -3,8 +3,8 @@ import { getIconSvg } from './icons.js';
 import { aliasFamilyStack } from './fonts.js';
 import { usableSafeArea } from './surfaces.js';
 import {
-  BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, TAB_BAND,
-  buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets, tabItems,
+  BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
+  buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
 } from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
@@ -79,15 +79,25 @@ function registeredFamilies(canvas?: Canvas): ReadonlySet<string> | undefined {
 interface RenderCtx {
   canvas?: Canvas;
   registered?: ReadonlySet<string>;
-  rootWidth: number;
+  /** The body's max width (the capture width): pinned offsets measure from
+   * its left edge, which is where the root starts. */
+  bodyWidth: number;
+  /** The width pinned elements are capped at: the root's own width when it
+   * sets one, never wider than the body. */
+  columnWidth: number;
   insets: { top: number; bottom: number };
   reservation: { top: number; bottom: number };
+  /** Rendering a direct child of a column document root. */
+  rootChild?: boolean;
+  /** Rendering a direct child of a sheet, whose panel scrolls: it never shrinks. */
+  sheetChild?: boolean;
 }
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
   const registered = registeredFamilies(canvas);
   const expand = (n: SceneNode) => (n.type === 'instance' && n.componentId && canvas ? resolveInstance(n, canvas) ?? n : n);
-  const rc: RenderCtx = { canvas, registered, rootWidth: width, insets: rootInsets(root), reservation: chromeReservation(root, expand) };
+  const columnWidth = Math.min(typeof root.width === 'number' ? root.width : width, width);
+  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation: chromeReservation(root, expand) };
   const body = renderNode(root, rc);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
@@ -644,7 +654,10 @@ function applyOverrides(node: SceneNode, overrides: Record<string, Partial<Scene
 
 function renderChildren(node: SceneNode, rc: RenderCtx): string {
   if (!node.children?.length) return '';
-  return node.children.map((child) => renderNode(child, rc)).join('\n');
+  const rootChild = node.type === 'document' && node.layout !== 'horizontal' && node.layout !== 'grid';
+  const sheetChild = node.type === 'sheet';
+  const childRc = rootChild === !!rc.rootChild && sheetChild === !!rc.sheetChild ? rc : { ...rc, rootChild, sheetChild };
+  return node.children.map((child) => renderNode(child, childRc)).join('\n');
 }
 
 function buildStyles(node: SceneNode, rc: RenderCtx): string {
@@ -663,12 +676,20 @@ function buildStyles(node: SceneNode, rc: RenderCtx): string {
   if (node.minWidth !== undefined) s.push(`min-width: ${cssLength(node.minWidth)}`);
   if (node.minHeight !== undefined) s.push(`min-height: ${cssLength(node.minHeight)}`);
   if (node.maxWidth !== undefined) s.push(`max-width: ${cssLength(node.maxWidth)}`);
-  if (node.height !== undefined) s.push(`height: ${cssLength(node.height)}`);
+  // Phase 30 slice D — a root child filling the column (`height: "100%"`)
+  // takes the space its siblings leave, as it did when the fixed-height root
+  // squeezed it; with taller content it grows instead of clipping.
+  const fillsRoot = rc.rootChild && node.height === '100%' && node.position !== 'absolute' && node.position !== 'fixed';
+  if (fillsRoot) s.push('flex: 1 1 auto', ...(node.minHeight === undefined ? ['min-height: 0'] : []));
+  else if (node.height !== undefined) s.push(`height: ${cssLength(node.height)}`);
+  if (rc.sheetChild) s.push('flex-shrink: 0');
   // Phase 30 slice D — the root's box is the viewport, and content may be
   // taller: the root grows to its content (keeping its end padding past it,
   // and its children their sizes) while `height: 100%` children still resolve
-  // against the artboard. An authored overflow keeps the plain fixed height.
-  if (node.type === 'document' && typeof node.height === 'number' && (node.overflow === undefined || node.overflow === 'visible')) {
+  // against the artboard. An authored overflow keeps the plain fixed height,
+  // and an authored minHeight is the author's own floor.
+  if (node.type === 'document' && typeof node.height === 'number' && node.minHeight === undefined
+    && (node.overflow === undefined || node.overflow === 'visible')) {
     s.push('min-height: max-content');
   }
 
@@ -922,10 +943,13 @@ function renderSelect(node: SceneNode, dataAttr: string): string {
 // ── mobile primitives (Phase 30 slice D) ─────────────────────────────────────
 // Fixed anatomy like the controls: each builder hand-rolls its styles from
 // src/primitives.ts geometry, and colours arrive pre-defaulted by
-// resolveVariables. Every primitive refuses to flex-shrink, so it keeps its
-// size in a fixed-height column. Labels sit in `data-fs-label` elements that
-// truncate to one line — canvas_stress reads their overflow as designed
-// truncation.
+// resolveVariables (the fallbacks below only serve a primitive that skipped
+// it, such as one inside a component). Every primitive refuses to
+// flex-shrink, so it keeps its size in a fixed-height column. Labels sit in
+// `data-fs-label` elements that truncate to one line — canvas_stress reads
+// their overflow as designed truncation.
+
+const FALLBACK = { accent: '#2563EB', text: '#111827', secondary: '#6B7280', border: '#D1D5DB', surface: '#FFFFFF', danger: '#DC2626' } as const;
 
 function renderPrimitive(node: SceneNode, rc: RenderCtx): string | undefined {
   const dataAttr = ` data-node-id="${node.id}" data-fs-primitive`;
@@ -941,23 +965,41 @@ function renderPrimitive(node: SceneNode, rc: RenderCtx): string | undefined {
   }
 }
 
-const style = (parts: Array<string | false | undefined>): string =>
+/** Join style declarations, dropping the absent ones. */
+const css = (parts: Array<string | false | undefined>): string =>
   escapeStyleValue(parts.filter((p): p is string => typeof p === 'string' && p.length > 0).join('; '));
+
+/** A prop as text: agents send numbers for labels and badges. */
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+}
+
+/** Plain-object entries of an array prop (a null entry is skipped). */
+function entries<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value.filter((v): v is T => !!v && typeof v === 'object') : [];
+}
 
 const LABEL_CSS = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%';
 
-function label(text: string, css: string): string {
-  return `<span data-fs-label style="${escapeStyleValue(`${LABEL_CSS}; ${css}`)}">${escapeHtml(text)}</span>`;
+function labelHtml(value: string, style: string): string {
+  return `<span data-fs-label style="${escapeStyleValue(`${LABEL_CSS}; ${style}`)}">${escapeHtml(value)}</span>`;
 }
 
-function icon(name: string | undefined, size: number, color: string | undefined): string {
-  if (!name) return '';
-  return getIconSvg(name, size, color) ?? `<!-- unknown icon: ${escapeHtml(name)} -->`;
+function iconHtml(name: unknown, size: number, color: string | undefined): string {
+  const ref = text(name);
+  if (!ref) return '';
+  return getIconSvg(ref, size, color) ?? `<!-- unknown icon: ${escapeHtml(ref)} -->`;
+}
+
+/** A badge shows unless it is empty or zero. */
+function badgeText(value: unknown): string {
+  const t = text(value);
+  return t === '0' ? '' : t;
 }
 
 /** Chrome glyph colour: appearance wins, else the defaulted `color`. */
 function chromeColor(node: SceneNode): string {
-  return node.appearance === 'dark' ? '#000000' : node.appearance === 'light' ? '#FFFFFF' : node.color ?? '#111827';
+  return node.appearance === 'dark' ? '#000000' : node.appearance === 'light' ? '#FFFFFF' : node.color ?? FALLBACK.text;
 }
 
 // Status-bar glyphs (bundled — no dependency): cellular bars, wifi, battery.
@@ -967,162 +1009,180 @@ const BATTERY_SVG = (c: string) => `<svg width="27" height="13" viewBox="0 0 27 
 
 function renderStatusBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
   const c = escapeAttr(chromeColor(node));
-  const box = style([
+  const box = css([
     ...positionStyles(node, rc), 'flex-shrink: 0', 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`,
     'display: flex', 'align-items: center', 'justify-content: space-between', 'padding: 0 26px 0 32px',
     `color: ${chromeColor(node)}`, node.fill ? `background-color: ${node.fill}` : undefined,
   ]);
-  const time = `<span style="font-size: 15px; font-weight: 600; letter-spacing: -0.2px; font-variant-numeric: tabular-nums">${escapeHtml(node.time ?? '9:41')}</span>`;
+  const time = `<span style="font-size: 15px; font-weight: 600; letter-spacing: -0.2px; font-variant-numeric: tabular-nums">${escapeHtml(text(node.time) || '9:41')}</span>`;
   return `<div${dataAttr} style="${box}">${time}<span style="display: flex; align-items: center; gap: 6px">${SIGNAL_SVG(c)}${WIFI_SVG(c)}${BATTERY_SVG(c)}</span></div>`;
 }
 
 function renderHomeIndicator(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
-  const box = style([
+  const box = css([
     ...positionStyles(node, rc), 'flex-shrink: 0', 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`,
     'display: flex', 'align-items: flex-end', 'justify-content: center', 'padding-bottom: 8px', 'pointer-events: none',
     node.fill ? `background-color: ${node.fill}` : undefined,
   ]);
-  return `<div${dataAttr} style="${box}"><div style="${style(['width: 134px', 'height: 5px', 'border-radius: 3px', `background-color: ${chromeColor(node)}`])}"></div></div>`;
+  return `<div${dataAttr} style="${box}"><div style="${css(['width: 134px', 'height: 5px', 'border-radius: 3px', `background-color: ${chromeColor(node)}`])}"></div></div>`;
 }
 
-function navAction(action: { icon?: string; label?: string }, color: string, back: boolean): string {
-  const glyph = icon(action.icon ?? (back ? 'chevron-left' : undefined), 24, color);
-  const text = action.label?.trim() ? label(action.label, 'font-size: 17px') : '';
-  return `<div style="${style([
+function navAction(action: { icon?: unknown; label?: unknown }, color: string, back: boolean): string {
+  const glyph = iconHtml(action.icon ?? (back ? 'chevron-left' : undefined), 24, color);
+  const words = text(action.label) ? labelHtml(text(action.label), 'font-size: 17px') : '';
+  return `<div style="${css([
     'display: flex', 'align-items: center', 'justify-content: center', 'gap: 2px', 'flex-shrink: 0',
-    `min-width: ${NAV_ACTION}px`, `height: ${NAV_ACTION}px`, text ? 'padding: 0 8px' : undefined, `color: ${color}`,
-  ])}">${glyph}${text}</div>`;
+    `min-width: ${NAV_ACTION}px`, `height: ${NAV_ACTION}px`, words ? 'padding: 0 8px' : undefined, `color: ${color}`,
+  ])}">${glyph}${words}</div>`;
 }
 
 function renderNavBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
-  const action = node.iconColor ?? '#2563EB';
-  const trailing = Array.isArray(node.trailing) ? node.trailing.slice(0, 2) : [];
-  const title = node.title?.trim() ?? '';
-  const box = style([
+  const action = node.iconColor ?? FALLBACK.accent;
+  const leading = node.leading && typeof node.leading === 'object' ? node.leading : undefined;
+  const trailing = entries<{ icon?: unknown; label?: unknown }>(node.trailing).slice(0, 2);
+  const title = text(node.title);
+  const box = css([
     ...positionStyles(node, rc), 'flex-shrink: 0', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: 100%',
     `height: ${navBarHeight(node)}px`, 'display: flex', 'flex-direction: column',
-    `color: ${node.color ?? '#111827'}`, node.fill ? `background-color: ${node.fill}` : undefined,
+    `color: ${node.color ?? FALLBACK.text}`, node.fill ? `background-color: ${node.fill}` : undefined,
   ]);
+  // Equal-flex sides keep the title centred; it truncates before it can
+  // collide with a wide action.
+  const side = (justify: string, inner: string) =>
+    `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'align-items: center', `justify-content: ${justify}`])}">${inner}</div>`;
   const centred = !node.largeTitle && title
-    ? `<div style="${style(['position: absolute', 'left: 96px', 'right: 96px', 'top: 0', `height: ${NAV_ACTION}px`, 'display: flex', 'align-items: center', 'justify-content: center'])}">${label(title, 'font-size: 17px; font-weight: 600')}</div>`
+    ? `<div style="${css(['flex: 0 1 auto', 'min-width: 0', 'display: flex', 'justify-content: center', 'padding: 0 4px'])}">${labelHtml(title, 'font-size: 17px; font-weight: 600')}</div>`
     : '';
-  const row = `<div style="${style(['position: relative', 'display: flex', 'align-items: center', 'justify-content: space-between', `height: ${NAV_ACTION}px`, 'padding: 0 4px'])}">`
-    + `<div style="display: flex; align-items: center; min-width: ${NAV_ACTION}px">${node.leading ? navAction(node.leading, action, true) : ''}</div>`
+  const row = `<div style="${css(['display: flex', 'align-items: center', `height: ${NAV_ACTION}px`, 'padding: 0 4px'])}">`
+    + side('flex-start', leading ? navAction(leading, action, true) : '')
     + centred
-    + `<div style="display: flex; align-items: center">${trailing.map((a) => navAction(a, action, false)).join('')}</div></div>`;
+    + side('flex-end', trailing.map((a) => navAction(a, action, false)).join('')) + '</div>';
   const large = node.largeTitle
-    ? `<div style="${style(['height: 52px', 'display: flex', 'align-items: center', 'padding: 0 16px'])}">${label(title, 'font-size: 34px; font-weight: 700; letter-spacing: -0.4px')}</div>`
+    ? `<div style="${css([`height: ${NAV_BAR_LARGE_HEIGHT - NAV_BAR_HEIGHT}px`, 'display: flex', 'align-items: center', 'padding: 0 16px'])}">${labelHtml(title, 'font-size: 34px; font-weight: 700; letter-spacing: -0.4px')}</div>`
     : '';
   return `<div${dataAttr} style="${box}">${row}${large}</div>`;
 }
 
-function tabItem(item: { icon?: string; label?: string; active?: boolean; badge?: string | number }, node: SceneNode): string {
-  const color = item.active ? node.iconColor ?? '#2563EB' : node.color ?? '#6B7280';
-  const badge = item.badge !== undefined && String(item.badge).trim()
-    ? `<span style="${style(['position: absolute', 'top: -4px', 'left: 16px', 'min-width: 16px', 'height: 16px', 'padding: 0 4px', 'border-radius: 8px', `background-color: ${node.badgeColor ?? '#DC2626'}`, 'color: #FFFFFF', 'font-size: 11px', 'font-weight: 600', 'line-height: 16px', 'text-align: center'])}">${escapeHtml(String(item.badge))}</span>`
+function tabItem(item: { icon?: unknown; label?: unknown; active?: unknown; badge?: unknown }, node: SceneNode): string {
+  const color = item.active ? node.iconColor ?? FALLBACK.accent : node.color ?? FALLBACK.secondary;
+  const count = badgeText(item.badge);
+  const badge = count
+    ? `<span style="${css(['position: absolute', 'top: -4px', 'left: 16px', 'min-width: 16px', 'height: 16px', 'padding: 0 4px', 'border-radius: 8px', `background-color: ${node.badgeColor ?? FALLBACK.danger}`, 'color: #FFFFFF', 'font-size: 11px', 'font-weight: 600', 'line-height: 16px', 'text-align: center'])}">${escapeHtml(count)}</span>`
     : '';
-  return `<div style="${style(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'flex-direction: column', 'align-items: center', 'justify-content: center', 'gap: 2px', `color: ${color}`])}">`
-    + `<span style="position: relative; display: flex">${icon(item.icon, 24, color)}${badge}</span>`
-    + `${item.label?.trim() ? label(item.label, 'font-size: 11px; font-weight: 500; line-height: 13px') : ''}</div>`;
+  const words = text(item.label);
+  return `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'flex-direction: column', 'align-items: center', 'justify-content: center', 'gap: 2px', `color: ${color}`])}">`
+    + `<span style="position: relative; display: flex">${iconHtml(item.icon, 24, color)}${badge}</span>`
+    + `${words ? labelHtml(words, 'font-size: 11px; font-weight: 500; line-height: 13px') : ''}</div>`;
 }
 
 function renderTabBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
-  const items = tabItems(node);
-  const fill = node.fill ?? '#FFFFFF';
-  const border = node.stroke ?? '#D1D5DB';
+  const items = entries<Parameters<typeof tabItem>[0]>(node.items);
+  const fill = node.fill ?? FALLBACK.surface;
+  const border = node.stroke ?? FALLBACK.border;
   const variant = node.variant === 'floating' || node.variant === 'fab' ? node.variant : 'standard';
   const slots = items.map((it) => tabItem(it, node));
   if (variant === 'fab') {
-    const accent = node.iconColor ?? '#2563EB';
-    const fab = `<div style="${style(['flex: 1 1 0', 'min-width: 0', 'position: relative'])}"><div style="${style([
-      'position: absolute', 'left: 50%', `top: -${FAB_RAISE}px`, `margin-left: -${FAB_SIZE / 2}px`, `width: ${FAB_SIZE}px`, `height: ${FAB_SIZE}px`,
+    const accent = node.iconColor ?? FALLBACK.accent;
+    // The row starts below the band's 1px top border, so the FAB rises one
+    // more pixel to sit FAB_RAISE above the band's edge.
+    const fab = `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'position: relative'])}"><div style="${css([
+      'position: absolute', 'left: 50%', `top: -${FAB_RAISE + 1}px`, `margin-left: -${FAB_SIZE / 2}px`, `width: ${FAB_SIZE}px`, `height: ${FAB_SIZE}px`,
       'border-radius: 50%', `background-color: ${accent}`, 'display: flex', 'align-items: center', 'justify-content: center',
       'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18)',
-    ])}">${icon(node.fab?.icon ?? 'plus', 24, '#FFFFFF')}</div></div>`;
+    ])}">${iconHtml(node.fab?.icon ?? 'plus', 24, '#FFFFFF')}</div></div>`;
     slots.splice(Math.ceil(items.length / 2), 0, fab);
   }
-  const row = `<div style="${style(['display: flex', `height: ${TAB_BAND}px`, 'align-items: stretch'])}">${slots.join('')}</div>`;
+  const row = `<div style="${css(['display: flex', `height: ${TAB_BAND}px`, 'align-items: stretch'])}">${slots.join('')}</div>`;
   const outer = [...positionStyles(node, rc), 'flex-shrink: 0', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`];
   if (variant === 'floating') {
-    const pill = style([`height: ${TAB_BAND}px`, `border-radius: ${TAB_BAND / 2}px`, `background-color: ${fill}`, `border: 1px solid ${border}`, 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12)', 'overflow: hidden']);
-    return `<div${dataAttr} style="${style([...outer, `padding: 0 ${FLOATING_INSET}px`])}"><div style="${pill}">${row}</div></div>`;
+    const pill = css([`height: ${TAB_BAND}px`, `border-radius: ${TAB_BAND / 2}px`, `background-color: ${fill}`, `border: 1px solid ${border}`, 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12)', 'overflow: hidden']);
+    return `<div${dataAttr} style="${css([...outer, `padding: 0 ${FLOATING_INSET}px`])}"><div style="${pill}">${row}</div></div>`;
   }
   const band = [`background-color: ${fill}`, `border-top: 1px solid ${border}`];
   if (variant === 'fab') {
-    return `<div${dataAttr} style="${style([...outer, `padding-top: ${FAB_RAISE}px`])}"><div style="${style([...band, 'height: 100%'])}">${row}</div></div>`;
+    return `<div${dataAttr} style="${css([...outer, `padding-top: ${FAB_RAISE}px`])}"><div style="${css([...band, 'height: 100%'])}">${row}</div></div>`;
   }
-  return `<div${dataAttr} style="${style([...outer, ...band])}">${row}</div>`;
+  return `<div${dataAttr} style="${css([...outer, ...band])}">${row}</div>`;
 }
 
 function renderButton(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const size = node.size === 'sm' || node.size === 'lg' ? node.size : 'md';
   const h = buttonHeight(node);
-  const text = node.label?.trim() ? label(node.label, '') : '';
-  const glyph = icon(node.icon, size === 'sm' ? 16 : 20, node.color);
+  const words = text(node.label) ? labelHtml(text(node.label), '') : '';
+  // Unthemed (a button inside a component skips resolveVariables): the
+  // primary look, so it is never an invisible white-on-transparent label.
+  const fill = node.fill ?? (node.variant === 'secondary' || node.variant === 'ghost' ? 'transparent' : node.variant === 'destructive' ? FALLBACK.danger : FALLBACK.accent);
+  const color = node.color ?? (fill === 'transparent' ? FALLBACK.accent : '#FFFFFF');
+  const glyph = iconHtml(node.icon, size === 'sm' ? 16 : 20, color);
   const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 8;
-  const box = style([
-    `--fs-ring: ${node.fill && node.fill !== 'transparent' ? node.fill : node.color ?? '#2563EB'}`,
+  const box = css([
+    `--fs-ring: ${fill !== 'transparent' ? fill : color}`,
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'justify-content: center', 'gap: 8px',
     `height: ${h}px`, `min-height: ${h}px`, `min-width: ${h}px`,
-    text ? (node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: fit-content') : `width: ${h}px`,
-    text ? `padding: 0 ${BUTTON_PADDING[size]}px` : 'padding: 0',
-    `border-radius: ${radius}px`, `background-color: ${node.fill ?? 'transparent'}`,
+    words ? (node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: fit-content') : `width: ${h}px`,
+    // A long label truncates inside the column instead of running past it.
+    words && node.maxWidth === undefined ? 'max-width: 100%' : undefined,
+    words ? `padding: 0 ${BUTTON_PADDING[size]}px` : 'padding: 0',
+    `border-radius: ${radius}px`, `background-color: ${fill}`,
     node.stroke ? `border: 1px solid ${node.stroke}` : undefined,
-    `color: ${node.color ?? '#FFFFFF'}`, `font-size: ${BUTTON_FONT[size]}px`, 'font-weight: 600', 'white-space: nowrap',
+    `color: ${color}`, `font-size: ${BUTTON_FONT[size]}px`, 'font-weight: 600', 'white-space: nowrap',
     node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
   ]);
-  const parts = node.iconPosition === 'trailing' ? `${text}${glyph}` : `${glyph}${text}`;
+  const parts = node.iconPosition === 'trailing' ? `${words}${glyph}` : `${glyph}${words}`;
   return `<div${attrs} style="${box}">${parts}</div>`;
 }
 
 function listRowTrailing(node: SceneNode): string {
   const t = node.trailing;
-  if (!t || Array.isArray(t)) return '';
-  const secondary = node.secondaryColor ?? '#6B7280';
-  if (t.text?.trim()) return `<div style="flex-shrink: 1; min-width: 0; max-width: 50%; display: flex">${label(t.text, `font-size: 15px; color: ${secondary}`)}</div>`;
-  if (t.chevron) return `<div style="flex-shrink: 0; display: flex">${icon('chevron-right', 18, secondary)}</div>`;
+  if (!t || typeof t !== 'object' || Array.isArray(t)) return '';
+  const secondary = node.secondaryColor ?? FALLBACK.secondary;
+  // A short accessory keeps its width; only a long one truncates (at half the row).
+  if (text(t.text)) return `<div style="flex: 0 1 auto; min-width: 0; max-width: 50%; display: flex">${labelHtml(text(t.text), `font-size: 15px; color: ${secondary}`)}</div>`;
+  if (t.chevron) return `<div style="flex-shrink: 0; display: flex">${iconHtml('chevron-right', 18, secondary)}</div>`;
   if (typeof t.toggle === 'boolean') {
-    const track = t.toggle ? node.iconColor ?? '#2563EB' : node.stroke ?? '#D1D5DB';
-    return `<div style="${style(['position: relative', 'flex-shrink: 0', 'width: 44px', 'height: 24px', 'border-radius: 12px', `background-color: ${track}`])}"><div style="${style(['position: absolute', 'top: 3px', `left: ${t.toggle ? 23 : 3}px`, 'width: 18px', 'height: 18px', 'border-radius: 50%', 'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)'])}"></div></div>`;
+    const track = t.toggle ? node.iconColor ?? FALLBACK.accent : node.stroke ?? FALLBACK.border;
+    return `<div style="${css(['position: relative', 'flex-shrink: 0', 'width: 44px', 'height: 24px', 'border-radius: 12px', `background-color: ${track}`])}"><div style="${css(['position: absolute', 'top: 3px', `left: ${t.toggle ? 23 : 3}px`, 'width: 18px', 'height: 18px', 'border-radius: 50%', 'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)'])}"></div></div>`;
   }
-  if (t.badge !== undefined && String(t.badge).trim()) {
-    return `<span style="${style(['flex-shrink: 0', 'min-width: 20px', 'height: 20px', 'padding: 0 6px', 'border-radius: 10px', `background-color: ${node.badgeColor ?? node.iconColor ?? '#2563EB'}`, 'color: #FFFFFF', 'font-size: 12px', 'font-weight: 600', 'line-height: 20px', 'text-align: center'])}">${escapeHtml(String(t.badge))}</span>`;
+  const count = badgeText(t.badge);
+  if (count) {
+    return `<span style="${css(['flex-shrink: 0', 'min-width: 20px', 'height: 20px', 'padding: 0 6px', 'border-radius: 10px', `background-color: ${node.badgeColor ?? node.iconColor ?? FALLBACK.accent}`, 'color: #FFFFFF', 'font-size: 12px', 'font-weight: 600', 'line-height: 20px', 'text-align: center'])}">${escapeHtml(count)}</span>`;
   }
   return '';
 }
 
 function listRowLeading(node: SceneNode): string {
   const l = node.leading;
-  if (!l) return '';
+  if (!l || typeof l !== 'object') return '';
   // Every leading kind takes the same 32px slot, so titles align down a list.
   const slot = ['flex-shrink: 0', 'width: 32px', 'height: 32px'];
-  if (l.icon) return `<div style="${style([...slot, 'display: flex', 'align-items: center', 'justify-content: center'])}">${icon(l.icon, 22, node.iconColor)}</div>`;
+  if (text(l.icon)) return `<div style="${css([...slot, 'display: flex', 'align-items: center', 'justify-content: center'])}">${iconHtml(l.icon, 22, node.iconColor)}</div>`;
   const circle = [...slot, 'border-radius: 50%'];
-  if (l.image) return `<img src="${escapeHtml(l.image)}" style="${style([...circle, 'object-fit: cover', 'display: block'])}" />`;
-  if (l.initials?.trim()) {
-    return `<div style="${style([...circle, 'display: flex', 'align-items: center', 'justify-content: center', `background-color: ${node.stroke ?? '#D1D5DB'}`, 'font-size: 13px', 'font-weight: 600'])}">${escapeHtml(l.initials.trim().slice(0, 3))}</div>`;
+  if (text(l.image)) return `<img src="${escapeHtml(text(l.image))}" style="${css([...circle, 'object-fit: cover', 'display: block'])}" />`;
+  if (text(l.initials)) {
+    return `<div style="${css([...circle, 'display: flex', 'align-items: center', 'justify-content: center', `background-color: ${node.stroke ?? FALLBACK.border}`, 'font-size: 13px', 'font-weight: 600'])}">${escapeHtml(text(l.initials).slice(0, 3))}</div>`;
   }
   return '';
 }
 
 function renderListRow(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
   const position = effectivePosition(node);
-  const box = style([
+  const box = css([
     ...positionStyles(node, rc), position ? undefined : 'position: relative',
     'display: flex', 'flex-direction: row', 'align-items: center', 'gap: 12px', 'flex-shrink: 0',
     `min-height: ${listRowMinHeight(node)}px`, typeof node.height === 'number' ? `height: ${node.height}px` : undefined,
     'padding: 6px 16px', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'align-self: stretch',
-    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? '#111827'}`,
+    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? FALLBACK.text}`,
     node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
   ]);
-  const text = `<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px">`
-    + label(node.title ?? '', 'font-size: 16px; line-height: 1.3')
-    + (node.subtitle?.trim() ? label(node.subtitle, `font-size: 14px; line-height: 1.3; color: ${node.secondaryColor ?? '#6B7280'}`) : '')
+  const subtitle = text(node.subtitle);
+  const words = `<div style="flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px">`
+    + labelHtml(text(node.title), 'font-size: 16px; line-height: 1.3')
+    + (subtitle ? labelHtml(subtitle, `font-size: 14px; line-height: 1.3; color: ${node.secondaryColor ?? FALLBACK.secondary}`) : '')
     + '</div>';
   const divider = node.divider
-    ? `<div style="${style(['position: absolute', 'left: 16px', 'right: 0', 'bottom: 0', 'height: 1px', `background-color: ${node.stroke ?? '#D1D5DB'}`])}"></div>`
+    ? `<div style="${css(['position: absolute', 'left: 16px', 'right: 0', 'bottom: 0', 'height: 1px', `background-color: ${node.stroke ?? FALLBACK.border}`])}"></div>`
     : '';
-  return `<div${dataAttr} style="${box}">${listRowLeading(node)}${text}${listRowTrailing(node)}${divider}</div>`;
+  return `<div${dataAttr} style="${box}">${listRowLeading(node)}${words}${listRowTrailing(node)}${divider}</div>`;
 }
 
 /** The four authored padding sides as CSS (fluid like every padding). */
@@ -1135,22 +1195,24 @@ function paddingCss(padding: SceneNode['padding']): [string, string, string, str
 }
 
 function renderSheet(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
-  const column = [`left: max(0px, (100% - ${rc.rootWidth}px) / 2)`, 'width: 100%', `max-width: ${rc.rootWidth}px`, 'z-index: 30'];
-  const scrim = `<div style="${style(['position: fixed', 'top: 0', 'bottom: 0', ...column, 'background-color: rgba(0, 0, 0, 0.4)'])}"></div>`;
+  const column = [`left: max(0px, (100% - ${rc.bodyWidth}px) / 2)`, 'width: 100%', `max-width: ${rc.columnWidth}px`, 'z-index: 30'];
+  const scrim = `<div style="${css(['position: fixed', 'top: 0', 'bottom: 0', ...column, 'background-color: rgba(0, 0, 0, 0.4)'])}"></div>`;
   const [pt, pr, pb, pl] = paddingCss(node.padding);
   const grabber = node.grabber !== false;
   const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 12;
   const reach = rc.insets.top + 10;
   const detent = node.detent === 'medium' ? 'height: 50%' : node.detent === 'large' ? `top: ${reach}px` : `max-height: calc(100% - ${reach}px)`;
-  const panel = style([
+  const panel = css([
     'position: fixed', 'bottom: 0', ...column, detent, 'display: flex', 'flex-direction: column',
     typeof node.gap === 'number' ? `gap: ${node.gap}px` : undefined,
     `padding: ${grabber ? `calc(${pt} + 16px)` : pt} ${pr} calc(${pb} + ${rc.insets.bottom}px) ${pl}`,
-    `background-color: ${node.fill ?? '#FFFFFF'}`, `border-radius: ${radius}px ${radius}px 0 0`, 'overflow-y: auto',
+    `background-color: ${node.fill ?? FALLBACK.surface}`, `border-radius: ${radius}px ${radius}px 0 0`, 'overflow-y: auto',
   ]);
   const grab = grabber
-    ? `<div style="${style(['position: absolute', 'top: 6px', 'left: 50%', 'margin-left: -18px', 'width: 36px', 'height: 5px', 'border-radius: 3px', `background-color: ${node.stroke ?? 'rgba(127, 127, 127, 0.4)'}`])}"></div>`
+    ? `<div style="${css(['position: absolute', 'top: 6px', 'left: 50%', 'margin-left: -18px', 'width: 36px', 'height: 5px', 'border-radius: 3px', `background-color: ${node.stroke ?? 'rgba(127, 127, 127, 0.4)'}`])}"></div>`
     : '';
+  // Its children never shrink (renderChildren marks them), so when they
+  // outgrow the panel it scrolls instead of squeezing them.
   return `${scrim}<div${dataAttr} data-fs-scroll style="${panel}">${grab}${renderChildren(node, rc)}</div>`;
 }
 
@@ -1331,13 +1393,13 @@ function positionStyles(node: SceneNode, rc: RenderCtx): string[] {
   const position = effectivePosition(node);
   if (position) s.push(`position: ${position}`);
   if (position === 'fixed') {
-    const edge = `max(0px, (100% - ${rc.rootWidth}px) / 2)`;
+    const edge = `max(0px, (100% - ${rc.bodyWidth}px) / 2)`;
     if (node.x !== undefined || node.right === undefined) s.push(`left: calc(${edge} + ${node.x ?? 0}px)`);
     // With no horizontal offset and no width, span the root's column — like an
     // in-flow frame stretching — instead of shrinking to fit.
     const span = node.x === undefined && node.right === undefined && node.width === undefined;
     if (node.right !== undefined || span) s.push(`right: calc(${edge} + ${node.right ?? 0}px)`);
-    if (node.maxWidth === undefined) s.push(`max-width: ${rc.rootWidth}px`);
+    if (node.maxWidth === undefined) s.push(`max-width: ${rc.columnWidth}px`);
   } else {
     if (node.x !== undefined) s.push(`left: ${node.x}px`);
     if (node.right !== undefined) s.push(`right: ${node.right}px`);

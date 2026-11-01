@@ -421,11 +421,12 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
   const rule = 'mobile-safe-area';
   const rects = new Map<string, LayoutRect>();
   (function flat(list: LayoutRect[]) { for (const r of list) { rects.set(r.nodeId, r); if (r.children) flat(r.children); } })(layout);
-  let docBottom = ctx.height;
-  for (const r of rects.values()) docBottom = Math.max(docBottom, r.y + r.height);
-  // A root that scrolls inside itself (an authored overflow) reports its full
-  // scroll height, which carries its end padding.
+  // The document ends where the root does: it grows with its content and
+  // keeps its end padding. A root that scrolls inside itself (an authored
+  // overflow) reports its full scroll height instead. Pinned overlays (a
+  // sheet's long list) and content clipped inside a scroller don't extend it.
   const rootRect = rects.get(ctx.root.id);
+  let docBottom = Math.max(ctx.height, rootRect ? rootRect.y + rootRect.height : 0);
   if (rootRect?.scrollHeight !== undefined) docBottom = Math.max(docBottom, rootRect.y + rootRect.scrollHeight);
   const reserved = insets.topReserved && insets.bottomReserved;
   const remedy = (stuck: boolean) => stuck
@@ -439,18 +440,18 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
   const flowContent: Array<{ node: SceneNode; rect: LayoutRect }> = [];
   const sticky: Array<{ node: SceneNode; rect: LayoutRect; content: Array<{ node: SceneNode; rect: LayoutRect }> }> = [];
 
-  const visit = (n: SceneNode, positioned: boolean, stuck: typeof sticky[number] | undefined): void => {
+  const visit = (n: SceneNode, positioned: boolean, stuck: typeof sticky[number] | undefined, clipped: boolean): void => {
     if (n.type === 'sheet') return;
     const r = rects.get(n.id);
     if (isContentNode(n, r)) {
       if (r && r.width > 0 && r.height > 0) {
         if (stuck) stuck.content.push({ node: n, rect: r });
-        if (!positioned) flowContent.push({ node: n, rect: r });
+        if (!positioned && !clipped) flowContent.push({ node: n, rect: r });
         const bottom = r.y + r.height;
         let where: string | undefined;
         if (r.y < insets.top && bottom > 0) where = `the top ${insets.top}px inset (y ${r.y})`;
         else if (positioned && bottom > ctx.height - insets.bottom && r.y < ctx.height) where = `the bottom ${insets.bottom}px inset of the screen (bottom edge ${bottom} on a ${ctx.height}px screen)`;
-        else if (!positioned && bottom > docBottom - insets.bottom) where = `the bottom ${insets.bottom}px inset at the end of the scroll (bottom edge ${bottom} of a ${docBottom}px document)`;
+        else if (!positioned && !clipped && bottom > docBottom - insets.bottom) where = `the bottom ${insets.bottom}px inset at the end of the scroll (bottom edge ${bottom} of a ${docBottom}px document)`;
         if (where) {
           issues.push(issue('usability', rule, 'warning', n,
             `"${n.name ?? n.id}" renders in ${where} — under the ${where.startsWith('the top') ? 'status bar' : 'home indicator'}.`, remedy(false)));
@@ -463,10 +464,13 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
       const cr = rects.get(c.id);
       const own = position === 'sticky' && cr ? { node: c, rect: cr, content: [] } : undefined;
       if (own) sticky.push(own);
-      visit(c, positioned || position === 'absolute' || position === 'fixed', own ?? stuck);
+      // Below a frame that clips or scrolls its overflow, content can't reach
+      // the end of the document's scroll.
+      const clips = n !== ctx.root && n.overflow !== undefined && n.overflow !== 'visible';
+      visit(c, positioned || position === 'absolute' || position === 'fixed', own ?? stuck, clipped || clips);
     }
   };
-  visit(ctx.root, false, undefined);
+  visit(ctx.root, false, undefined, false);
 
   // Sticky content where it sticks: its offset from the viewport edge.
   for (const s of sticky) {
@@ -490,7 +494,9 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
   (function bars(n: SceneNode) {
     if (n.type === 'sheet') return;
     const r = rects.get(n.id);
-    if (r && n !== ctx.root && effectivePosition(n) === 'fixed' && n.type !== 'home-indicator' && n.type !== 'status-bar') {
+    // A fixed node under a blurred or animated ancestor pins to that ancestor,
+    // not the screen, so it is not a bar at the scroll's ends.
+    if (r && n !== ctx.root && effectivePosition(n) === 'fixed' && n.type !== 'home-indicator' && n.type !== 'status-bar' && !fixedUnpinned(n, ctx)) {
       const bottomBar = pinsBottom(n);
       if (bottomBar || pinsTop(n)) {
         const top = bottomBar ? r.y + scroll : r.y;
@@ -626,15 +632,19 @@ export function checkTabBars(ctx: MobileContext): EvaluationIssue[] {
           `Tab bar "${name}" has ${count} tab${count === 1 ? '' : 's'} — a phone tab bar holds ${min}–${max} (3–5 recommended).`,
           count > max ? 'Move the extra destinations into a "More" tab or a screen of their own.' : 'Give it at least two destinations, or drop the tab bar.'));
       }
-      const unlabeled = (items ?? []).flatMap((it, i) => (typeof it?.label === 'string' && it.label.trim() ? [] : [i + 1]));
+      const labeled = (v: unknown) => (typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && Number.isFinite(v));
+      const unlabeled = (items ?? []).flatMap((it, i) => (labeled(it?.label) ? [] : [i + 1]));
       if (unlabeled.length) {
         issues.push(issue('usability', rule, 'warning', n,
           `Tab bar "${name}": tab${unlabeled.length === 1 ? '' : 's'} ${unlabeled.join(', ')} ${unlabeled.length === 1 ? 'has' : 'have'} no label — every tab needs one (an icon alone is a guess).`,
           'Give every item a short label (one word).'));
       }
-      if (effectivePosition(n) !== 'fixed' || n.y !== undefined) {
+      const position = effectivePosition(n);
+      if (position !== 'fixed' || n.y !== undefined) {
+        const why = n.y !== undefined && position === 'fixed' ? 'its y pins it to the top' : `position "${position}"`;
+        const inFlow = position !== 'fixed' && position !== 'absolute';
         issues.push(issue('usability', rule, 'warning', n,
-          `Tab bar "${name}" is not pinned to the bottom of the screen${n.y !== undefined ? ' (its y pins it to the top)' : ` (position "${effectivePosition(n)}")`} — in flow it falls below the fold on a long screen.`,
+          `Tab bar "${name}" is not pinned to the bottom of the screen (${why})${inFlow ? ' — in flow it falls below the fold on a long screen' : ''}.`,
           'Remove its position, x and y overrides: a tab-bar pins to the bottom by default (position "fixed", bottom 0).'));
       }
     }
