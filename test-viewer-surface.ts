@@ -112,6 +112,26 @@ const customDetail = await viewer.renderDetailPage(custom, 3001);
 check('custom insets: top from the root', customDetail.includes('safe-band--top" style="height: 20px;"'));
 check('custom insets: unusable bottom falls back to the profile', customDetail.includes('safe-band--bottom" style="height: 34px;"'));
 
+// A side set to 0 draws no band (a 1px band under a 16px label straddled the edge).
+const flush = make('flush', {}, { type: 'mobile' });
+flush.root.safeArea = { top: 0, bottom: 34 };
+const flushDetail = await viewer.renderDetailPage(flush, 3001);
+check('zero inset: no top band', !flushDetail.includes('class="safe-band safe-band--top"') && flushDetail.includes('safe-band--bottom" style="height: 34px;"'));
+
+// Only finite positive sizes are read; anything else is the 1440×900 default.
+for (const bad of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+  const odd = make('odd', { width: 1440, height: 900 });
+  odd.root.width = bad;
+  const card = cardFor((await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!, odd.id);
+  check(`root width ${bad}: card falls back to 1440`, card.includes('style="width: 1440px; height: 900px;"') && card.includes('--thumb-scale: 0.222;'));
+  sg.deleteCanvas(odd.id);
+}
+
+// The open detail page reloads when its type or artboard changes.
+check('detail page: reloads on a type or size change', phoneDetail.includes('const pageShape = {"type":"mobile","width":390,"height":844}') && phoneDetail.includes('location.reload()'));
+check('detail page: breakpoint switch keeps the dark render', phoneDetail.includes("(themeMode === 'dark' ? '&theme=dark' : '')"));
+check('preview: overflow stays scrollable to the left edge', /\.viewport \{[^}]*justify-content: safe center/.test(phoneDetail));
+
 // --- FR-F2: web breakpoints from the profile table ---
 const p = DEVICE_PROFILES['iphone-390'];
 const webDetail = await viewer.renderDetailPage(sg.getCanvas(desktop.id)!, 3001);

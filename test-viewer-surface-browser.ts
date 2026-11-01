@@ -31,6 +31,10 @@ parseAndExecute(phone.root, `row=I("document",{type:"list-row",title:"Settings"}
 const desktop = sg.createCanvas('Desktop', DEFAULT_PROJECT_ID, { width: 1440, height: 900 });
 parseAndExecute(desktop.root, `t=I("document",{type:"text",content:"Hello"})`);
 
+const narrowWeb = sg.createCanvas('Narrow web', DEFAULT_PROJECT_ID, { width: 390, height: 844 });
+parseAndExecute(narrowWeb.root, `t=I("document",{type:"text",content:"Hello"})`);
+desktop.variables = { colors: { bg: '#ffffff' }, dark: { colors: { bg: '#000000' } } };
+
 const port = await startViewer(0);
 const base = `http://127.0.0.1:${port}`;
 
@@ -117,6 +121,36 @@ try {
   }));
   check('web: Mobile sizes the frame 390 wide', web.frameW === '390', String(web.frameW));
   check('web: Mobile active, JSON still active', JSON.stringify(web.active) === JSON.stringify(['bp-mobile', 'btn-json']), web.active.join(','));
+
+  // A 390-wide web canvas: Desktop highlights Desktop, not Mobile.
+  await page.goto(`${base}/canvas/${narrowWeb.id}`, { waitUntil: 'networkidle0' });
+  await page.click('#bp-mobile');
+  await page.click('#bp-desktop');
+  const narrowActive = await page.evaluate(() => [...document.querySelectorAll('.bp-btn.active')].map((b) => b.id));
+  check('390-wide web canvas: Desktop highlights Desktop', JSON.stringify(narrowActive) === '["bp-desktop"]', narrowActive.join(','));
+
+  // Dark survives a breakpoint switch.
+  await page.goto(`${base}/canvas/${desktop.id}`, { waitUntil: 'networkidle0' });
+  await page.click('#theme-toggle');
+  await page.click('#bp-tablet');
+  const darkSrc = await page.evaluate(() => document.getElementById('frame')!.getAttribute('src'));
+  check('Dark stays on through a breakpoint switch', !!darkSrc && darkSrc.includes('theme=dark'), String(darkSrc));
+
+  // An open page follows a type change without a manual reload.
+  await page.goto(`${base}/canvas/${desktop.id}`, { waitUntil: 'networkidle0' });
+  sg.setCanvasType(desktop.id, { type: 'mobile' });
+  await page.waitForSelector('.device', { timeout: 6000 }).catch(() => null);
+  const live = await page.evaluate(() => ({ device: !!document.querySelector('.device'), bp: !!document.getElementById('bp-mobile') }));
+  check('type change: an open page switches to the device frame', live.device && !live.bp, JSON.stringify(live));
+
+  // An overflowing device (this one is 1440 wide) can scroll to its left edge.
+  await page.setViewport({ width: 1100, height: 900, deviceScaleFactor: 1 });
+  const left = await page.evaluate(() => {
+    const vp = document.getElementById('viewport')!;
+    vp.scrollLeft = 0;
+    return document.querySelector('.device')!.getBoundingClientRect().left - vp.getBoundingClientRect().left;
+  });
+  check('wide device: left edge reachable', left >= 0, String(left));
 } finally {
   await browser.close();
 }

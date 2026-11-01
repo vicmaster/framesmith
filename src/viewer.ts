@@ -106,6 +106,7 @@ export async function startViewer(port: number): Promise<number> {
           contentKey: evalCacheKey(canvas),
           width: canvas.root.width,
           height: canvas.root.height,
+          type: resolveSurface(canvas).type,
         }));
         return;
       }
@@ -479,8 +480,8 @@ function renderSidebar(active: string): string {
 function artboardSize(canvas: Canvas): { w: number; h: number } {
   const { width, height } = canvas.root;
   return {
-    w: typeof width === 'number' && width > 0 ? width : 1440,
-    h: typeof height === 'number' && height > 0 ? height : 900,
+    w: typeof width === 'number' && Number.isFinite(width) && width > 0 ? width : 1440,
+    h: typeof height === 'number' && Number.isFinite(height) && height > 0 ? height : 900,
   };
 }
 
@@ -518,7 +519,8 @@ const THUMB_FIT_JS = `
     (() => {
       const fit = (thumb) => {
         const w = Number(thumb.dataset.artboardW);
-        if (w > 0 && thumb.clientWidth > 0) thumb.style.setProperty('--thumb-scale', String(thumb.clientWidth / w));
+        const width = thumb.getBoundingClientRect().width;
+        if (w > 0 && width > 0) thumb.style.setProperty('--thumb-scale', String(width / w));
       };
       const thumbs = document.querySelectorAll('.thumb[data-artboard-w]');
       if (typeof ResizeObserver !== 'function') { thumbs.forEach(fit); return; }
@@ -1146,7 +1148,8 @@ function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
 
 /** The detail view's device presentation: the canvas at 1:1 inside a bezel,
  *  with the safe-area bands (the root's `safeArea`, else the profile's insets,
- *  per side — the hardware intrudes there either way) hidden until toggled. */
+ *  per side — the hardware intrudes there either way) hidden until toggled. A
+ *  side set to 0 draws no band. */
 function renderDevice(canvas: Canvas, w: number, h: number, deviceId: string, profile: DeviceProfile): string {
   const reserved = canvas.root.type === 'document' ? usableSafeArea(canvas.root.safeArea) : {};
   const top = reserved.top ?? profile.safeArea.top;
@@ -1156,8 +1159,8 @@ function renderDevice(canvas: Canvas, w: number, h: number, deviceId: string, pr
       <div class="device-screen" style="width: ${w}px; height: ${h}px;">
         <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
         <div class="safe-overlay" id="safe-overlay" hidden>
-          <div class="safe-band safe-band--top" style="height: ${top}px;"><span>${top}</span></div>
-          <div class="safe-band safe-band--bottom" style="height: ${bottom}px;"><span>${bottom}</span></div>
+          ${top > 0 ? `<div class="safe-band safe-band--top" style="height: ${top}px;"><span>${top}</span></div>` : ''}
+          ${bottom > 0 ? `<div class="safe-band safe-band--bottom" style="height: ${bottom}px;"><span>${bottom}</span></div>` : ''}
         </div>
       </div>
     </div>
@@ -1273,7 +1276,7 @@ ${FAVICON_HTML}
   /* Phase 19 — detail body splits into the preview (left) and the read-only
    * quality inspector (right). Toolbar stays full-width above. */
   .detail-main { flex: 1; display: flex; min-height: 0; }
-  .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: center; overflow: auto; background: var(--bg-0); padding: 24px 0; }
+  .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: safe center; overflow: auto; background: var(--bg-0); padding: 24px 0; }
   .viewport iframe { border: none; background: #fff; transition: width 0.3s, height 0.3s; transform-origin: top center; }
   .viewport.fit iframe { width: 100% !important; height: 100% !important; }
   .viewport.compare #frame { display: none; }
@@ -1477,6 +1480,9 @@ ${FAVICON_HTML}
     const canvasId = '${canvas.id}';
     let lastModified = '${canvas.lastModified}';
     let contentKey = '${evalCacheKey(canvas)}';
+    // The layout (device frame or breakpoints, artboard size) is server-rendered,
+    // so a change to the type or the root size reloads the page.
+    const pageShape = ${scriptJson({ type: surface.type, width: canvas.root.width ?? null, height: canvas.root.height ?? null })};
     let currentBp = 'desktop';
 
     // Phase 21 — point-and-tell: initial feedback entries + node labels for
@@ -1492,6 +1498,10 @@ ${FAVICON_HTML}
         document.getElementById('status').className = 'status';
         // contentKey catches edits that never bump lastModified (issue #150).
         if (meta.lastModified !== lastModified || (meta.contentKey && meta.contentKey !== contentKey)) {
+          if (meta.type !== pageShape.type || (meta.width ?? null) !== pageShape.width || (meta.height ?? null) !== pageShape.height) {
+            location.reload();
+            return;
+          }
           lastModified = meta.lastModified;
           contentKey = meta.contentKey || contentKey;
           refreshFrames();
@@ -1549,7 +1559,7 @@ ${FAVICON_HTML}
       frame.style.width = '';
       frame.style.height = '';
       frame.style.overflow = '';
-      frame.src = '/canvas/' + canvasId + '/html?w=' + w + '&h=' + h + '&t=' + Date.now();
+      frame.src = '/canvas/' + canvasId + '/html?w=' + w + '&h=' + h + (themeMode === 'dark' ? '&theme=dark' : '') + '&t=' + Date.now();
 
       // The pressed button is the active breakpoint; other toolbar state stays.
       document.querySelectorAll('.bp-btn').forEach(b => b.classList.remove('active'));

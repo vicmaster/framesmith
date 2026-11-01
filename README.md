@@ -58,7 +58,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 
 ## Viewer
 
-Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (it takes the first free port from 3001 up; pass a port to pin one). Open any canvas to review it at multiple breakpoints, compare them side-by-side, inspect the underlying JSON, or archive / delete. Cards keep each artboard's proportions, so phone screens are portrait cards, and a canvas declared `mobile` opens at 1:1 in a device frame with a **Safe area** toggle that shades the status-bar and home-indicator insets.
+Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (it takes the first free port from 3001 up; pass a port to pin one). Open a web canvas to review it at multiple breakpoints and compare them side-by-side; open any canvas to inspect its JSON, leave comments, or archive / delete it. Cards keep each artboard's proportions (between a phone held upright and 2:1; a longer page shows its top), so phone screens are portrait cards. A canvas declared `mobile` opens at 1:1 in a device frame instead of the breakpoint buttons, with a **Safe area** toggle that shades the status-bar and home-indicator insets (47 and 34 on the default `iphone-390`). The overlay is viewer-only: it never changes a screenshot.
 
 ![framesmith canvas detail view — the dashboard pattern rendered (grouped sidebar navigation with an account row, KPI cards with sparklines and delta pills, a real multi-series line chart with an area fill and a dashed reference line beside a recent-activity feed) with the Quality inspector open on the right: a 99/100 "Excellent" score, per-category bars (spacing, color, typography, structure, consistency, usability, coverage, cliche), and honest APCA advisories in the issue list. The toolbar shows the canvas's designed states (default / loading / empty), theme and viewport toggles, and a Comment toggle.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png?v=2.0)
 
@@ -1301,7 +1301,7 @@ The standalone viewer:
 - **Gallery** (`/`) — browse all canvases as clickable cards with live thumbnails
 - **Project** (`/project/:id`) — same gallery but scoped to one project
 - **Archive** (`/archive`) — soft-deleted canvases with restore / permadelete actions
-- **Canvas detail** (`/canvas/:id`) — full rendered design with responsive viewport buttons (Mobile / Tablet / Desktop), Compare mode, Fit toggle, and JSON inspector
+- **Canvas detail** (`/canvas/:id`) — full rendered design with responsive viewport buttons (Mobile / Tablet / Desktop), Compare mode, Fit toggle, and JSON inspector; a canvas declared `mobile` opens 1:1 in a device frame with a Safe area toggle instead of the viewport, Compare and Fit buttons
 - **Raw HTML** (`/canvas/:id/html`) — the rendered HTML for embedding or inspection
 - **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
 - **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
