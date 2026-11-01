@@ -1,13 +1,14 @@
 import type { Canvas, SceneNode, DesignVariables } from './types.js';
 import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
-import { renderToHtml } from './renderer.js';
+import { renderToHtml, resolveInstance } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
-import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, type SurfaceType } from './surfaces.js';
-import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
+import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, type SurfaceType } from './surfaces.js';
+import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
+import { FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, listRowMinHeight, navActions, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -762,8 +763,16 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
   score -= 10 * iconFindings.length;
   issues.push(...iconFindings);
 
-  // Component reuse
-  if (totalNodes > 10 && instanceNodes === 0) {
+  // Component reuse. Phase 30 slice D — a repeated primitive (list rows,
+  // buttons, tab bars) is reuse too: the primitive is the component.
+  const primitiveCounts = new Map<string, number>();
+  for (const e of entries) {
+    if (e.node.type === 'button' || e.node.type === 'list-row' || e.node.type === 'tab-bar') {
+      primitiveCounts.set(e.node.type, (primitiveCounts.get(e.node.type) ?? 0) + 1);
+    }
+  }
+  const repeatsPrimitive = [...primitiveCounts.values()].some((n) => n >= 2);
+  if (totalNodes > 10 && instanceNodes === 0 && !repeatsPrimitive) {
     issues.push({
       category: 'structure',
       severity: 'info',
@@ -774,6 +783,28 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
   }
 
   return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
+}
+
+/** Every icon reference in a tree: icon nodes' `icon`, and the mobile
+ * primitives' icon props (a blank glyph in a tab bar is the same defect). */
+function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref: string; flat: boolean; required: boolean }> {
+  const out: Array<{ node: SceneNode; path: string; ref: string; flat: boolean; required: boolean }> = [];
+  const add = (node: SceneNode, path: string, ref: unknown, flat: boolean, required: boolean) => {
+    if (typeof ref === 'string' || required) out.push({ node, path, ref: typeof ref === 'string' ? ref : '', flat, required });
+  };
+  (function walk(n: SceneNode) {
+    if (n.type === 'icon') add(n, 'icon', n.icon, true, true);
+    else if (n.type === 'button') add(n, 'icon', n.icon, true, false);
+    else if (n.type === 'list-row' || n.type === 'nav-bar') {
+      add(n, 'leading.icon', n.leading?.icon, false, false);
+      if (n.type === 'nav-bar' && Array.isArray(n.trailing)) n.trailing.forEach((a, i) => add(n, `trailing[${i}].icon`, a?.icon, false, false));
+    } else if (n.type === 'tab-bar') {
+      (Array.isArray(n.items) ? n.items : []).forEach((it, i) => add(n, `items[${i}].icon`, it?.icon, false, true));
+      if (n.variant === 'fab') add(n, 'fab.icon', n.fab?.icon, false, false);
+    }
+    n.children?.forEach(walk);
+  })(root);
+  return out;
 }
 
 /** Spellings worth trying for an icon name that didn't resolve: Material
@@ -804,32 +835,37 @@ function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
   const ownIds = new Set<string>();
   (function walk(n: SceneNode) { ownIds.add(n.id); n.children?.forEach(walk); })(canvas.root);
 
-  const icons: SceneNode[] = [];
-  (function walk(n: SceneNode) { if (n.type === 'icon') icons.push(n); n.children?.forEach(walk); })(expanded);
+  // Every icon reference: icon nodes, and (Phase 30 slice D) the primitives'
+  // icon props. `flat` = the prop is the node's own `icon`, so a one-prop
+  // update fixes it; `required` = a missing name is itself a defect.
+  const icons = iconSlots(expanded);
 
   // Tie-break between candidates by the icon set the rest of the canvas uses:
   // mixing stroke (Lucide) and fill (Material) glyphs is its own inconsistency.
   const resolvedSets = new Set(icons
-    .filter((n) => n.icon && getIconSvg(n.icon, 24, undefined, n.iconStyle))
-    .map((n) => parseIconRef(n.icon!).set));
+    .filter((sl) => sl.ref && getIconSvg(sl.ref, 24, undefined, sl.node.iconStyle))
+    .map((sl) => parseIconRef(sl.ref).set));
   const canvasSet = resolvedSets.size === 1 ? [...resolvedSets][0] : null;
 
   const issues: EvaluationIssue[] = [];
   const seen = new Set<string>();
-  for (const node of icons) {
-    if (seen.has(node.id)) continue;
-    seen.add(node.id);
-    const ref = (node.icon ?? '').trim();
+  for (const { node, path, ref: rawRef, flat, required } of icons) {
+    const key = `${node.id}\u0000${path}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ref = rawRef.trim();
     if (ref && getIconSvg(ref, 24, undefined, node.iconStyle)) continue;
+    if (!ref && !required) continue;
 
-    const where = ownIds.has(node.id) ? '' : ' (inside a component — fix it in the component definition)';
+    const where = (ownIds.has(node.id) ? '' : ' (inside a component — fix it in the component definition)')
+      + (node.type === 'icon' ? '' : ` (${node.type} ${path})`);
     if (!ref) {
       issues.push({
         category: 'structure',
         severity: 'warning',
         nodeId: node.id,
         nodeName: node.name,
-        message: `Icon node has no icon name${where} — it renders as an empty slot.`,
+        message: `${node.type === 'icon' ? 'Icon node has' : 'Tab item has'} no icon name${where} — it renders as an empty slot.`,
         suggestion: 'Set icon to a Lucide name ("chevron-right") or a Material Symbols name with the material: prefix ("material:chevron_right"), or delete the node.',
       });
       continue;
@@ -848,7 +884,7 @@ function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
         ? `Did you mean ${candidates.map((c) => `"${c}"`).join(' or ')}? Lucide names use hyphens (chevron-right); Material Symbols names use underscores and need the material: prefix (material:chevron_right).`
         : 'Lucide names use hyphens (chevron-right); Material Symbols names use underscores and need the material: prefix (material:chevron_right). Check the spelling against lucide.dev or fonts.google.com/icons.',
     };
-    if (pick && ownIds.has(node.id)) {
+    if (pick && flat && ownIds.has(node.id)) {
       issue.fix = {
         op: formatUpdateOp(node.id, { icon: pick }),
         rationale: `"${ref}" doesn't exist; "${pick}" is the spelling that resolves${candidates.length > 1 ? ' in the icon set this canvas already uses' : ''}.`,
@@ -1875,14 +1911,41 @@ function mobileTarget(
   return { w: tw, h: th };
 }
 
+/** Phase 30 slice D — the touch targets a tappable primitive carries, each
+ * its own rendered box (never extended by an ancestor). A width the tree
+ * doesn't fix is left undefined and not judged. */
+function primitiveTargets(
+  node: SceneNode, parentOf: Map<string, SceneNode | null>, rootWidth: number,
+): Array<{ what: string; w?: number; h: number; fix: string }> {
+  if (node.type === 'button') {
+    const b = buttonBox(node);
+    return [{ what: 'button', ...b, fix: 'Use size "md" (44px) or "lg" (52px) — "sm" is for pointer surfaces — and drop any smaller height.' }];
+  }
+  if (node.type === 'list-row') {
+    const h = Math.max(typeof node.height === 'number' ? node.height : 0, listRowMinHeight(node));
+    return [{ what: 'list-row', w: knownWidth(node, parentOf, rootWidth), h, fix: 'Let the row span its list (no width), or widen it.' }];
+  }
+  if (node.type === 'tab-bar') {
+    const box = tabItemBox(node, rootWidth);
+    const items = tabItems(node).map((it, i) => ({ what: `tab "${it?.label ?? i + 1}"`, ...box, fix: 'Widen the tab bar (drop its width) or move a destination out of it.' }));
+    return node.variant === 'fab' ? [...items, { what: 'tab-bar FAB', w: FAB_SIZE, h: FAB_SIZE, fix: '' }] : items;
+  }
+  if (node.type === 'nav-bar') {
+    return navActions(node).map((a) => ({ what: `nav-bar action "${a.label ?? a.icon ?? 'back'}"`, w: NAV_ACTION, h: NAV_ACTION, fix: '' }));
+  }
+  return [];
+}
+
 function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor: number }): CheckResult {
   const issues: EvaluationIssue[] = [];
   let score = 100;
 
   const parentOf = new Map<string, SceneNode | null>();
   for (const en of entries) parentOf.set(en.node.id, en.parent);
+  // On a phone a row holds "one control" only when no tappable primitive
+  // shares it either — a checkbox beside a button doesn't own the row.
   const countControls = (n: SceneNode): number => {
-    let c = CONTROL_TYPES.has(n.type) ? 1 : 0;
+    let c = CONTROL_TYPES.has(n.type) || (touch !== undefined && TAPPABLE_PRIMITIVES.has(n.type)) ? 1 : 0;
     for (const ch of n.children ?? []) c += countControls(ch);
     return c;
   };
@@ -1893,6 +1956,23 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
   const touchFirst = rootWidth > 0 && rootWidth < 500;   // a phone-width artboard
 
   for (const { node } of entries) {
+    if (touch && TAPPABLE_PRIMITIVES.has(node.type)) {
+      for (const t of primitiveTargets(node, parentOf, rootWidth)) {
+        if ((t.w !== undefined && t.w < touch.floor) || t.h < touch.floor) {
+          score -= 25;
+          issues.push({
+            category: 'usability',
+            rule: 'mobile-touch-target',
+            severity: 'error',
+            nodeId: node.id,
+            nodeName: node.name,
+            message: `${t.what} has a ${t.w === undefined ? '?' : Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            ...(t.fix ? { suggestion: t.fix } : {}),
+          });
+        }
+      }
+    }
+
     if (CONTROL_TYPES.has(node.type)) {
       const def = CONTROL_DEFAULT_SIZE[node.type];
       let w = typeof node.width === 'number' ? node.width : def.w;
@@ -2108,6 +2188,40 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
   };
 }
 
+/** Phase 30 slice D — for every node an instance renders (its expanded
+ * descendants), the outermost instance that owns it. */
+function instanceOwners(root: SceneNode, canvas: Canvas): Map<string, SceneNode> {
+  const own = new Set<string>();
+  (function walk(n: SceneNode) { own.add(n.id); n.children?.forEach(walk); })(root);
+  const owners = new Map<string, SceneNode>();
+  (function walk(n: SceneNode) {
+    if (n.type === 'instance' && n.componentId) {
+      const resolved = resolveInstance(n, canvas);
+      if (resolved) {
+        (function claim(x: SceneNode) {
+          for (const c of x.children ?? []) {
+            if (!own.has(c.id) && !owners.has(c.id)) owners.set(c.id, n);
+            claim(c.type === 'instance' && c.componentId ? resolveInstance(c, canvas) ?? c : c);
+          }
+        })(resolved);
+      }
+      return;
+    }
+    n.children?.forEach(walk);
+  })(root);
+  return owners;
+}
+
+/** Re-point findings on nodes inside an instance at the instance (the
+ * component holds the node), naming the inner node. */
+function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
+  return issues.map((i) => {
+    const owner = i.nodeId ? owners.get(i.nodeId) : undefined;
+    if (!owner) return i;
+    return { ...i, nodeId: owner.id, nodeName: owner.name, message: `${i.message} (inside instance "${owner.name ?? owner.id}" — fix it in its component)` };
+  });
+}
+
 export async function evaluateCanvas(
   canvas: Canvas,
   options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[]; genre?: string; designedStates?: string[] },
@@ -2127,8 +2241,15 @@ export async function evaluateCanvas(
   const rules = composeRulesets(activeRulesets({ type: declared.type, genre: resolvedGenre.genre, preset }));
   const surface: SurfaceReport = { ...declared, rulesOn: rules.on, rulesOff: rules.off, conflicts: rules.conflicts };
   const ruleOn = new Set(rules.on);
+  // Phase 30 slice D — the mobile rules judge what the renderer draws, so they
+  // read the tree with instances expanded (a tab bar inside a component is
+  // still a tab bar). Findings inside an instance report the instance.
+  const expandedRaw = expandInstances(canvas.root, canvas);
+  const mobileRoot = resolveVariables(expandedRaw, mergedTokens);
+  const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
+  const owners = instanceOwners(canvas.root, canvas);
   const mobile: MobileContext = {
-    root: resolvedRoot,
+    root: mobileRoot,
     profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
     width: typeof resolvedRoot.width === 'number' ? resolvedRoot.width : 1440,
     height: typeof resolvedRoot.height === 'number' ? resolvedRoot.height : 900,
@@ -2198,11 +2319,11 @@ export async function evaluateCanvas(
       layout: detailedLayout,
       tables: extractInventory(resolvedRoot).tables,
     });
-    const rawById = new Map(rawEntries.map((en) => [en.node.id, en.node]));
-    results.set('typography', withRuleIssues(typography, ruleOn.has('mobile-type-floor') ? checkTypeFloor(mobile, rawById) : []));
+    const rawById = new Map(buildTreeContext(expandedRaw).map((en) => [en.node.id, en.node]));
+    results.set('typography', withRuleIssues(typography, ruleOn.has('mobile-type-floor') ? reportOnInstances(checkTypeFloor(mobile, rawById), owners) : []));
   }
   if (activeCategories.includes('structure')) {
-    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), ruleOn.has('mobile-artboard') ? checkArtboard(mobile, declared) : []));
+    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []));
   }
   if (activeCategories.includes('consistency')) {
     const consistencyCtx = { rawEntries, tokens: mergedTokens };
@@ -2214,12 +2335,17 @@ export async function evaluateCanvas(
   }
   if (activeCategories.includes('usability')) {
     const touch = ruleOn.has('mobile-touch-target') ? { floor: mobile.profile.touchTarget } : undefined;
-    const usability = checkUsability(entries, mobile.width, touch);
-    const extra = [
+    // On a mobile canvas the whole usability check reads the expanded tree;
+    // web keeps the unexpanded one.
+    const usability = mobileTypeRules
+      ? (({ score, issues }) => ({ score, issues: reportOnInstances(issues, owners) }))(checkUsability(buildTreeContext(mobileRoot), mobile.width, touch))
+      : checkUsability(entries, mobile.width, touch);
+    const extra = reportOnInstances([
       ...(ruleOn.has('mobile-handbuilt-target') ? checkHandbuiltTargets(mobile) : []),
       ...(ruleOn.has('mobile-safe-area') ? (detailedLayout ? checkSafeAreaDetailed(mobile, detailedLayout) : checkSafeAreaFast(mobile)) : []),
       ...(ruleOn.has('mobile-one-column') ? checkOneColumn(mobile) : []),
-    ];
+      ...(ruleOn.has('mobile-tab-bar') ? checkTabBars(mobile) : []),
+    ], owners);
     results.set('usability', withRuleIssues(usability, extra));
   }
 

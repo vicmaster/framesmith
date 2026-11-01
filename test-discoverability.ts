@@ -63,7 +63,7 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
 {
   const typesSrc = readFileSync('src/types.ts', 'utf-8');
   const union = typesSrc.match(/export type NodeType =([\s\S]*?);/)?.[1] ?? '';
-  const nodeTypes = [...union.matchAll(/'([a-z]+)'/g)].map((m) => m[1]).filter((t) => t !== 'document');
+  const nodeTypes = [...union.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]).filter((t) => t !== 'document');
   expect('node types found', nodeTypes.length >= 13, String(nodeTypes.length));
   const docLine = indexSrc.match(/Node types: ([^\n]+)/)?.[1] ?? '';
   const missingDoc = nodeTypes.filter((t) => !docLine.includes(t));

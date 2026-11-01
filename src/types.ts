@@ -6,7 +6,19 @@ export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'i
   | 'skeleton'
   // Phase 22 slice F — data-driven chart (line/bar): the node does the
   // value→coordinate math, so a chart edit is a data edit.
-  | 'chart';
+  | 'chart'
+  // Phase 30 slice D — mobile vocabulary: device chrome, navigation, and the
+  // tappable content primitives (each carries its own hit area).
+  | 'status-bar' | 'home-indicator' | 'nav-bar' | 'tab-bar' | 'button' | 'list-row' | 'sheet';
+
+/** Phase 30 slice D — one `nav-bar` action: an icon or a text label. */
+export interface NavAction { icon?: string; label?: string }
+
+/** Phase 30 slice D — one `tab-bar` item. */
+export interface TabItem { icon: string; label: string; active?: boolean; badge?: string | number }
+
+/** Phase 30 slice D — a `list-row`'s trailing accessory (one of). */
+export interface ListRowTrailing { text?: string; chevron?: boolean; toggle?: boolean; badge?: string | number }
 
 /** Phase 22 slice F (#129) — one plotted series of a `chart` node. X positions
  * are data indexes (0-based); a series shorter than the chart's x-range stops
@@ -112,7 +124,12 @@ export interface SceneNode {
   // Position (when layout is 'none' on parent)
   x?: number;
   y?: number;
-  position?: 'absolute' | 'relative';
+  /** Phase 30 slice D — offsets from the bottom / right edge (px). */
+  bottom?: number;
+  right?: number;
+  /** `fixed` pins to the viewport (the root's width × height box); `sticky`
+   * sticks within its scroll container at its `y` (or `bottom`) offset. */
+  position?: 'absolute' | 'relative' | 'fixed' | 'sticky';
 
   // Visual
   fill?: string;
@@ -255,6 +272,45 @@ export interface SceneNode {
   /** Tick labels spread evenly along the bottom / left edge. */
   xLabels?: string[];
   yLabels?: string[];
+
+  // Phase 30 slice D — mobile primitives.
+  /** status-bar: the clock (default "9:41"). */
+  time?: string;
+  /** status-bar / home-indicator: "dark" glyphs for a light screen, "light"
+   * for a dark one; absent follows `color` ($text-primary). */
+  appearance?: 'dark' | 'light';
+  /** nav-bar / list-row title. */
+  title?: string;
+  /** list-row secondary line. */
+  subtitle?: string;
+  /** nav-bar: the back action `{ icon?, label? }`; list-row: `{ icon }` |
+   * `{ initials }` | `{ image }`. */
+  leading?: { icon?: string; label?: string; initials?: string; image?: string };
+  /** nav-bar: up to two actions; list-row: one accessory. */
+  trailing?: NavAction[] | ListRowTrailing;
+  /** nav-bar: the 96px large-title form. */
+  largeTitle?: boolean;
+  /** tab-bar items (2–5 on a phone). */
+  items?: TabItem[];
+  /** tab-bar: standard | floating | fab; button: primary | secondary | ghost | destructive. */
+  variant?: 'standard' | 'floating' | 'fab' | 'primary' | 'secondary' | 'ghost' | 'destructive';
+  /** tab-bar (variant "fab"): the raised centre action. */
+  fab?: { icon?: string };
+  /** button label. */
+  label?: string;
+  iconPosition?: 'leading' | 'trailing';
+  /** button: sm 32 / md 44 / lg 52. */
+  size?: 'sm' | 'md' | 'lg';
+  /** list-row: a hairline under the row from the 16px inset. */
+  divider?: boolean;
+  /** sheet: medium (half the screen) | large | auto (its content). */
+  detent?: 'medium' | 'large' | 'auto';
+  /** sheet: the grabber pill (default true). */
+  grabber?: boolean;
+  /** list-row subtitle / trailing text colour (default $text-secondary). */
+  secondaryColor?: string;
+  /** tab-bar item badge / list-row badge colour (tab-bar default $danger). */
+  badgeColor?: string;
 
   // Component / Instance
   componentId?: string;

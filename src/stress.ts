@@ -98,7 +98,7 @@ function listRuns(root: SceneNode): Array<{ container: SceneNode; start: number;
     const kids = n.children ?? [];
     for (let i = 0; i < kids.length;) {
       let j = i;
-      while (j < kids.length && (kids[j].type as string) === 'list-row') j++; // slice D adds the node type
+      while (j < kids.length && kids[j].type === 'list-row') j++;
       if (j - i >= 2) runs.push({ container: n, start: i, length: j - i });
       i = j > i ? j : i + 1;
     }
@@ -255,13 +255,19 @@ export function compareLayouts(
     }
   }
 
+  // A scrolling panel's vertical overflow is scrolling, not a clip.
   const clips = (r: FlatRect): boolean =>
     (r.scrollWidth !== undefined && r.clientWidth !== undefined && r.scrollWidth > r.clientWidth + 1) ||
-    (r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1);
+    (!r.scrolls && r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1);
 
   for (const [id, r] of pert) {
     if (findings.length >= FINDING_CAP) break;
     const b = base.get(id);
+
+    // Phase 30 slice D — a primitive's label hitting its designed ellipsis.
+    if (r.truncated && !b?.truncated) {
+      findings.push({ kind: 'clip', severity: 'info', nodeId: id, detail: 'A label truncates with its designed ellipsis under this content.' });
+    }
 
     // clip — content cut off that wasn't cut off at baseline.
     if (clips(r) && !(b && clips(b as FlatRect))) {

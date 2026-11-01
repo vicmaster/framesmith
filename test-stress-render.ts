@@ -92,6 +92,39 @@ I(c4, { type: "text", content: "paused" })
   check('table fixture: empty perturbation renders clean', !rEmpty.skipped && rEmpty.findings.filter((f) => f.severity === 'warning').length === 0, JSON.stringify(rEmpty.findings));
   const rMany = await stress(tbl, 'many');
   check('table fixture: many perturbation renders clean', !rMany.skipped && rMany.findings.filter((f) => f.severity === 'warning').length === 0, JSON.stringify(rMany.findings));
+  // Phase 30 slice D — primitives under stress at phone width: a five-tab bar
+  // under i18n truncates its labels by design (info, never a warning); a
+  // list-row survives long-text with designed truncation only; a sheet's
+  // tripled rows scroll inside the panel instead of clipping.
+  {
+    const PW = 390;
+    const PH = 844;
+    const phoneStress = async (canvas: Canvas, name: PerturbationName) => {
+      const base = await computeLayout(renderToHtml(resolveVariables(structuredClone(canvas.root), {}), PW, PH, canvas), undefined, 25, { width: PW, height: PH });
+      const { root, touched } = applyPerturbation(name, canvas.root, { type: 'mobile' });
+      const pert = await computeLayout(renderToHtml(resolveVariables(structuredClone(root), {}), PW, PH, canvas), undefined, 25, { width: PW, height: PH });
+      return { findings: compareLayouts(base, pert, touched, PW), touched };
+    };
+    const tabs = createCanvas('stress-tabs', undefined, {}, { type: 'mobile' });
+    parseAndExecute(tabs.root, `I("document", { type: "tab-bar", items: [{ icon: "inbox", label: "Messages" }, { icon: "settings", label: "Settings" }, { icon: "activity", label: "Activity" }, { icon: "library", label: "Library" }, { icon: "user", label: "Account" }] })`, tabs);
+    const t = await phoneStress(tabs, 'i18n');
+    check('five-tab bar under i18n: truncation infos only, no warnings', t.findings.length > 0 && t.findings.every((f) => f.severity === 'info') && t.findings.some((f) => f.detail.includes('designed ellipsis')), JSON.stringify(t.findings));
+    const lt = await phoneStress(tabs, 'long-text');
+    check('…long-text leaves the tab labels alone on mobile', lt.touched.length === 0, JSON.stringify(lt.touched));
+
+    const list = createCanvas('stress-rows', undefined, {}, { type: 'mobile' });
+    parseAndExecute(list.root, `l=I("document", { type: "frame", layout: "vertical" })
+I(l, { type: "list-row", title: "Morning run", subtitle: "5.2 mi", trailing: { text: "Today" } })
+I(l, { type: "list-row", title: "Evening ride", trailing: { chevron: true } })`, list);
+    const lr = await phoneStress(list, 'long-text');
+    check('list-row under long-text: designed truncation only', lr.findings.length > 0 && lr.findings.every((f) => f.severity === 'info'), JSON.stringify(lr.findings));
+
+    const sheet = createCanvas('stress-sheet', undefined, {}, { type: 'mobile' });
+    parseAndExecute(sheet.root, `sh=I("document", { type: "sheet", detent: "medium" })
+${Array.from({ length: 6 }, (_, i) => `I(sh, { type: "list-row", title: "Option ${i}" })`).join('\n')}`, sheet);
+    const sm = await phoneStress(sheet, 'many');
+    check('a sheet\'s tripled rows scroll inside the panel, no clip', !sm.findings.some((f) => f.kind === 'clip' && f.severity === 'warning'), JSON.stringify(sm.findings));
+  }
 } finally {
   await shutdown();
 }

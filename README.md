@@ -306,9 +306,9 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order; an op that succeeded but will not fully take effect carries a `warning` (a `shadow` beside an active `shadows`, a chart `highlight` entry outside the series data). If the call wrote a `fontFamily` nothing can serve yet (not cached, registered, or system/generic), a `Font warnings` content item names it — a cache-only check with no network call, so it's a heads-up, not exhaustive.
 
-**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out)
+**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out), and the mobile primitives `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row`, `sheet` (see [Mobile primitives](#mobile-primitives))
 
-**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position`, `x`, `y`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `segments`, `innerRatio`, `centerValue`, `centerLabel`, `sparkKind`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`, `safeArea` (`{ top, bottom }`, document root only — insets the renderer adds to the root's top and bottom padding; `canvas_create` with `type: "mobile"` writes the device's), `name` (a readable label — `find_nodes` and component overrides match on it), `pulse` (skeleton only), `responsive` (`"stack"` | `"wrap"`)
+**Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position` (`"absolute"` | `"relative"` | `"fixed"` | `"sticky"`), `x`, `y`, `bottom`, `right`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `segments`, `innerRatio`, `centerValue`, `centerLabel`, `sparkKind`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`, `safeArea` (`{ top, bottom }`, document root only — insets the renderer adds to the root's top and bottom padding; `canvas_create` with `type: "mobile"` writes the device's), `name` (a readable label — `find_nodes` and component overrides match on it), `pulse` (skeleton only), `responsive` (`"stack"` | `"wrap"`)
 
 Chart `series` entries take their own keys: `data`, `stroke`, `strokeWidth`, `strokeDasharray`, `area`, `points`, `highlight`, `barGradient`.
 
@@ -345,6 +345,34 @@ Multi-series in one node; x positions are data indexes (a shorter series stops e
 Borders: `stroke` + `strokeWidth` draw all four sides (`strokeStyle: "dashed" | "dotted"` for forecast/placeholder outlines); per-side borders take an object — `borderTop: { width: 1, color: "$border", style? }` for table row rules, `borderLeft: { width: 3, color: "$primary" }` for accent edges. Paths dash via `strokeDasharray: "6 4"` (or `[6, 4]`).
 
 Grid: `layout: "grid"` + `gridColumns` (a count → equal columns; an array of fr weights / CSS lengths like `[2, 1, "240px"]`; or a raw template string) gives real CSS grid for bento/editorial compositions that flex can only approximate. Children place with `gridColumn` / `gridRow` — a number means "span N", strings accept `"span 2"` or `"1 / 3"`. `gap` covers both axes, `rowGap` overrides the row axis; `responsive: "stack"` collapses the grid to one column on mobile with spans reset. Tracks render as `minmax(0, Nfr)` so long content can't blow a column past its share. Values outside the supported forms never reach the DOM. A `gridColumns` that isn't a count, an array of numbers / CSS lengths (`px`, `fr`, `%`, `em`, `rem`, `auto`, `min-content`, `max-content`, `minmax(…)`) or a plain template string falls back to equal columns. A `gridColumn` / `gridRow` that isn't a number, `"span N"` or `"A / B"` is dropped.
+
+#### Mobile primitives
+
+Phone screens are built from seven primitives that carry their own sizes, 44px hit areas and token colours (`$accent`, `$border`, `$bg-surface`, `$text-primary`, `$text-secondary`, `$danger`; neutral fallbacks unthemed). Labels truncate to one line with an ellipsis.
+
+| Type | Key props | What it is |
+|---|---|---|
+| `status-bar` | `time`, `appearance` | Device chrome pinned to the top, as tall as the root's `safeArea.top` (47 without one) |
+| `home-indicator` | `appearance` | The home pill pinned to the bottom, as tall as `safeArea.bottom` (34) |
+| `nav-bar` | `title`, `leading`, `trailing` (≤2), `largeTitle` | 44 tall (96 large), in flow; every action a 44×44 target |
+| `tab-bar` | `items: [{ icon, label, active?, badge? }]`, `variant` (`standard` / `floating` / `fab`), `fab` | Pinned to the bottom, 49 + the inset; 2–5 labeled tabs; `fab` adds a raised 56px centre action |
+| `button` | `label`, `icon`, `variant`, `size` (`sm` 32 / `md` 44 / `lg` 52), `disabled` | `md` meets the phone floor; `sm` is a mobile error by design |
+| `list-row` | `title`, `subtitle`, `leading`, `trailing` (`text` / `chevron` / `toggle` / `badge`), `divider` | 44 tall (56 with a subtitle); repeated rows count as reuse |
+| `sheet` | `detent`, `grabber`, children | A bottom sheet over a scrim, padded past the home indicator |
+
+`position: "fixed"` pins a node to the screen (the root's width × height is the viewport; content taller than it scrolls and the root grows with it, keeping its bottom padding), `"sticky"` sticks at its `y` while its container scrolls; `bottom` and `right` join `x` / `y`. The renderer raises the root's padding to at least the reach of any pinned `status-bar`, `tab-bar` or `home-indicator`, so content never starts or ends under chrome:
+
+```
+I("document", { type: "status-bar" })
+I("document", { type: "nav-bar", title: "Settings", largeTitle: true })
+list=I("document", { type: "frame", layout: "vertical" })
+I(list, { type: "list-row", title: "Notifications", leading: { icon: "bell" }, trailing: { toggle: true }, divider: true })
+I(list, { type: "list-row", title: "Account", subtitle: "ada@example.com", leading: { initials: "AL" }, trailing: { chevron: true } })
+I("document", { type: "tab-bar", items: [{ icon: "house", label: "Home" }, { icon: "settings", label: "Settings", active: true }] })
+I("document", { type: "home-indicator" })
+```
+
+The mobile ruleset judges them (see [`canvas_evaluate`](#canvas_evaluate)); [GUIDELINES](docs/GUIDELINES.md#mobile-vocabulary-primitives-and-pinning) has the pinned-CTA-bar idiom.
 
 ### `find_nodes`
 
@@ -412,7 +440,7 @@ Render canvas to PNG (returned as base64 image).
 | `nodeId` | string? | Specific node to capture |
 | `width` | number? | Viewport width (default: the canvas's artboard width) |
 | `height` | number? | Viewport height (default: the canvas's artboard height) |
-| `fullPage` | boolean? | Capture the whole design instead of one viewport — default false, so existing captures (diffs, responsive sets, the pattern gate) are byte-identical. A canvas taller than its artboard otherwise cuts off at the artboard height. `export` takes the same option (ignored for PDF, which paginates) |
+| `fullPage` | boolean? | Capture the whole design instead of one viewport — default false, so existing captures (diffs, responsive sets, the pattern gate) are byte-identical. A canvas taller than its artboard otherwise cuts off at the artboard height. The capture grows to the content, so `position: "fixed"` elements land at its ends (a bottom-pinned tab bar at the bottom of the image). `export` takes the same option (ignored for PDF, which paginates) |
 | `scale` | number? | Device scale (default 2) |
 | `theme` | string? | `"dark"` renders the design system's dark token layer (`dark.colors`/`dark.elevation` overrides); default light — a no-op without a dark layer |
 
@@ -827,9 +855,10 @@ Every result also carries a **`surface`** field: `{ type, device, source, rulesO
 
 | Rule | Category | Severity | Fires on |
 |---|---|---|---|
-| `mobile-touch-target` | usability | error | A control whose touch target is below 44px. The target extends to its row only when the row is a horizontal frame holding that one control. |
-| `mobile-handbuilt-target` | usability | info | A frame shaped like a tap target (one icon, or an icon plus a label of up to three words) whose box is below 44px. |
-| `mobile-safe-area` | usability | warning | Content under the 47px status-bar or 34px home-indicator inset. In fast mode, with the root's `safeArea` only positioned content can get there; without it, the first and last content must clear the insets. Padding of 32px or more scales down on a phone, so clear an inset with a spacer frame inside the content frame. Detailed mode checks rendered positions and also catches a long screen that ends in the bottom inset. |
+| `mobile-touch-target` | usability | error | A tap target below 44px: a control (its target extends to its row only when the row is a horizontal frame holding that one tappable), a `button` (`size: "sm"` is 32), a `list-row`, each `tab-bar` tab and FAB, or each `nav-bar` action. Primitives are measured by their own box; nodes inside an instance are judged as rendered and reported on the instance. |
+| `mobile-tab-bar` | usability | warning | A `tab-bar` with fewer than 2 or more than 5 tabs (the FAB is not a tab), a tab with no label, or a bar not pinned to the bottom (a `position` override or any `y`). |
+| `mobile-handbuilt-target` | usability | info | A frame shaped like a tap target (one icon, or an icon plus a label of up to three words) whose box is below 44px; rebuild it as a `button` if it is tappable. |
+| `mobile-safe-area` | usability | warning | Content under the 47px status-bar or 34px home-indicator inset, or left under a pinned bar. With the root's `safeArea` or pinned chrome the renderer reserves the insets, so fast mode checks positioned content (`absolute`, `fixed`, `sticky` at its stuck `y`) and pinned bars: the scroll's end (or start) must clear a bar you pinned, and the finding names the spacer height to add to your content frame. Without `safeArea`, the first and last content must clear the insets. Padding of 32px or more scales down on a phone, so clear an inset with a spacer frame. A `sheet`'s content is never judged. Detailed mode checks rendered positions and is authoritative. |
 | `mobile-type-floor` | typography | warning | Text below 11px, `$body` below 16px, or prose of five or more words below 13px (copy of twelve or more words at 13–15px is an info). |
 | `mobile-one-column` | usability | info | Prose set side by side in a horizontal or grid frame: two or more children each holding eight or more words. |
 | `mobile-artboard` | structure | warning / info | Runs on every type. A mobile canvas 500px or wider warns, and any other size than the device's is an info. An undeclared canvas narrower than 500px warns until `canvas_set_type` declares it; one declared `web` gets an info. |
@@ -978,7 +1007,7 @@ Content stress test — does the design survive real data? Re-renders the canvas
 | `empty` | Detected tables lose their data rows |
 | `many` | Data rows ×3 |
 
-Finding kinds: `clip` (content cut off — *info* when a designed `text-overflow: ellipsis` is doing its job, or when it's just the page growing taller than a fixed artboard — that scrolls on a real page; *warning* otherwise), `overflow-x` (a node escapes its parent box or the canvas), `layout-shift` (an **untouched** node ballooning — perturbed nodes, their ancestors, and a stretch sibling that merely follows a legitimately growing parent are exempt). Only **new** breakage counts: anything already clipping at baseline is the design's standing state. Tables are found with the same inventory drift and coverage use; component instances are expanded first.
+Finding kinds: `clip` (content cut off — *info* when a designed `text-overflow: ellipsis` is doing its job, or when it's a primitive's label hitting its designed ellipsis, or a root with an authored `overflow` scrolling inside itself; a sheet's own vertical overflow scrolls and is never a clip; *warning* otherwise), `overflow-x` (a node escapes its parent box or the canvas), `layout-shift` (an **untouched** node ballooning — perturbed nodes, their ancestors, and a stretch sibling that merely follows a legitimately growing parent are exempt). Only **new** breakage counts: anything already clipping at baseline is the design's standing state. Tables are found with the same inventory drift and coverage use; component instances are expanded first.
 
 | Param | Type | Description |
 |-------|------|-------------|

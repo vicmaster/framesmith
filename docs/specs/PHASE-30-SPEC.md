@@ -281,6 +281,15 @@ Slice B re-checked every value against the HIG through developer.apple.com's JSO
   - *Pre-freeze verifier.* A verifier attacked the first draft on paper and in Chrome and found nine wrong verdicts and nine ambiguities; the contract above includes every fix: the root keeps `height` with `min-height: max-content` (a plain `min-height` collapsed `height: "100%"` children), primitives never flex-shrink, the mobile rules see inside instances, `fixed` under a transformed ancestor is unplaceable, condition 2 counts spacers, the FAB is inside the tab-bar's box and reservation, sticky is checked stuck in detailed mode, the document bottom honours an `overflow` root's scroll height, top-pinned bars get the mirror condition, and the icon, tab-bar, button `minHeight`, sheet-scroll and reuse rules are pinned.
   - *Known limits, recorded.* Text checks (contrast, typography, the slop-copy tell) read text nodes only, so primitive labels are not contrast-checked; label colours are picked by contrast instead. Coverage still does not see list-row lists (Analyze).
 
+- **As built (slice D).** Where the build settles what the contract left open:
+  - *A fixed node with no `x`, `right` or `width` spans the root's column* (`left` and `right` both at the root's edges). Without it such a node shrank to its content: a fixed bar with no width rendered 0px wide.
+  - *List-row vertical padding is 6, not 8.* With 8, a row with a subtitle rendered 57px tall (16px title and 14px subtitle at line-height 1.3, plus a 2px gap), over the 56 the rules measure.
+  - *Two colour props* carry the roles the contract names: `secondaryColor` (list-row subtitle, trailing text and chevron; default `$text-secondary`) and `badgeColor` (tab and list-row badges; tab-bar default `$danger`).
+  - *`data-fs-primitive`* marks every primitive's root element, and the layout walker scans for `data-fs-label` only under it, so the scan never runs on ordinary frames (it would be quadratic in depth).
+  - *On a mobile canvas the whole usability category reads the expanded tree*, so label association and vague-copy findings inside an instance report on the instance too. Web keeps the unexpanded tree.
+  - *A pinned bar's height* counts a text child as unknown (the contract lists numeric heights, primitives and frames only), so a bar holding text gets the detailed-mode info.
+  - *The five-tab i18n acceptance* uses labels long enough to truncate. Short labels ("Home", "Profile") still fit a 78px slot after i18n's ×1.4, so they report nothing, which is also correct (no warning).
+
 **Slice E — mobile starting points (FR-E1..E4)**
 - `src/types.ts:316-326` (`Structure`), `src/structures.ts:1466-1468` (`listStructures`), `:1618` (`applyStructure`), `list_structures` at `src/index.ts:1449-1452` (whose docstring also misses the four state scaffolds today; fix it in passing).
 - Six mobile realisations in `src/structures.ts`, referencing type roles and $tokens only.

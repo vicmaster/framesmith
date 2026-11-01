@@ -117,14 +117,15 @@ export interface Ruleset {
 
 export type RulesetAxis = 'base' | 'type' | 'genre' | 'preset';
 
-/** The mobile ruleset's rule ids (Phase 30 slice C), each registered in the
- * same change as the check that honours it. */
+/** The mobile ruleset's rule ids (Phase 30 slices C and D), each registered
+ * in the same change as the check that honours it. */
 export const MOBILE_RULES = [
   'mobile-touch-target',
   'mobile-handbuilt-target',
   'mobile-safe-area',
   'mobile-type-floor',
   'mobile-one-column',
+  'mobile-tab-bar',
 ] as const;
 
 /** Keyed by axis, then value. Genre rows are canonical names only; aliases

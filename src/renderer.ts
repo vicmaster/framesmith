@@ -2,6 +2,10 @@ import type { Canvas, FontFace, SceneNode } from './types.js';
 import { getIconSvg } from './icons.js';
 import { aliasFamilyStack } from './fonts.js';
 import { usableSafeArea } from './surfaces.js';
+import {
+  BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, TAB_BAND,
+  buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets, tabItems,
+} from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
  *
@@ -68,9 +72,23 @@ function registeredFamilies(canvas?: Canvas): ReadonlySet<string> | undefined {
   return fonts?.length ? new Set(fonts.map((f) => f.family.toLowerCase())) : undefined;
 }
 
+/** What every node's render may read about the document: the canvas (for
+ * instances), registered font families, and — Phase 30 slice D — the root's
+ * width, the insets the chrome primitives size by, and how far pinned chrome
+ * reaches at each edge. All of it comes from the hashed scene. */
+interface RenderCtx {
+  canvas?: Canvas;
+  registered?: ReadonlySet<string>;
+  rootWidth: number;
+  insets: { top: number; bottom: number };
+  reservation: { top: number; bottom: number };
+}
+
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
   const registered = registeredFamilies(canvas);
-  const body = renderNode(root, canvas, registered);
+  const expand = (n: SceneNode) => (n.type === 'instance' && n.componentId && canvas ? resolveInstance(n, canvas) ?? n : n);
+  const rc: RenderCtx = { canvas, registered, rootWidth: width, insets: rootInsets(root), reservation: chromeReservation(root, expand) };
+  const body = renderNode(root, rc);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
   // (the live viewer). Without them the fs-skeleton class is inert, so every
@@ -96,6 +114,7 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 ${preconnect}<style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { min-height: 100vh;${rootBg ? ` ${rootBg};` : ''} }
@@ -518,14 +537,19 @@ function rootBackgroundCss(root: SceneNode): string {
   return '';
 }
 
-function renderNode(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<string>): string {
+function renderNode(node: SceneNode, rc: RenderCtx): string {
+  const { canvas } = rc;
   // Resolve instances: clone the component tree and apply overrides
   if (node.type === 'instance' && node.componentId && canvas) {
     const resolved = resolveInstance(node, canvas);
-    if (resolved) return renderNode(resolved, canvas, registered);
+    if (resolved) return renderNode(resolved, rc);
   }
 
-  const styles = buildStyles(node, registered);
+  // Phase 30 slice D — mobile primitives: fixed anatomy, own builders.
+  const primitive = renderPrimitive(node, rc);
+  if (primitive !== undefined) return primitive;
+
+  const styles = buildStyles(node, rc);
   const styleAttr = styles ? ` style="${escapeStyleValue(styles)}"` : '';
   const dataAttr = ` data-node-id="${node.id}"`;
 
@@ -574,10 +598,10 @@ function renderNode(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<s
   if (node.type === 'ellipse') {
     // Ensure border-radius: 50% for ellipses
     const ellipseStyles = styles.includes('border-radius') ? styles : styles + '; border-radius: 50%';
-    return `<div${dataAttr} style="${escapeStyleValue(ellipseStyles)}">${renderChildren(node, canvas, registered)}</div>`;
+    return `<div${dataAttr} style="${escapeStyleValue(ellipseStyles)}">${renderChildren(node, rc)}</div>`;
   }
 
-  return `<div${dataAttr}${styleAttr}>${renderChildren(node, canvas, registered)}</div>`;
+  return `<div${dataAttr}${styleAttr}>${renderChildren(node, rc)}</div>`;
 }
 
 // Exported for drift.ts (Phase 23 slice B): the structural inventory must see
@@ -618,12 +642,13 @@ function applyOverrides(node: SceneNode, overrides: Record<string, Partial<Scene
   }
 }
 
-function renderChildren(node: SceneNode, canvas?: Canvas, registered?: ReadonlySet<string>): string {
+function renderChildren(node: SceneNode, rc: RenderCtx): string {
   if (!node.children?.length) return '';
-  return node.children.map((child) => renderNode(child, canvas, registered)).join('\n');
+  return node.children.map((child) => renderNode(child, rc)).join('\n');
 }
 
-function buildStyles(node: SceneNode, registered?: ReadonlySet<string>): string {
+function buildStyles(node: SceneNode, rc: RenderCtx): string {
+  const { registered } = rc;
   const s: string[] = [];
 
   // Dimensions
@@ -639,6 +664,13 @@ function buildStyles(node: SceneNode, registered?: ReadonlySet<string>): string 
   if (node.minHeight !== undefined) s.push(`min-height: ${cssLength(node.minHeight)}`);
   if (node.maxWidth !== undefined) s.push(`max-width: ${cssLength(node.maxWidth)}`);
   if (node.height !== undefined) s.push(`height: ${cssLength(node.height)}`);
+  // Phase 30 slice D — the root's box is the viewport, and content may be
+  // taller: the root grows to its content (keeping its end padding past it,
+  // and its children their sizes) while `height: 100%` children still resolve
+  // against the artboard. An authored overflow keeps the plain fixed height.
+  if (node.type === 'document' && typeof node.height === 'number' && (node.overflow === undefined || node.overflow === 'visible')) {
+    s.push('min-height: max-content');
+  }
 
   // Layout
   if (node.layout === 'grid') {
@@ -678,12 +710,9 @@ function buildStyles(node: SceneNode, registered?: ReadonlySet<string>): string 
       }
     }
   }
-  if (node.type === 'document') s.push(...safeAreaPadding(node));
+  if (node.type === 'document') s.push(...safeAreaPadding(node, rc));
 
-  // Position
-  if (node.position) s.push(`position: ${node.position}`);
-  if (node.x !== undefined) s.push(`left: ${node.x}px`);
-  if (node.y !== undefined) s.push(`top: ${node.y}px`);
+  s.push(...positionStyles(node, rc));
 
   // Visual. For path nodes, `fill`/`stroke` are SVG path attributes (applied
   // in renderPathSvg) — skip the wrapper-level background/border so the path
@@ -890,6 +919,241 @@ function renderSelect(node: SceneNode, dataAttr: string): string {
   return `<div${dataAttr} style="${escapeStyleValue(frame)}">${label}${chevron}</div>`;
 }
 
+// ── mobile primitives (Phase 30 slice D) ─────────────────────────────────────
+// Fixed anatomy like the controls: each builder hand-rolls its styles from
+// src/primitives.ts geometry, and colours arrive pre-defaulted by
+// resolveVariables. Every primitive refuses to flex-shrink, so it keeps its
+// size in a fixed-height column. Labels sit in `data-fs-label` elements that
+// truncate to one line — canvas_stress reads their overflow as designed
+// truncation.
+
+function renderPrimitive(node: SceneNode, rc: RenderCtx): string | undefined {
+  const dataAttr = ` data-node-id="${node.id}" data-fs-primitive`;
+  switch (node.type) {
+    case 'status-bar': return renderStatusBar(node, rc, dataAttr);
+    case 'home-indicator': return renderHomeIndicator(node, rc, dataAttr);
+    case 'nav-bar': return renderNavBar(node, rc, dataAttr);
+    case 'tab-bar': return renderTabBar(node, rc, dataAttr);
+    case 'button': return renderButton(node, rc, `${dataAttr} tabindex="0" data-focusable`);
+    case 'list-row': return renderListRow(node, rc, dataAttr);
+    case 'sheet': return renderSheet(node, rc, dataAttr);
+    default: return undefined;
+  }
+}
+
+const style = (parts: Array<string | false | undefined>): string =>
+  escapeStyleValue(parts.filter((p): p is string => typeof p === 'string' && p.length > 0).join('; '));
+
+const LABEL_CSS = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 100%';
+
+function label(text: string, css: string): string {
+  return `<span data-fs-label style="${escapeStyleValue(`${LABEL_CSS}; ${css}`)}">${escapeHtml(text)}</span>`;
+}
+
+function icon(name: string | undefined, size: number, color: string | undefined): string {
+  if (!name) return '';
+  return getIconSvg(name, size, color) ?? `<!-- unknown icon: ${escapeHtml(name)} -->`;
+}
+
+/** Chrome glyph colour: appearance wins, else the defaulted `color`. */
+function chromeColor(node: SceneNode): string {
+  return node.appearance === 'dark' ? '#000000' : node.appearance === 'light' ? '#FFFFFF' : node.color ?? '#111827';
+}
+
+// Status-bar glyphs (bundled — no dependency): cellular bars, wifi, battery.
+const SIGNAL_SVG = (c: string) => `<svg width="18" height="12" viewBox="0 0 18 12" xmlns="http://www.w3.org/2000/svg" style="display: block"><rect x="0" y="8" width="3" height="4" rx="1" fill="${c}"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="${c}"/><rect x="10" y="3" width="3" height="9" rx="1" fill="${c}"/><rect x="15" y="0" width="3" height="12" rx="1" fill="${c}"/></svg>`;
+const WIFI_SVG = (c: string) => `<svg width="16" height="12" viewBox="0 0 16 12" xmlns="http://www.w3.org/2000/svg" style="display: block"><path d="M8 2.6c2.2 0 4.2.8 5.7 2.2l1.2-1.3C13.1 1.8 10.7.8 8 .8S2.9 1.8 1.1 3.5l1.2 1.3C3.8 3.4 5.8 2.6 8 2.6z" fill="${c}"/><path d="M8 6c1.3 0 2.5.5 3.4 1.3l1.2-1.3C11.4 4.9 9.8 4.2 8 4.2S4.6 4.9 3.4 6l1.2 1.3C5.5 6.5 6.7 6 8 6z" fill="${c}"/><path d="M8 9.4c.5 0 .9.2 1.2.5L8 11.2 6.8 9.9c.3-.3.7-.5 1.2-.5z" fill="${c}"/></svg>`;
+const BATTERY_SVG = (c: string) => `<svg width="27" height="13" viewBox="0 0 27 13" xmlns="http://www.w3.org/2000/svg" style="display: block"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" fill="none" stroke="${c}" stroke-opacity="0.4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="${c}"/><path d="M25 4.5v4c.8-.3 1.5-1.1 1.5-2s-.7-1.7-1.5-2z" fill="${c}" fill-opacity="0.4"/></svg>`;
+
+function renderStatusBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const c = escapeAttr(chromeColor(node));
+  const box = style([
+    ...positionStyles(node, rc), 'flex-shrink: 0', 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`,
+    'display: flex', 'align-items: center', 'justify-content: space-between', 'padding: 0 26px 0 32px',
+    `color: ${chromeColor(node)}`, node.fill ? `background-color: ${node.fill}` : undefined,
+  ]);
+  const time = `<span style="font-size: 15px; font-weight: 600; letter-spacing: -0.2px; font-variant-numeric: tabular-nums">${escapeHtml(node.time ?? '9:41')}</span>`;
+  return `<div${dataAttr} style="${box}">${time}<span style="display: flex; align-items: center; gap: 6px">${SIGNAL_SVG(c)}${WIFI_SVG(c)}${BATTERY_SVG(c)}</span></div>`;
+}
+
+function renderHomeIndicator(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const box = style([
+    ...positionStyles(node, rc), 'flex-shrink: 0', 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`,
+    'display: flex', 'align-items: flex-end', 'justify-content: center', 'padding-bottom: 8px', 'pointer-events: none',
+    node.fill ? `background-color: ${node.fill}` : undefined,
+  ]);
+  return `<div${dataAttr} style="${box}"><div style="${style(['width: 134px', 'height: 5px', 'border-radius: 3px', `background-color: ${chromeColor(node)}`])}"></div></div>`;
+}
+
+function navAction(action: { icon?: string; label?: string }, color: string, back: boolean): string {
+  const glyph = icon(action.icon ?? (back ? 'chevron-left' : undefined), 24, color);
+  const text = action.label?.trim() ? label(action.label, 'font-size: 17px') : '';
+  return `<div style="${style([
+    'display: flex', 'align-items: center', 'justify-content: center', 'gap: 2px', 'flex-shrink: 0',
+    `min-width: ${NAV_ACTION}px`, `height: ${NAV_ACTION}px`, text ? 'padding: 0 8px' : undefined, `color: ${color}`,
+  ])}">${glyph}${text}</div>`;
+}
+
+function renderNavBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const action = node.iconColor ?? '#2563EB';
+  const trailing = Array.isArray(node.trailing) ? node.trailing.slice(0, 2) : [];
+  const title = node.title?.trim() ?? '';
+  const box = style([
+    ...positionStyles(node, rc), 'flex-shrink: 0', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: 100%',
+    `height: ${navBarHeight(node)}px`, 'display: flex', 'flex-direction: column',
+    `color: ${node.color ?? '#111827'}`, node.fill ? `background-color: ${node.fill}` : undefined,
+  ]);
+  const centred = !node.largeTitle && title
+    ? `<div style="${style(['position: absolute', 'left: 96px', 'right: 96px', 'top: 0', `height: ${NAV_ACTION}px`, 'display: flex', 'align-items: center', 'justify-content: center'])}">${label(title, 'font-size: 17px; font-weight: 600')}</div>`
+    : '';
+  const row = `<div style="${style(['position: relative', 'display: flex', 'align-items: center', 'justify-content: space-between', `height: ${NAV_ACTION}px`, 'padding: 0 4px'])}">`
+    + `<div style="display: flex; align-items: center; min-width: ${NAV_ACTION}px">${node.leading ? navAction(node.leading, action, true) : ''}</div>`
+    + centred
+    + `<div style="display: flex; align-items: center">${trailing.map((a) => navAction(a, action, false)).join('')}</div></div>`;
+  const large = node.largeTitle
+    ? `<div style="${style(['height: 52px', 'display: flex', 'align-items: center', 'padding: 0 16px'])}">${label(title, 'font-size: 34px; font-weight: 700; letter-spacing: -0.4px')}</div>`
+    : '';
+  return `<div${dataAttr} style="${box}">${row}${large}</div>`;
+}
+
+function tabItem(item: { icon?: string; label?: string; active?: boolean; badge?: string | number }, node: SceneNode): string {
+  const color = item.active ? node.iconColor ?? '#2563EB' : node.color ?? '#6B7280';
+  const badge = item.badge !== undefined && String(item.badge).trim()
+    ? `<span style="${style(['position: absolute', 'top: -4px', 'left: 16px', 'min-width: 16px', 'height: 16px', 'padding: 0 4px', 'border-radius: 8px', `background-color: ${node.badgeColor ?? '#DC2626'}`, 'color: #FFFFFF', 'font-size: 11px', 'font-weight: 600', 'line-height: 16px', 'text-align: center'])}">${escapeHtml(String(item.badge))}</span>`
+    : '';
+  return `<div style="${style(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'flex-direction: column', 'align-items: center', 'justify-content: center', 'gap: 2px', `color: ${color}`])}">`
+    + `<span style="position: relative; display: flex">${icon(item.icon, 24, color)}${badge}</span>`
+    + `${item.label?.trim() ? label(item.label, 'font-size: 11px; font-weight: 500; line-height: 13px') : ''}</div>`;
+}
+
+function renderTabBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const items = tabItems(node);
+  const fill = node.fill ?? '#FFFFFF';
+  const border = node.stroke ?? '#D1D5DB';
+  const variant = node.variant === 'floating' || node.variant === 'fab' ? node.variant : 'standard';
+  const slots = items.map((it) => tabItem(it, node));
+  if (variant === 'fab') {
+    const accent = node.iconColor ?? '#2563EB';
+    const fab = `<div style="${style(['flex: 1 1 0', 'min-width: 0', 'position: relative'])}"><div style="${style([
+      'position: absolute', 'left: 50%', `top: -${FAB_RAISE}px`, `margin-left: -${FAB_SIZE / 2}px`, `width: ${FAB_SIZE}px`, `height: ${FAB_SIZE}px`,
+      'border-radius: 50%', `background-color: ${accent}`, 'display: flex', 'align-items: center', 'justify-content: center',
+      'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18)',
+    ])}">${icon(node.fab?.icon ?? 'plus', 24, '#FFFFFF')}</div></div>`;
+    slots.splice(Math.ceil(items.length / 2), 0, fab);
+  }
+  const row = `<div style="${style(['display: flex', `height: ${TAB_BAND}px`, 'align-items: stretch'])}">${slots.join('')}</div>`;
+  const outer = [...positionStyles(node, rc), 'flex-shrink: 0', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: 100%', `height: ${chromeHeight(node, rc.insets)}px`];
+  if (variant === 'floating') {
+    const pill = style([`height: ${TAB_BAND}px`, `border-radius: ${TAB_BAND / 2}px`, `background-color: ${fill}`, `border: 1px solid ${border}`, 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12)', 'overflow: hidden']);
+    return `<div${dataAttr} style="${style([...outer, `padding: 0 ${FLOATING_INSET}px`])}"><div style="${pill}">${row}</div></div>`;
+  }
+  const band = [`background-color: ${fill}`, `border-top: 1px solid ${border}`];
+  if (variant === 'fab') {
+    return `<div${dataAttr} style="${style([...outer, `padding-top: ${FAB_RAISE}px`])}"><div style="${style([...band, 'height: 100%'])}">${row}</div></div>`;
+  }
+  return `<div${dataAttr} style="${style([...outer, ...band])}">${row}</div>`;
+}
+
+function renderButton(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const size = node.size === 'sm' || node.size === 'lg' ? node.size : 'md';
+  const h = buttonHeight(node);
+  const text = node.label?.trim() ? label(node.label, '') : '';
+  const glyph = icon(node.icon, size === 'sm' ? 16 : 20, node.color);
+  const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 8;
+  const box = style([
+    `--fs-ring: ${node.fill && node.fill !== 'transparent' ? node.fill : node.color ?? '#2563EB'}`,
+    ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'justify-content: center', 'gap: 8px',
+    `height: ${h}px`, `min-height: ${h}px`, `min-width: ${h}px`,
+    text ? (node.width !== undefined ? `width: ${cssLength(node.width)}` : 'width: fit-content') : `width: ${h}px`,
+    text ? `padding: 0 ${BUTTON_PADDING[size]}px` : 'padding: 0',
+    `border-radius: ${radius}px`, `background-color: ${node.fill ?? 'transparent'}`,
+    node.stroke ? `border: 1px solid ${node.stroke}` : undefined,
+    `color: ${node.color ?? '#FFFFFF'}`, `font-size: ${BUTTON_FONT[size]}px`, 'font-weight: 600', 'white-space: nowrap',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const parts = node.iconPosition === 'trailing' ? `${text}${glyph}` : `${glyph}${text}`;
+  return `<div${attrs} style="${box}">${parts}</div>`;
+}
+
+function listRowTrailing(node: SceneNode): string {
+  const t = node.trailing;
+  if (!t || Array.isArray(t)) return '';
+  const secondary = node.secondaryColor ?? '#6B7280';
+  if (t.text?.trim()) return `<div style="flex-shrink: 1; min-width: 0; max-width: 50%; display: flex">${label(t.text, `font-size: 15px; color: ${secondary}`)}</div>`;
+  if (t.chevron) return `<div style="flex-shrink: 0; display: flex">${icon('chevron-right', 18, secondary)}</div>`;
+  if (typeof t.toggle === 'boolean') {
+    const track = t.toggle ? node.iconColor ?? '#2563EB' : node.stroke ?? '#D1D5DB';
+    return `<div style="${style(['position: relative', 'flex-shrink: 0', 'width: 44px', 'height: 24px', 'border-radius: 12px', `background-color: ${track}`])}"><div style="${style(['position: absolute', 'top: 3px', `left: ${t.toggle ? 23 : 3}px`, 'width: 18px', 'height: 18px', 'border-radius: 50%', 'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)'])}"></div></div>`;
+  }
+  if (t.badge !== undefined && String(t.badge).trim()) {
+    return `<span style="${style(['flex-shrink: 0', 'min-width: 20px', 'height: 20px', 'padding: 0 6px', 'border-radius: 10px', `background-color: ${node.badgeColor ?? node.iconColor ?? '#2563EB'}`, 'color: #FFFFFF', 'font-size: 12px', 'font-weight: 600', 'line-height: 20px', 'text-align: center'])}">${escapeHtml(String(t.badge))}</span>`;
+  }
+  return '';
+}
+
+function listRowLeading(node: SceneNode): string {
+  const l = node.leading;
+  if (!l) return '';
+  // Every leading kind takes the same 32px slot, so titles align down a list.
+  const slot = ['flex-shrink: 0', 'width: 32px', 'height: 32px'];
+  if (l.icon) return `<div style="${style([...slot, 'display: flex', 'align-items: center', 'justify-content: center'])}">${icon(l.icon, 22, node.iconColor)}</div>`;
+  const circle = [...slot, 'border-radius: 50%'];
+  if (l.image) return `<img src="${escapeHtml(l.image)}" style="${style([...circle, 'object-fit: cover', 'display: block'])}" />`;
+  if (l.initials?.trim()) {
+    return `<div style="${style([...circle, 'display: flex', 'align-items: center', 'justify-content: center', `background-color: ${node.stroke ?? '#D1D5DB'}`, 'font-size: 13px', 'font-weight: 600'])}">${escapeHtml(l.initials.trim().slice(0, 3))}</div>`;
+  }
+  return '';
+}
+
+function renderListRow(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const position = effectivePosition(node);
+  const box = style([
+    ...positionStyles(node, rc), position ? undefined : 'position: relative',
+    'display: flex', 'flex-direction: row', 'align-items: center', 'gap: 12px', 'flex-shrink: 0',
+    `min-height: ${listRowMinHeight(node)}px`, typeof node.height === 'number' ? `height: ${node.height}px` : undefined,
+    'padding: 6px 16px', node.width !== undefined ? `width: ${cssLength(node.width)}` : 'align-self: stretch',
+    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? '#111827'}`,
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const text = `<div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px">`
+    + label(node.title ?? '', 'font-size: 16px; line-height: 1.3')
+    + (node.subtitle?.trim() ? label(node.subtitle, `font-size: 14px; line-height: 1.3; color: ${node.secondaryColor ?? '#6B7280'}`) : '')
+    + '</div>';
+  const divider = node.divider
+    ? `<div style="${style(['position: absolute', 'left: 16px', 'right: 0', 'bottom: 0', 'height: 1px', `background-color: ${node.stroke ?? '#D1D5DB'}`])}"></div>`
+    : '';
+  return `<div${dataAttr} style="${box}">${listRowLeading(node)}${text}${listRowTrailing(node)}${divider}</div>`;
+}
+
+/** The four authored padding sides as CSS (fluid like every padding). */
+function paddingCss(padding: SceneNode['padding']): [string, string, string, string] {
+  const px = (v: unknown) => (typeof v === 'number' ? responsivePadding(v) : '0px');
+  if (typeof padding === 'number') { const v = px(padding); return [v, v, v, v]; }
+  if (!Array.isArray(padding) || !padding.length || !padding.every((p) => typeof p === 'number')) return ['0px', '0px', '0px', '0px'];
+  const [a, b = a, c = a, d = b] = padding;
+  return [px(a), px(b), px(c), px(d)];
+}
+
+function renderSheet(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const column = [`left: max(0px, (100% - ${rc.rootWidth}px) / 2)`, 'width: 100%', `max-width: ${rc.rootWidth}px`, 'z-index: 30'];
+  const scrim = `<div style="${style(['position: fixed', 'top: 0', 'bottom: 0', ...column, 'background-color: rgba(0, 0, 0, 0.4)'])}"></div>`;
+  const [pt, pr, pb, pl] = paddingCss(node.padding);
+  const grabber = node.grabber !== false;
+  const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 12;
+  const reach = rc.insets.top + 10;
+  const detent = node.detent === 'medium' ? 'height: 50%' : node.detent === 'large' ? `top: ${reach}px` : `max-height: calc(100% - ${reach}px)`;
+  const panel = style([
+    'position: fixed', 'bottom: 0', ...column, detent, 'display: flex', 'flex-direction: column',
+    typeof node.gap === 'number' ? `gap: ${node.gap}px` : undefined,
+    `padding: ${grabber ? `calc(${pt} + 16px)` : pt} ${pr} calc(${pb} + ${rc.insets.bottom}px) ${pl}`,
+    `background-color: ${node.fill ?? '#FFFFFF'}`, `border-radius: ${radius}px ${radius}px 0 0`, 'overflow-y: auto',
+  ]);
+  const grab = grabber
+    ? `<div style="${style(['position: absolute', 'top: 6px', 'left: 50%', 'margin-left: -18px', 'width: 36px', 'height: 5px', 'border-radius: 3px', `background-color: ${node.stroke ?? 'rgba(127, 127, 127, 0.4)'}`])}"></div>`
+    : '';
+  return `${scrim}<div${dataAttr} data-fs-scroll style="${panel}">${grab}${renderChildren(node, rc)}</div>`;
+}
+
 function buildImageStyles(node: SceneNode): string {
   const s: string[] = ['width: 100%', 'height: 100%'];
   if (node.objectFit) s.push(`object-fit: ${node.objectFit}`);
@@ -1041,14 +1305,53 @@ function findNearestContainer(ancestors: SceneNode[]): SceneNode | undefined {
 
 /** Phase 30 slice B — the root's safeArea insets ride on top of its authored
  * top/bottom padding, at exact px (insets never scale fluidly). Each side is
- * honoured only when it is a finite non-negative number. */
-function safeAreaPadding(node: SceneNode): string[] {
+ * honoured only when it is a finite non-negative number. Slice D — pinned
+ * chrome raises its edge to at least the chrome's reach (CSS max()), so
+ * content never starts or ends under it. */
+function safeAreaPadding(node: SceneNode, rc: RenderCtx): string[] {
   const insets = usableSafeArea(node.safeArea);
   const sides = paddingSides(node.padding);
   const out: string[] = [];
-  if (insets.top !== undefined) out.push(`padding-top: calc(${sides.top} + ${insets.top}px)`);
-  if (insets.bottom !== undefined) out.push(`padding-bottom: calc(${sides.bottom} + ${insets.bottom}px)`);
+  for (const edge of ['top', 'bottom'] as const) {
+    const inset = insets[edge];
+    const reach = rc.reservation[edge];
+    const base = inset !== undefined ? `calc(${sides[edge]} + ${inset}px)` : sides[edge];
+    if (reach > 0) out.push(`padding-${edge}: max(${base}, ${reach}px)`);
+    else if (inset !== undefined) out.push(`padding-${edge}: ${base}`);
+  }
   return out;
+}
+
+/** Position and offsets. `fixed` pins to the viewport, with horizontal
+ * offsets measured from the root's edges (centred column in a wider window)
+ * and a width capped at the root's; `fixed` / `sticky` with no vertical
+ * offset stick to the top, and pinned chrome to its own edge. */
+function positionStyles(node: SceneNode, rc: RenderCtx): string[] {
+  const s: string[] = [];
+  const position = effectivePosition(node);
+  if (position) s.push(`position: ${position}`);
+  if (position === 'fixed') {
+    const edge = `max(0px, (100% - ${rc.rootWidth}px) / 2)`;
+    if (node.x !== undefined || node.right === undefined) s.push(`left: calc(${edge} + ${node.x ?? 0}px)`);
+    // With no horizontal offset and no width, span the root's column — like an
+    // in-flow frame stretching — instead of shrinking to fit.
+    const span = node.x === undefined && node.right === undefined && node.width === undefined;
+    if (node.right !== undefined || span) s.push(`right: calc(${edge} + ${node.right ?? 0}px)`);
+    if (node.maxWidth === undefined) s.push(`max-width: ${rc.rootWidth}px`);
+  } else {
+    if (node.x !== undefined) s.push(`left: ${node.x}px`);
+    if (node.right !== undefined) s.push(`right: ${node.right}px`);
+  }
+  if (node.y !== undefined) s.push(`top: ${node.y}px`);
+  if (node.bottom !== undefined) s.push(`bottom: ${node.bottom}px`);
+  if (node.y === undefined && node.bottom === undefined) {
+    const chromeEdge = CHROME_EDGE[node.type];
+    if (chromeEdge && position) s.push(`${chromeEdge}: 0`);
+    else if (position === 'fixed' || position === 'sticky') s.push('top: 0');
+  }
+  if (position === 'fixed') s.push('z-index: 10');
+  else if (position === 'sticky') s.push('z-index: 5');
+  return s;
 }
 
 /** The authored top/bottom padding as buildStyles emits it (0px when absent or

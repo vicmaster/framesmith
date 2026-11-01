@@ -1,6 +1,7 @@
-// Phase 30 slice C — the mobile ruleset where it needs Chrome: mobile-safe-area
-// in detailed mode (rendered rects), and the canvas_stress record carrying the
-// canvas type through the real tool handlers.
+// Phase 30 slices C and D — the mobile ruleset where it needs Chrome:
+// mobile-safe-area in detailed mode (rendered rects, pinned bars, sticky), and
+// the canvas_stress record carrying the canvas type through the real tool
+// handlers.
 //
 // Usage: npx tsx test-mobile-rules-detailed.ts
 
@@ -68,17 +69,17 @@ I(w, { type: "text", content: "Badge", position: "absolute", x: 0, y: -80 })`);
   const nestedDetailed = await safeArea(nested, 'detailed');
   check('positioned content fast mode cannot place: fast says info, detailed places it', nestedFast.length === 1 && nestedFast[0].severity === 'info' && nestedDetailed.length === 1 && nestedDetailed[0].severity === 'warning', `${show(nestedFast)} / ${show(nestedDetailed)}`);
 
-  // The known gap until slice D: a fixed-height root does not carry its end
-  // padding past overflowing content, so a long screen ends in the inset.
+  // Slice D closed the slice C gap: the root grows to its content and keeps
+  // its end padding, so a long screen on the default path is clean in both.
   const rows = Array.from({ length: 60 }, (_, k) => `I(f, { type: "text", content: "Row ${k + 1}" })`).join('\n');
   const tall = phone(`f=I("document", { type: "frame", layout: "vertical", gap: 8, padding: [0, 16] })\n${rows}`);
   const tallFast = await safeArea(tall, 'fast');
   const tallDetailed = await safeArea(tall, 'detailed');
-  check('tall screen on the default path: detailed catches the document end in the inset', tallDetailed.length > 0 && tallDetailed.every((i) => i.message.includes('end of the scroll')), show(tallDetailed));
-  check('…which fast mode trusts the reservation for (recorded gap until slice D)', tallFast.length === 0, show(tallFast));
+  check('tall screen on the default path: detailed agrees with fast now (the root keeps its end padding)', tallDetailed.length === 0, show(tallDetailed));
+  check('…and fast mode trusts the reservation, now correctly', tallFast.length === 0, show(tallFast));
 
   console.log('\n── boundaries (detailed) ──');
-  check('G-D1 detailed + categories [usability] only still checks rendered rects (E21)', (await iss(tall, 'mobile-safe-area', 'detailed', ['usability'])).length > 0);
+  check('G-D1 detailed + categories [usability] only still checks rendered rects (E21)', (await iss(nested, 'mobile-safe-area', 'detailed', ['usability'])).some((i) => i.severity === 'warning'));
   let ops = 'p0=I("document", { type: "frame" })\n'; for (let k = 1; k < 14; k++) ops += `p${k}=I(p${k - 1}, { type: "frame" })\n`; ops += 'I(p13, { type: "text", content: "Deep" })';
   check('G-D2 text 15 levels deep in the top inset (bare root) is seen in detailed (E22)', (await iss(phone(ops, { bare: true }), 'mobile-safe-area', 'detailed')).some((i) => i.message.includes('top')));
 } finally {
@@ -149,6 +150,57 @@ I(b, { type: "text", content: "Morning run" })` });
     const aft = await tool('canvas_evaluate', { canvasId: w.canvasId });
     check('G-M3 after an edit the same-type record is no longer current (X04)', aft.stress?.current === false && aft.directive.includes('earlier version'), JSON.stringify(aft.stress));
   } finally { await client.close(); }
+}
+
+// ── slice D: pinned positioning in detailed mode ──────────────────────────
+{
+  console.log('\n── slice D: detailed ──');
+  const rows = (n: number) => Array.from({ length: n }, (_, i) => `I(list, { type: "list-row", name: "Row ${i}", title: "Row ${i}" })`).join('\n');
+  const bareBar = phone(`bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical" })
+I(bar, { type: "button", name: "Pay", label: "Pay" })`);
+  check('a fixed CTA at bottom 0 with no padding warns in detailed mode too', (await safeArea(bareBar, 'detailed')).some((i) => i.severity === 'warning' && i.message.includes('Pay')), show(await safeArea(bareBar, 'detailed')));
+
+  const idiom = (spacer: number) => phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+I(list, { type: "frame", name: "End spacer", height: ${spacer} })
+bar=I("document", { type: "frame", name: "CTA", position: "fixed", bottom: 0, layout: "vertical", padding: [12, 16, 12, 16], fill: "#FFFFFF" })
+I(bar, { type: "button", name: "Pay", label: "Pay", width: "100%" })
+I(bar, { type: "frame", name: "Inset", height: 34 })`);
+  const goodFast = await safeArea(idiom(68), 'fast');
+  const goodDetailed = await safeArea(idiom(68), 'detailed');
+  check('the pinned-bar idiom on a long screen passes both modes', goodFast.length === 0 && goodDetailed.length === 0, `${show(goodFast)} / ${show(goodDetailed)}`);
+  const shortDetailed = await safeArea(idiom(20), 'detailed');
+  check('…a short end spacer leaves the last row under the bar at max scroll (detailed agrees with fast)', shortDetailed.some((i) => i.message.includes('under pinned "CTA"') && i.message.includes('Row 29')), show(shortDetailed));
+
+  const tabbed = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+I("document", { type: "tab-bar", variant: "fab", items: [{ icon: "house", label: "A" }, { icon: "map", label: "B" }, { icon: "user", label: "C" }, { icon: "bell", label: "D" }] })`);
+  const tb = await safeArea(tabbed, 'detailed');
+  check('a long screen with a fab tab-bar: the renderer reserves it, detailed is clean', tb.length === 0, show(tb));
+
+  const sticky = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(3)}
+h=I(list, { type: "frame", position: "sticky", y: 0, layout: "vertical" })
+I(h, { type: "text", name: "Header", content: "Header" })
+${rows(20).replace(/Row (\\d+)/g, 'Later $1')}`);
+  const st = await safeArea(sticky, 'detailed');
+  check('a sticky header at y 0 warns at its stuck position in detailed mode', st.some((i) => i.message.includes('Header') && i.message.includes('sticks')), show(st));
+
+  const nav = phone(`I("document", { type: "nav-bar", name: "Nav", title: "Inbox", position: "fixed", y: 47 })
+I("document", { type: "text", name: "First", content: "First message" })`);
+  const nv = await safeArea(nav, 'detailed');
+  check('a fixed nav-bar at y 47 over the first content warns in detailed mode', nv.some((i) => i.message.includes('First') && i.message.includes('start of the scroll')), show(nv));
+
+  const overflowRoot = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}
+U("document", { overflow: "auto" })`);
+  const ov = await safeArea(overflowRoot, 'detailed');
+  check('a root with overflow: auto and safeArea: no false end-of-scroll warning', ov.length === 0, show(ov));
+
+  const long = phone(`list=I("document", { type: "frame", layout: "vertical" })
+${rows(30)}`);
+  const lg = await safeArea(long, 'detailed');
+  check('the slice C gap is closed: a long safeArea screen is clean in detailed mode with no spacer', lg.length === 0, show(lg));
 }
 
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');

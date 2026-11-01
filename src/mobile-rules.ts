@@ -10,11 +10,20 @@ import type { EvaluationIssue } from './evaluate.js';
 import type { LayoutRect } from './screenshot.js';
 import { renderedPaddingPx } from './renderer.js';
 import { usableSafeArea, type DeviceProfile, type SurfaceDeclaration } from './surfaces.js';
+import {
+  buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, pinsBottom, pinsTop,
+  rootInsets, unpinsFixed,
+} from './primitives.js';
 
-/** Fixed-vocabulary mobile chrome primitives (slice D adds the node types). */
+/** Fixed-vocabulary mobile chrome primitives. */
 const CHROME_TYPES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'sheet']);
-const CONTENT_TYPES = new Set(['icon', 'toggle', 'checkbox', 'radio', 'select', 'button', 'list-row', 'instance']);
-const POSITIONED = new Set(['absolute']);
+/** A nav-bar holds a title and actions, so it must clear the insets too. */
+const CONTENT_TYPES = new Set(['icon', 'toggle', 'checkbox', 'radio', 'select', 'button', 'list-row', 'nav-bar', 'instance']);
+const POSITIONED = new Set(['absolute', 'fixed', 'sticky']);
+/** Chrome that sits in an inset by design and renders its own reservation. */
+const PINNED_CHROME = new Set(['status-bar', 'home-indicator', 'tab-bar', 'sheet']);
+/** The controls' render defaults (renderer controlSize / select). */
+const CONTROL_HEIGHT: Record<string, number> = { toggle: 24, checkbox: 18, radio: 18, select: 36 };
 
 /** A phone-width artboard: narrower than this reads as a phone screen. */
 export const PHONE_WIDTH = 500;
@@ -86,12 +95,15 @@ export function proseWords(content: string): number {
 const textOf = (n: SceneNode): string | undefined =>
   n.type === 'text' && typeof n.content === 'string' && n.content.trim() ? n.content : undefined;
 
-const isPositioned = (n: SceneNode): boolean => n.position !== undefined && POSITIONED.has(n.position);
+const isPositioned = (n: SceneNode): boolean => {
+  const position = effectivePosition(n);
+  return position !== undefined && POSITIONED.has(position);
+};
 
 /** Parent links and the in-flow-content answer per node, built once per
  * evaluated tree: the walks below ask about the same subtrees repeatedly, and
  * recomputing would be cubic in nesting depth. */
-interface TreeIndex { parentOf: Map<SceneNode, SceneNode>; flow: Map<SceneNode, boolean> }
+interface TreeIndex { parentOf: Map<SceneNode, SceneNode>; flow: Map<SceneNode, boolean>; unpinned: Map<SceneNode, boolean> }
 const indexes = new WeakMap<SceneNode, TreeIndex>();
 
 function indexFor(ctx: MobileContext): TreeIndex {
@@ -99,10 +111,32 @@ function indexFor(ctx: MobileContext): TreeIndex {
   if (!index) {
     const parentOf = new Map<SceneNode, SceneNode>();
     (function link(n: SceneNode) { for (const c of n.children ?? []) { parentOf.set(c, n); link(c); } })(ctx.root);
-    index = { parentOf, flow: new Map() };
+    index = { parentOf, flow: new Map(), unpinned: new Map() };
     indexes.set(ctx.root, index);
   }
   return index;
+}
+
+/** Inside a sheet (a modal overlay the renderer pads): skipped by the
+ * safe-area checks in both modes. */
+function inSheet(n: SceneNode, ctx: MobileContext): boolean {
+  const { parentOf } = indexFor(ctx);
+  for (let a: SceneNode | undefined = n; a; a = parentOf.get(a)) if (a.type === 'sheet') return true;
+  return false;
+}
+
+/** A `fixed` node whose ancestor sets a transform, filter or backdrop filter
+ * pins to that ancestor, not the viewport — fast mode can't place it. */
+function fixedUnpinned(n: SceneNode, ctx: MobileContext): boolean {
+  const { parentOf, unpinned } = indexFor(ctx);
+  const parent = parentOf.get(n);
+  if (!parent) return false;
+  let held = unpinned.get(parent);
+  if (held === undefined) {
+    held = unpinsFixed(parent) || fixedUnpinned(parent, ctx);
+    unpinned.set(parent, held);
+  }
+  return held;
 }
 
 /** Content per the spec's Terms: text, icons, controls, the tappable
@@ -185,9 +219,11 @@ function firstContent(container: SceneNode, offset: number, edge: 'top' | 'botto
   for (const child of ordered) {
     const hit = visit(child, at);
     if (hit) return hit;
-    // A spacer: background, or a frame with nothing in flow beneath it.
+    // A spacer: background, or a frame with nothing in flow beneath it. In-flow
+    // chrome (a status bar, a home indicator) spaces by its rendered height.
     const pad = paddingSides(child, ctx.width);
-    at += Math.max(isNum(child.height) ? child.height : 0, isNum(child.minHeight) ? child.minHeight : 0, pad.top + pad.bottom) + gap;
+    const chrome = chromeHeight(child, rootInsets(ctx.root)) ?? 0;
+    at += Math.max(isNum(child.height) ? child.height : 0, isNum(child.minHeight) ? child.minHeight : 0, pad.top + pad.bottom, chrome) + gap;
   }
   return null;
 }
@@ -199,117 +235,276 @@ function textHeight(n: SceneNode): number {
   return lh;
 }
 
+/** A primitive's or control's own height, as the renderer draws it. */
+function fixedHeight(n: SceneNode): number | undefined {
+  if (n.type === 'button') return buttonHeight(n);
+  if (n.type === 'list-row') return Math.max(isNum(n.height) ? n.height : 0, listRowMinHeight(n));
+  if (n.type === 'nav-bar') return navBarHeight(n);
+  if (isNum(n.height)) return n.height;
+  return CONTROL_HEIGHT[n.type];
+}
+
+/** A leaf's height for placement: text estimated from its size, primitives
+ * their own, anything else its numeric height or 0. */
+function leafHeight(n: SceneNode): number {
+  return n.type === 'text' ? textHeight(n) : fixedHeight(n) ?? 0;
+}
+
+/** A pinned element's height when the tree fixes it: numeric height, else
+ * padding plus its in-flow children (the tallest across a row, the sum down a
+ * column); a child counts by its numeric height, a primitive's own height, or
+ * recursively. Any unknown → undefined. */
+function resolvedHeight(n: SceneNode, ctx: MobileContext): number | undefined {
+  const own = fixedHeight(n);
+  if (own !== undefined) return own;
+  if (n.type !== 'frame' && n.type !== 'component') return undefined;
+  const kids = (n.children ?? []).filter((c) => !isPositioned(c));
+  const heights = kids.map((c) => resolvedHeight(c, ctx));
+  if (heights.some((h) => h === undefined)) return undefined;
+  const hs = heights as number[];
+  const pad = paddingSides(n, ctx.width);
+  const row = n.layout === 'horizontal' || n.layout === 'grid';
+  const gap = isNum(n.gap) ? n.gap : 0;
+  const inner = row ? Math.max(0, ...hs) : hs.reduce((a, b) => a + b, 0) + gap * Math.max(0, hs.length - 1);
+  return pad.top + pad.bottom + inner;
+}
+
 const SAFE_AREA_OP = (p: DeviceProfile) => `U("document", { safeArea: { top: ${p.safeArea.top}, bottom: ${p.safeArea.bottom} } })`;
 
+/** Where each edge's in-flow content starts: the root's rendered padding (+
+ * its usable safeArea side), raised to the pinned chrome's reach — the
+ * renderer's max(). */
+function flowStart(ctx: MobileContext): { top: number; bottom: number } {
+  const pad = paddingSides(ctx.root, ctx.width);
+  const usable = ctx.root.type === 'document' ? usableSafeArea(ctx.root.safeArea) : {};
+  const reach = chromeReservation(ctx.root);
+  return {
+    top: Math.max(pad.top + (usable.top ?? 0), reach.top),
+    bottom: Math.max(pad.bottom + (usable.bottom ?? 0), reach.bottom),
+  };
+}
+
 /** Fast mode: the root's reservation (structural walk on each side without a
- * usable safeArea) plus every positioned node fast mode can place. */
+ * usable safeArea), every positioned node fast mode can place, and the pinned
+ * bars' two conditions. */
 export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   const insets = insetsFor(ctx);
-  const rootPad = paddingSides(ctx.root, ctx.width);
+  const start = flowStart(ctx);
   const rule = 'mobile-safe-area';
 
   for (const edge of ['top', 'bottom'] as const) {
     if (edge === 'top' ? insets.topReserved : insets.bottomReserved) continue;
     const inset = insets[edge];
-    const hit = firstContent(ctx.root, edge === 'top' ? rootPad.top : rootPad.bottom, edge, ctx);
+    const hit = firstContent(ctx.root, start[edge], edge, ctx);
     if (hit && hit.offset < inset) {
       issues.push(issue('usability', rule, 'warning', hit.node,
         `"${hit.node.name ?? hit.node.id}" sits about ${Math.round(hit.offset)}px from the ${edge} of the screen — inside the ${inset}px ${edge === 'top' ? 'status-bar' : 'home-indicator'} inset.`,
-        `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)} (the renderer adds them to the root's padding). For a deliberate full-bleed screen, put a ${inset}px spacer frame at the ${edge} of your content frame (padding of 32px or more scales down on a phone, and a spacer directly under the fixed-height root shrinks on a long screen).`));
+        `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)} (the renderer adds them to the root's padding), or pin a ${edge === 'top' ? 'status-bar' : 'home-indicator'} (the renderer reserves its height). For a deliberate full-bleed screen, put a ${inset}px spacer frame at the ${edge} of your content frame (padding of 32px or more scales down on a phone).`));
     }
   }
 
-  // Positioned content, placed through a chain of absolute ancestors with a
-  // numeric y up to the root. Anything else has an in-flow containing block
-  // whose position fast mode doesn't know.
+  // Positioned content. fixed / sticky place in the artboard frame directly
+  // (sticky at its stuck position); absolute through a chain of placed
+  // ancestors with a numeric y up to the root. Anything else has a containing
+  // block whose position fast mode doesn't know.
   let unplaceable = false;
   const placedY = new Map<SceneNode, number>();
+  const holds = (n: SceneNode) => isContent(n, ctx) || holdsFlowContent(n, ctx);
   const visit = (n: SceneNode, parent: SceneNode | undefined): void => {
-    if (parent && isPositioned(n)) {
-      const base = parent === ctx.root ? 0 : placedY.get(parent);
-      const y = base !== undefined && isNum(n.y) ? base + n.y : undefined;
-      if (y === undefined) {
-        if (isContent(n, ctx) || holdsFlowContent(n, ctx)) unplaceable = true;
+    if (n.type === 'sheet') return;
+    if (parent && isPositioned(n) && !PINNED_CHROME.has(n.type)) {
+      const position = effectivePosition(n);
+      if (position === 'fixed' && fixedUnpinned(n, ctx)) {
+        if (holds(n)) unplaceable = true;
+      } else if (position === 'fixed' || position === 'sticky') {
+        if (isNum(n.y) || !isNum(n.bottom)) {
+          const y = isNum(n.y) ? n.y : 0;
+          placedY.set(n, y);
+          checkPlaced(n, y, isNum(n.height) ? ctx.height - (y + n.height) : undefined);
+        } else {
+          const h = isContent(n, ctx) ? leafHeight(n) : resolvedHeight(n, ctx);
+          if (h !== undefined) placedY.set(n, ctx.height - n.bottom - h);
+          checkPlaced(n, h !== undefined ? ctx.height - n.bottom - h : undefined, n.bottom);
+        }
       } else {
-        placedY.set(n, y);
-        checkPlaced(n, y);
+        const base = parent === ctx.root ? 0 : placedY.get(parent);
+        const y = base !== undefined && isNum(n.y) ? base + n.y : undefined;
+        if (y === undefined) {
+          if (holds(n)) unplaceable = true;
+        } else {
+          placedY.set(n, y);
+          checkPlaced(n, y, isNum(n.height) ? ctx.height - (y + n.height) : undefined);
+        }
       }
     }
     for (const c of n.children ?? []) visit(c, n);
   };
 
-  const checkPlaced = (n: SceneNode, y: number): void => {
-    const bottomEdge = ctx.height - insets.bottom;
+  /** `top` = its top in the artboard, `fromBottom` = its bottom edge's
+   * distance from the artboard's bottom (each when known). */
+  const checkPlaced = (n: SceneNode, top: number | undefined, fromBottom: number | undefined): void => {
     if (isContent(n, ctx)) {
-      const h = n.type === 'text' ? textHeight(n) : isNum(n.height) ? n.height : 0;
-      if (y < insets.top || y + h > bottomEdge) {
-        const edge = y < insets.top ? 'top' : 'bottom';
+      const h = leafHeight(n);
+      const bottomGap = fromBottom ?? (top !== undefined ? ctx.height - (top + h) : undefined);
+      const inTop = top !== undefined && top < insets.top;
+      const inBottom = bottomGap !== undefined && bottomGap < insets.bottom;
+      if (inTop || inBottom) {
+        const edge = inTop ? 'top' : 'bottom';
+        const where = top !== undefined ? `y ${Math.round(top)}${h ? `, ${Math.round(h)}px tall` : ''}` : `${Math.round(bottomGap as number)}px from the bottom`;
         issues.push(issue('usability', rule, 'warning', n,
-          `Positioned "${n.name ?? n.id}" sits in the ${edge} ${edge === 'top' ? insets.top : insets.bottom}px inset (y ${Math.round(y)}${h ? `, ${Math.round(h)}px tall` : ''} on a ${ctx.height}px screen) — under the ${edge === 'top' ? 'status bar' : 'home indicator'}.`,
-          `Move it to y ≥ ${insets.top}${edge === 'bottom' ? ` and keep its bottom above ${bottomEdge}` : ''}.`));
+          `Positioned "${n.name ?? n.id}" sits in the ${edge} ${edge === 'top' ? insets.top : insets.bottom}px inset (${where} on a ${ctx.height}px screen) — under the ${edge === 'top' ? 'status bar' : 'home indicator'}.`,
+          edge === 'top' ? `Move it to y ≥ ${insets.top}.` : `Keep its bottom at least ${insets.bottom}px above the screen's bottom edge (bottom: ${insets.bottom} or more).`));
       }
       return;
     }
     if (!holdsFlowContent(n, ctx)) return;
     const pad = paddingSides(n, ctx.width);
-    const top = firstContent(n, y + pad.top, 'top', ctx);
-    const bottom = isNum(n.height) ? firstContent(n, ctx.height - (y + n.height) + pad.bottom, 'bottom', ctx) : null;
-    for (const [hit, edge, inset] of [[top, 'top', insets.top], [bottom, 'bottom', insets.bottom]] as const) {
+    const topHit = top !== undefined ? firstContent(n, top + pad.top, 'top', ctx) : null;
+    const bottomHit = fromBottom !== undefined ? firstContent(n, fromBottom + pad.bottom, 'bottom', ctx) : null;
+    for (const [hit, edge, inset] of [[topHit, 'top', insets.top], [bottomHit, 'bottom', insets.bottom]] as const) {
       if (hit && hit.offset < inset) {
         issues.push(issue('usability', rule, 'warning', hit.node,
           `"${hit.node.name ?? hit.node.id}" inside positioned "${n.name ?? n.id}" sits about ${Math.round(hit.offset)}px from the ${edge} of the screen — inside the ${inset}px ${edge === 'top' ? 'status-bar' : 'home-indicator'} inset.`,
-          `Pad "${n.name ?? n.id}" so its content clears ${inset}px from the ${edge} (a spacer frame of that height is exact; padding of 32px or more scales down on a phone).`));
+          `Pad "${n.name ?? n.id}" so its content clears ${inset}px from the ${edge} — a spacer frame of that height at its ${edge} is exact (padding of 32px or more scales down on a phone).`));
       }
     }
   };
 
   visit(ctx.root, undefined);
-  if (unplaceable) {
+
+  // Pinned bars: the scroll's start and end must clear them, or a bar hides
+  // the first or last content for good.
+  let unresolved = false;
+  (function bars(n: SceneNode) {
+    if (n.type === 'sheet') return;
+    if (n !== ctx.root && effectivePosition(n) === 'fixed' && !PINNED_CHROME.has(n.type) && !fixedUnpinned(n, ctx) && holds(n)) {
+      const bottomBar = pinsBottom(n);
+      const topBar = !bottomBar && pinsTop(n);
+      if (bottomBar || topBar) {
+        const h = isContent(n, ctx) ? leafHeight(n) : resolvedHeight(n, ctx);
+        if (h === undefined) {
+          unresolved = true;
+        } else {
+          const edge = bottomBar ? 'bottom' : 'top';
+          const need = h + (bottomBar ? (isNum(n.bottom) ? n.bottom : 0) : (isNum(n.y) ? n.y : 0));
+          const hit = firstContent(ctx.root, start[edge], edge, ctx);
+          if (hit && hit.offset < need - 0.5) {
+            const more = Math.ceil(need - hit.offset);
+            issues.push(issue('usability', rule, 'warning', hit.node,
+              `"${hit.node.name ?? hit.node.id}" ends up under pinned "${n.name ?? n.id}" at the ${edge === 'bottom' ? 'end' : 'start'} of the scroll — it clears ${Math.round(hit.offset)}px of the ${Math.round(need)}px the bar covers.`,
+              `Add a ${more}px spacer frame at the ${edge === 'bottom' ? 'end' : 'start'} of the frame that holds your content (${edge === 'bottom' ? 'after' : 'before'} "${hit.node.name ?? hit.node.id}"); root padding of 32px or more renders scaled down on a phone.`));
+          }
+        }
+      }
+    }
+    n.children?.forEach(bars);
+  })(ctx.root);
+
+  if (unplaceable || unresolved) {
     issues.push(issue('usability', rule, 'info', ctx.root,
-      'Some positioned content sits inside an in-flow frame, so fast mode cannot place it against the safe areas.',
+      unplaceable && !unresolved
+        ? 'Some positioned content sits where fast mode cannot place it against the safe areas (inside an in-flow frame, or a fixed element under a blurred or animated ancestor, which pins to that ancestor instead of the screen).'
+        : 'Fast mode cannot work out the height of a pinned bar (it holds text or a frame with no fixed height), so it cannot check that the scroll clears it.',
       'Run canvas_evaluate with mode: "detailed" — it checks rendered positions.'));
   }
   return issues;
 }
 
 /** Detailed mode: the rendered rects. Content in the top inset at scroll 0,
- * positioned content in the artboard's bottom inset, and in-flow content in
- * the last bottom-inset px of the document (a fixed-height root does not
- * carry its end padding past overflowing content). */
+ * positioned content in the artboard's bottom inset, in-flow content in the
+ * last bottom-inset px of the document, sticky content at its stuck position,
+ * and in-flow content under a pinned bar at the scroll's start or end. */
 export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   const insets = insetsFor(ctx);
+  const rule = 'mobile-safe-area';
   const rects = new Map<string, LayoutRect>();
   (function flat(list: LayoutRect[]) { for (const r of list) { rects.set(r.nodeId, r); if (r.children) flat(r.children); } })(layout);
   let docBottom = ctx.height;
   for (const r of rects.values()) docBottom = Math.max(docBottom, r.y + r.height);
+  // A root that scrolls inside itself (an authored overflow) reports its full
+  // scroll height, which carries its end padding.
+  const rootRect = rects.get(ctx.root.id);
+  if (rootRect?.scrollHeight !== undefined) docBottom = Math.max(docBottom, rootRect.y + rootRect.scrollHeight);
+  const reserved = insets.topReserved && insets.bottomReserved;
+  const remedy = (stuck: boolean) => stuck
+    ? 'Give the sticky element a y (or bottom) offset that clears the inset, or pad its content past it.'
+    : reserved
+      ? 'Keep positioned content inside the safe area; on a long screen, end the frame that holds the content with a spacer frame of the inset height.'
+      : `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)}.`;
+  const isContentNode = (n: SceneNode, r: LayoutRect | undefined) => n.type === 'image'
+    ? r !== undefined && r.width < ctx.width - 1
+    : n.type === 'text' ? textOf(n) !== undefined : CONTENT_TYPES.has(n.type);
+  const flowContent: Array<{ node: SceneNode; rect: LayoutRect }> = [];
+  const sticky: Array<{ node: SceneNode; rect: LayoutRect; content: Array<{ node: SceneNode; rect: LayoutRect }> }> = [];
 
-  const visit = (n: SceneNode, positioned: boolean): void => {
+  const visit = (n: SceneNode, positioned: boolean, stuck: typeof sticky[number] | undefined): void => {
+    if (n.type === 'sheet') return;
     const r = rects.get(n.id);
-    const content = n.type === 'image'
-      ? r !== undefined && r.width < ctx.width - 1
-      : n.type === 'text' ? textOf(n) !== undefined : CONTENT_TYPES.has(n.type);
-    if (content) {
+    if (isContentNode(n, r)) {
       if (r && r.width > 0 && r.height > 0) {
+        if (stuck) stuck.content.push({ node: n, rect: r });
+        if (!positioned) flowContent.push({ node: n, rect: r });
         const bottom = r.y + r.height;
         let where: string | undefined;
         if (r.y < insets.top && bottom > 0) where = `the top ${insets.top}px inset (y ${r.y})`;
         else if (positioned && bottom > ctx.height - insets.bottom && r.y < ctx.height) where = `the bottom ${insets.bottom}px inset of the screen (bottom edge ${bottom} on a ${ctx.height}px screen)`;
         else if (!positioned && bottom > docBottom - insets.bottom) where = `the bottom ${insets.bottom}px inset at the end of the scroll (bottom edge ${bottom} of a ${docBottom}px document)`;
         if (where) {
-          issues.push(issue('usability', 'mobile-safe-area', 'warning', n,
-            `"${n.name ?? n.id}" renders in ${where} — under the ${where.startsWith('the top') ? 'status bar' : 'home indicator'}.`,
-            insets.topReserved && insets.bottomReserved
-              ? 'Keep positioned content inside the safe area. On a screen taller than its artboard, end the frame that holds the content with a spacer frame of the inset height (not a spacer directly under the root, which shrinks).'
-              : `Reserve the insets on the root: ${SAFE_AREA_OP(ctx.profile)}.`));
+          issues.push(issue('usability', rule, 'warning', n,
+            `"${n.name ?? n.id}" renders in ${where} — under the ${where.startsWith('the top') ? 'status bar' : 'home indicator'}.`, remedy(false)));
         }
       }
       return; // a content node's own descendants are part of it
     }
-    for (const c of n.children ?? []) visit(c, positioned || isPositioned(c));
+    for (const c of n.children ?? []) {
+      const position = effectivePosition(c);
+      const cr = rects.get(c.id);
+      const own = position === 'sticky' && cr ? { node: c, rect: cr, content: [] } : undefined;
+      if (own) sticky.push(own);
+      visit(c, positioned || position === 'absolute' || position === 'fixed', own ?? stuck);
+    }
   };
-  visit(ctx.root, false);
+  visit(ctx.root, false, undefined);
+
+  // Sticky content where it sticks: its offset from the viewport edge.
+  for (const s of sticky) {
+    const toBottom = !isNum(s.node.y) && isNum(s.node.bottom);
+    const shift = toBottom ? (ctx.height - (s.node.bottom as number)) - (s.rect.y + s.rect.height) : (isNum(s.node.y) ? s.node.y : 0) - s.rect.y;
+    for (const c of s.content) {
+      const top = c.rect.y + shift;
+      const bottom = top + c.rect.height;
+      if (toBottom ? bottom > ctx.height - insets.bottom : top < insets.top) {
+        issues.push(issue('usability', rule, 'warning', c.node,
+          `"${c.node.name ?? c.node.id}" sits in the ${toBottom ? `bottom ${insets.bottom}` : `top ${insets.top}`}px inset when sticky "${s.node.name ?? s.node.id}" sticks (${toBottom ? `bottom edge ${Math.round(bottom)}` : `y ${Math.round(top)}`}).`, remedy(true)));
+      }
+    }
+  }
+
+  // Pinned bars: in-flow content under one at the scroll's end (bottom bars,
+  // moved to maximum scroll) or start (top bars).
+  const overlaps = (a: LayoutRect, top: number, b: LayoutRect) =>
+    a.y < top + b.height && a.y + a.height > top && a.x < b.x + b.width && a.x + a.width > b.x;
+  const scroll = docBottom - ctx.height;
+  (function bars(n: SceneNode) {
+    if (n.type === 'sheet') return;
+    const r = rects.get(n.id);
+    if (r && n !== ctx.root && effectivePosition(n) === 'fixed' && n.type !== 'home-indicator' && n.type !== 'status-bar') {
+      const bottomBar = pinsBottom(n);
+      if (bottomBar || pinsTop(n)) {
+        const top = bottomBar ? r.y + scroll : r.y;
+        for (const c of flowContent) {
+          if (overlaps(c.rect, top, r)) {
+            issues.push(issue('usability', rule, 'warning', c.node,
+              `"${c.node.name ?? c.node.id}" renders under pinned "${n.name ?? n.id}" at the ${bottomBar ? 'end' : 'start'} of the scroll.`,
+              `Add a spacer frame at the ${bottomBar ? 'end' : 'start'} of the frame that holds your content, as tall as the bar plus its offset.`));
+          }
+        }
+      }
+    }
+    n.children?.forEach(bars);
+  })(ctx.root);
   return issues;
 }
 
@@ -403,9 +598,44 @@ export function checkHandbuiltTargets(ctx: MobileContext): EvaluationIssue[] {
         if ((w !== undefined && w < floor) || (h !== undefined && h < floor)) {
           issues.push(issue('usability', 'mobile-handbuilt-target', 'info', n,
             `"${n.name ?? n.id}" looks like a hand-built tap target (${w ?? '?'}×${h ?? '?'}px) — below the ${floor}px touch floor if it is tappable, and the touch-target rule can't check a frame.`,
-            `If it is tappable, make it at least ${floor}×${floor}px. If it is decorative, ignore this.`));
+            `If it is tappable, rebuild it as a \`button\` (size "md" is ${floor}px tall; an icon-only button is square), or as a \`list-row\` / \`tab-bar\` item when that is what it is. If it is decorative, ignore this.`));
         }
         return; // the outermost tap-shaped frame is the target
+      }
+    }
+    n.children?.forEach(walk);
+  })(ctx.root);
+  return issues;
+}
+
+// ── mobile-tab-bar ─────────────────────────────────────────────────────────
+
+/** A phone tab bar: 2–5 labeled tabs (the FAB is not a tab), pinned to the
+ * bottom. One warning per broken condition per bar. */
+export function checkTabBars(ctx: MobileContext): EvaluationIssue[] {
+  const issues: EvaluationIssue[] = [];
+  const { min, max } = ctx.profile.tabCount;
+  const rule = 'mobile-tab-bar';
+  (function walk(n: SceneNode) {
+    if (n.type === 'tab-bar') {
+      const name = n.name ?? n.id;
+      const items = Array.isArray(n.items) ? n.items : undefined;
+      const count = items?.length ?? 0;
+      if (count < min || count > max) {
+        issues.push(issue('usability', rule, 'warning', n,
+          `Tab bar "${name}" has ${count} tab${count === 1 ? '' : 's'} — a phone tab bar holds ${min}–${max} (3–5 recommended).`,
+          count > max ? 'Move the extra destinations into a "More" tab or a screen of their own.' : 'Give it at least two destinations, or drop the tab bar.'));
+      }
+      const unlabeled = (items ?? []).flatMap((it, i) => (typeof it?.label === 'string' && it.label.trim() ? [] : [i + 1]));
+      if (unlabeled.length) {
+        issues.push(issue('usability', rule, 'warning', n,
+          `Tab bar "${name}": tab${unlabeled.length === 1 ? '' : 's'} ${unlabeled.join(', ')} ${unlabeled.length === 1 ? 'has' : 'have'} no label — every tab needs one (an icon alone is a guess).`,
+          'Give every item a short label (one word).'));
+      }
+      if (effectivePosition(n) !== 'fixed' || n.y !== undefined) {
+        issues.push(issue('usability', rule, 'warning', n,
+          `Tab bar "${name}" is not pinned to the bottom of the screen${n.y !== undefined ? ' (its y pins it to the top)' : ` (position "${effectivePosition(n)}")`} — in flow it falls below the fold on a long screen.`,
+          'Remove its position, x and y overrides: a tab-bar pins to the bottom by default (position "fixed", bottom 0).'));
       }
     }
     n.children?.forEach(walk);
