@@ -59,6 +59,7 @@ try {
 
   // apply_structure resolves by the canvas type.
   const stamped = (await tool('apply_structure', { canvasId: phone, structure: 'dashboard' })).data;
+  check('the stamp\'s instruction says how to set a nested primitive field', /whole object or array/.test(stamped.instruction ?? ''), stamped.instruction);
   check('dashboard on a mobile canvas stamps dashboard-mobile', stamped.applied === 'dashboard-mobile' && stamped.anatomy === 'dashboard' && stamped.surface === 'mobile', JSON.stringify({ applied: stamped.applied, anatomy: stamped.anatomy }));
   const refused = await tool('apply_structure', { canvasId: phone, structure: 'pricing', replace: true });
   check('pricing on a mobile canvas refuses, listing the mobile anatomies', refused.isError && /no mobile realisation.*dashboard, settings, auth, onboarding, feed, detail/.test(refused.text), refused.text);
