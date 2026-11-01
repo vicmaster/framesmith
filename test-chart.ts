@@ -83,8 +83,10 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   // Each x label owns a slot and truncates inside it. Plot 44..596 (y labels
   // reserve 44), three ticks 276 apart: the end labels get half a step each.
   const slotOf = (h: string, text: string) => h.match(new RegExp(`left: ([\\d.]+)%; width: ([\\d.]+)%; text-align: (\\w+)[^>]*>${text}</span>`))?.slice(1).join(' ');
-  check('line x labels: first slot starts at the plot, left-aligned', slotOf(html, 'Jan') === '7.33 23 left', slotOf(html, 'Jan'));
-  check('line x labels: last slot ends at the plot, right-aligned', slotOf(html, 'Dec') === '76.33 23 right', slotOf(html, 'Dec'));
+  // The empty middle tick leaves its room to its neighbours: each end label
+  // reaches halfway to the other (276 of 600).
+  check('line x labels: first slot starts at the plot, left-aligned', slotOf(html, 'Jan') === '7.33 46 left', slotOf(html, 'Jan'));
+  check('line x labels: last slot ends at the plot, right-aligned', slotOf(html, 'Dec') === '53.33 46 right', slotOf(html, 'Dec'));
   check('x labels truncate inside their slot', /overflow: hidden; text-overflow: ellipsis[^>]*>Jan<\/span>/.test(html));
 
   // Smooth curve emits cubic segments.
@@ -118,6 +120,11 @@ const render = () => renderToHtml(root, 1200, 800, canvas);
   line.xLabels = ['Zero'];
   check('a zero-width chart renders no labels', !render().includes('>Zero</span>') && !render().includes('NaN%') && !render().includes('Infinity%'));
   line.width = 600;
+  // Twelve ticks, every other one labelled: each label gets two steps of room
+  // (plot 0..596, step 54.18), so "Wk1" is not squeezed into half a step.
+  line.xLabels = ['Wk1', '', 'Wk3', '', 'Wk5', '', 'Wk7', '', 'Wk9', '', 'Wk11', ''];
+  const sparse = render();
+  check('a sparse label reaches halfway to the next labelled tick', slotOf(sparse, 'Wk1') === '0 9.03 left' && slotOf(sparse, 'Wk3') === '9.03 18.06 center', `${slotOf(sparse, 'Wk1')} | ${slotOf(sparse, 'Wk3')}`);
   line.xLabels = undefined;
   // A label count that differs from the bar count keeps the edge-to-edge spread.
   barChart.xLabels = ['Q1', 'Q4'];

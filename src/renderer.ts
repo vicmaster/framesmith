@@ -439,9 +439,10 @@ function renderChartSvg(node: SceneNode): string {
   // percentage: the plot stretches to the node's box (preserveAspectRatio
   // none), and SVG text would stretch with it — squashed on a 100%-wide chart
   // in a phone card, widened on a desktop one. Each x label owns a slot (its
-  // bar's band when there is one label per bar, else the span between its
-  // neighbouring ticks) and truncates with an ellipsis inside it, so dense
-  // labels never run into each other or past the plot.
+  // bar's band when there is one label per bar, else the room halfway to the
+  // nearest labelled tick on each side) and truncates with an ellipsis inside
+  // it, so dense labels never run into each other or past the plot. Empty
+  // labels skip a tick and leave their room to the neighbours.
   const labelColor = escapeAttr(node.color ?? CHART_LABEL_COLOR);
   const labels: string[] = [];
   const pct = (v: number, of: number) => `${round2((v / of) * 100)}%`;
@@ -460,14 +461,20 @@ function renderChartSvg(node: SceneNode): string {
       label(slot(geom.x0 + i * band, band, 'center'), text);
     } else if (n === 1) {
       label(slot(geom.x0, geom.plotW, 'center'), text);
-    } else {
-      // Ticks sit at the plot's ends and evenly between: the end labels hug
-      // the edges (half a step wide), the rest centre on their tick.
+    } else if (text) {
+      // Ticks sit at the plot's ends and evenly between. A label's room on
+      // each side reaches halfway to the nearest labelled tick (the whole plot
+      // when it is the only one): the end labels hug the edges inside it, the
+      // rest centre on their tick inside the nearer side's room.
       const step = geom.plotW / (n - 1);
       const tick = geom.x0 + i * step;
-      if (i === 0) label(slot(tick, step / 2, 'left'), text);
-      else if (i === n - 1) label(slot(tick - step / 2, step / 2, 'right'), text);
-      else label(slot(tick - step / 2, step, 'center'), text);
+      const labelled = xLabels.flatMap((t, j) => (t ? [j] : []));
+      const k = labelled.indexOf(i);
+      const before = k > 0 ? ((i - labelled[k - 1]) * step) / 2 : tick - geom.x0;
+      const after = k < labelled.length - 1 ? ((labelled[k + 1] - i) * step) / 2 : geom.x0 + geom.plotW - tick;
+      if (i === 0) label(slot(tick, after, 'left'), text);
+      else if (i === n - 1) label(slot(tick - before, before, 'right'), text);
+      else label(slot(tick - Math.min(before, after), 2 * Math.min(before, after), 'center'), text);
     }
   }
   for (const [i, text] of (sized ? yLabels : []).entries()) {

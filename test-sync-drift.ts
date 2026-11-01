@@ -40,7 +40,7 @@ const W = 800, H = 400;
 /** The handler's pipeline, minus the MCP envelope. */
 async function sync(canvas: Canvas, w = W): Promise<number> {
   const imported = await importUrl(URL_, { viewport: { width: w, height: H } });
-  const liveHtml = await renderImportedTree(imported.root, w, H, canvas.root.width as number);
+  const liveHtml = await renderImportedTree(imported.root, w, H, canvas.root.width);
   const resolved = resolveVariables(canvas.root, canvas.variables);
   const canvasHtml = renderToHtml(resolved, w, H, canvas);
   const diff = await computeDiff(canvasHtml, liveHtml, w, H, 1);
@@ -66,6 +66,11 @@ try {
   // so the 40px heading shrinks alike on both sides and the page stays in sync.
   const narrow = await sync(canvas, 600);
   expect('unchanged page at a narrower viewport diffs ≈ 0%', narrow < 0.5, `${narrow}%`);
+  // A fluid root (no numeric width) scales type against 1440 on both sides.
+  canvas.root.width = '100%';
+  const fluid = await sync(canvas, 1920);
+  expect('a fluid-width root at a viewport above 1440 diffs ≈ 0%', fluid < 0.5, `${fluid}%`);
+  canvas.root.width = W;
 
   // ── 2. the app drifts → real signal ─────────────────────────────────────
   accent = '#b71421'; // someone shipped a different CTA color
