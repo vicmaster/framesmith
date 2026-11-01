@@ -35,6 +35,9 @@ const CHROME_ANYWAY = new Set([
   // Shells out to the CLI, whose check-drift path launches Chrome. Nothing in
   // this file's own imports reveals that.
   'test-cli.ts',
+  // Drives the MCP server over stdio, and the server renders in Chrome for
+  // detailed evaluate, canvas_stress and screenshots.
+  'test-ridgeline.ts',
 ]);
 
 /** Direct use of the browser is the honest signal — these are the entry points

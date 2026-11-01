@@ -551,7 +551,9 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 - [x] Slice D — vocabulary: `fixed` / `sticky` positioning with the renderer reserving room for pinned chrome, a root that grows with long content (closing slice C's long-screen gap), the `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row` and `sheet` primitives, the primitives joining the 44px target rule, `mobile-tab-bar`, and pinned bars in the safe-area rule (`safeArea` on the root landed in slice B)
 - [x] Slice E — starting points: anatomy and realisation on structures, resolution by canvas type, six mobile realisations, and the pattern gate extended to them
 - [x] Slice F — the viewer: thumbnails at the artboard's real proportions and a device frame with a safe-area overlay
-- [ ] Slice G — the acceptance re-run
+- [x] Slice G — the acceptance re-run: Ridgeline Today rebuilt from `dashboard-mobile` in 33 nodes (93 by hand), 100/100 and READY in fast and detailed mode with no dark-theme finding, `canvas_stress` CLEAN, every tap target a primitive, pinned as `test-ridgeline.ts`; the re-run surfaced two render defects, fixed here: large type now scales against the artboard's own width (a phone's titles rendered at 60%, under the body), and chart tick labels no longer stretch with the plot
+
+All seven slices are merged and the acceptance re-run passed. The phase is closed.
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 

@@ -1083,8 +1083,11 @@ export async function importHtml(html: string, opts: ImportHtmlOptions = {}): Pr
 /** Render an imported tree the same way a canvas renders (Phase 16 font
  * backstop included) WITHOUT creating a canvas — canvas_sync_from_url diffs
  * this against the stored design (spec FR-D1: ephemeral, mutates nothing). */
-export async function renderImportedTree(root: SceneNode, width: number, height: number): Promise<string> {
-  const doc: SceneNode = { id: 'sync-doc', type: 'document', fill: '#FFFFFF', width, height, children: [root] };
+export async function renderImportedTree(root: SceneNode, width: number, height: number, rootWidth: SceneNode['width'] = width): Promise<string> {
+  // The document carries the compared canvas root's width, not the viewport's:
+  // the renderer scales large type against the root's width, so both sides of
+  // a diff must share it or an in-sync page reads as drifted at another viewport.
+  const doc: SceneNode = { id: 'sync-doc', type: 'document', fill: '#FFFFFF', width: rootWidth, height, children: [root] };
   const { extraFonts } = await ensureFontsForRender(doc, { fonts: [] } as unknown as Canvas, undefined);
   return renderToHtml(doc, width, height, undefined, { extraFonts });
 }
