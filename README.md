@@ -12,7 +12,7 @@ An open-source MCP server that turns your AI coding agent into a capable UI desi
 
 ### What an agent actually ships
 
-Every screen below was built end-to-end by an agent with framesmith's own vocabulary — one `generate_design_system` call each (a seed color + a personality), stamped patterns, real controls, and every quality gate cleared (score ≥ 95, states designed, stress-tested, both themes):
+Every screen below was built end-to-end by an agent with framesmith's own vocabulary — one `generate_design_system` call each (a seed color + a personality), stamped patterns, real controls, and every quality gate cleared (score ≥ 95, stress-tested, both themes, and every state the evaluator demands designed):
 
 ![A customer-support dashboard built by an agent in framesmith, light theme: sidebar with grouped navigation and an account row, four KPI cards (tickets resolved, first reply, SLA breaches, CSAT) with sparklines and tinted delta pills, a tickets-per-day bar chart with a highlighted day and a floating tooltip, a data-bound tickets-by-channel donut with a center total and legend, an agent-workload table with tinted status chips, and a top-performers panel. Generated from one seed (#2563EB) on the "technical" personality.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-support-dashboard.png?v=2.0)
 
@@ -23,6 +23,10 @@ Every screen below was built end-to-end by an agent with framesmith's own vocabu
 ![A specialty-coffee checkout built by an agent in framesmith, light theme: a masthead with the store mark and a secure-checkout note, a form column with Contact, Delivery and Payment sections — real radio, checkbox and input controls, a two-option delivery-speed selector — beside a sticky order summary listing two line items, subtotal, free delivery, a first-order credit, the total, and a Place order button, with a gift-code card beneath. Generated from one seed (#A24B1E) on the "soft" personality and stamped with the commerce genre.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-checkout.png?v=2.1)
 
 > Not every screen is a dashboard. This checkout carries the `commerce` genre — the transactional counterpart to `data` — so the evaluator reads its line prices and total as the design rather than as fabricated data. It still cleared the same bar as the two screens above, including designed **empty-basket** and **loading** states.
+
+![A trail-running app's home screen built by an agent in framesmith, one phone screen shown in light and dark side by side: a status bar, a "Good morning, Fiona" large title with a notifications bell, a This week card reading 42.8 km with a progress bar toward a 55 km goal, a two-by-two grid of Start run, Routes, Plan and Gear buttons, a daily-distance bar chart with Saturday highlighted, the start of a recent-runs list, and a pinned tab bar with a raised centre start-run button above the home indicator.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-mobile.png?v=2.4)
+
+> Not every screen is a web page either. This one is declared `type: "mobile"`, so it is judged as a phone screen: a 44px tap target on every button, row and tab, content clear of the status bar and home indicator, and a minimum body size. It started from the `dashboard` structure, which stamps its phone version on a mobile canvas, and is built from the phone primitives (status bar, nav bar, buttons, list rows, tab bar) with no hand-built device chrome, in 33 nodes. framesmith's test suite rebuilds it on every run.
 
 ```
 MCP Client → stdio → framesmith server
