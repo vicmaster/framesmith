@@ -246,6 +246,12 @@ export function parseAlpha(str: string): number {
   return 1;
 }
 
+/** Source-over blend of `top` at `alpha` onto an opaque `base`. */
+function composite(top: [number, number, number], alpha: number, base: [number, number, number]): [number, number, number] {
+  if (alpha >= 1) return top;
+  return [0, 1, 2].map((i) => Math.round(alpha * top[i] + (1 - alpha) * base[i])) as [number, number, number];
+}
+
 // --- Tree walking ---
 
 function buildTreeContext(root: SceneNode): NodeEntry[] {
@@ -414,37 +420,58 @@ function checkColorContrast(entries: NodeEntry[], theme?: 'dark'): CheckResult {
 
   for (const { node, parent } of textNodes) {
     const fgStr = node.color ?? '#000000';
-    const fg = parseColor(fgStr);
-    if (!fg) continue;
+    const fgRaw = parseColor(fgStr);
+    if (!fgRaw) continue;
 
-    // Walk up to find nearest background fill
-    let bgStr: string | null = null;
+    // Walk up collecting fills until an opaque one. Translucent fills
+    // (rgba / #RRGGBBAA) are layers the text sees THROUGH, so they composite
+    // over what is behind them instead of counting as solid paint.
+    const layers: string[] = [];
+    let onGradient = false;
+    let unreadable = false;
     let current = parent;
-    const allEntries = entries;
     while (current) {
       if (current.gradient) {
-        issues.push({
-          category: 'color',
-          severity: 'info',
-          nodeId: node.id,
-          nodeName: node.name,
-          message: `Text "${(node.content ?? '').slice(0, 30)}" is on a gradient background. Cannot compute contrast automatically.`,
-        });
-        bgStr = null;
+        onGradient = true;
         break;
       }
-      if (current.fill && !current.fill.startsWith('$')) {
-        bgStr = current.fill;
-        break;
+      const see = current.fill === 'transparent' || current.fill === 'none';
+      if (current.fill && !see && !current.fill.startsWith('$')) {
+        // A fill we cannot parse (hsl(), a named color) still paints: stop
+        // here and skip the check rather than measure against what is behind.
+        if (!parseColor(current.fill)) {
+          unreadable = true;
+          break;
+        }
+        const alpha = parseAlpha(current.fill);
+        if (alpha > 0) layers.push(current.fill);
+        if (alpha >= 1) break;
       }
-      // Find parent of current
-      const parentEntry = allEntries.find((e) => e.node.children?.includes(current!));
+      const parentEntry = entries.find((e) => e.node.children?.includes(current!));
       current = parentEntry?.node ?? null;
     }
 
-    if (!bgStr) continue;
-    const bg = parseColor(bgStr);
-    if (!bg) continue;
+    if (onGradient) {
+      issues.push({
+        category: 'color',
+        severity: 'info',
+        nodeId: node.id,
+        nodeName: node.name,
+        message: `Text "${(node.content ?? '').slice(0, 30)}" is on a gradient background. Cannot compute contrast automatically.`,
+      });
+      continue;
+    }
+    if (unreadable || layers.length === 0) continue;
+
+    // No opaque fill behind the layers: they sit on the page, which renders white.
+    const backmost = layers[layers.length - 1];
+    let bg: [number, number, number] = parseAlpha(backmost) >= 1 ? parseColor(backmost)! : [255, 255, 255];
+    for (let i = layers.length - 1; i >= 0; i--) {
+      if (parseAlpha(layers[i]) < 1) bg = composite(parseColor(layers[i])!, parseAlpha(layers[i]), bg);
+    }
+    const fg = composite(fgRaw, parseAlpha(fgStr), bg);
+    const composited = layers.length > 1 || parseAlpha(layers[0]) < 1;
+    const bgStr = composited ? `${layers[0]} (composited: ${rgbToHex(bg)})` : layers[0];
 
     // Round to 2 decimals — the precision contrast is conventionally reported at
     // (WebAIM et al.). Comparing the rounded value stops a ratio that rounds to
