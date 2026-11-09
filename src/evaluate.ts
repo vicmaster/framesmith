@@ -2032,8 +2032,8 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
   return targets;
 }
 
-/** The ids of every target node a rendered layout must place for the circle
- * test, or [] when nothing is undersized (no render needed). */
+/** The live targets still below 24px after the padded-row step — the ones
+ * the circle test must place; [] means no detailed render is needed. */
 export function undersizedTargets(targets: PointerTarget[]): PointerTarget[] {
   return targets.filter((t) => !t.disabled && Math.min(t.w, t.h) < 24);
 }
@@ -2228,8 +2228,6 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
   return { score: Math.max(0, score), issues };
 }
 
-/** Fold ruleset findings into a category result: −10 per warning (errors
- * score themselves inside their check), infos free. */
 /** Phase 31 FR-A7 — fold repeated findings for the serialised result.
  * Warnings and infos that share a severity, a category, a rule or tell and a
  * theme fold into ONE entry once three or more also share their message:
@@ -2276,6 +2274,8 @@ export function foldIssues(issues: EvaluationIssue[]): EvaluationIssue[] {
   return out;
 }
 
+/** Fold ruleset findings into a category result: −10 per warning (errors
+ * score themselves inside their check), infos free. */
 function withRuleIssues(result: CheckResult, extra: EvaluationIssue[]): CheckResult {
   if (extra.length === 0) return result;
   const warnings = extra.filter((i) => i.severity === 'warning').length;
