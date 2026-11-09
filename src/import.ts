@@ -168,6 +168,39 @@ export interface ImportReport {
   warnings: string[];
 }
 
+/** Phase 31 FR-A7 — the report an agent reads by default: snapped and
+ * scaleMatches grouped per token, literals per value, each with a count and
+ * the first five node ids. The full per-node lists come back under
+ * `verbose: true`. */
+export interface ImportReportGroup { token?: string; value?: string; count: number; nodeIds: string[] }
+export type SummarizedImportReport = Omit<ImportReport, 'snapped' | 'literals' | 'scaleMatches'> & {
+  snapped: ImportReportGroup[];
+  literals: ImportReportGroup[];
+  scaleMatches: ImportReportGroup[];
+  /** Always true here — pass verbose: true for the per-node lists. */
+  summarized: true;
+};
+
+export function summarizeImportReport(report: ImportReport): SummarizedImportReport {
+  const group = <T extends { nodeId: string }>(rows: T[], keyOf: (r: T) => string, field: 'token' | 'value'): ImportReportGroup[] => {
+    const groups = new Map<string, { count: number; nodeIds: string[] }>();
+    for (const r of rows) {
+      const g = groups.get(keyOf(r)) ?? { count: 0, nodeIds: [] };
+      g.count++;
+      if (g.nodeIds.length < 5 && !g.nodeIds.includes(r.nodeId)) g.nodeIds.push(r.nodeId);
+      groups.set(keyOf(r), g);
+    }
+    return [...groups].map(([key, g]) => ({ [field]: key, ...g }));
+  };
+  return {
+    ...report,
+    snapped: group(report.snapped, (r) => r.token, 'token'),
+    literals: group(report.literals, (r) => r.value, 'value'),
+    scaleMatches: group(report.scaleMatches, (r) => r.token, 'token'),
+    summarized: true,
+  };
+}
+
 function emptyReport(): ImportReport {
   return { counts: { nodes: 0, frames: 0, text: 0, maxDepth: 0, dropped: 0 }, snapped: [], literals: [], scaleMatches: [], layout: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
 }

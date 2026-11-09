@@ -299,6 +299,30 @@ export function tintLayer(
 
 export type StatusColors = Record<'success' | 'warning' | 'danger', string>;
 
+/** Phase 31 FR-A8 — the control colors an app needs: a focus ring that reads
+ * against every surface and tint it can sit on, and a border strong enough
+ * to be a control's only boundary cue (both 3:1, WCAG 1.4.11). */
+export type ControlColors = Record<'focus-ring' | 'border-strong', string>;
+
+/** First ramp step clearing `min` against EVERY background. Falls back to
+ * the extreme step (900 for light themes, 50 for dark), which clears against
+ * the generated surfaces. */
+function pickStepAll(ramp: Ramp, bgs: string[], min: number, direction: 'darker' | 'lighter'): string {
+  const steps = direction === 'darker' ? [...RAMP_STEPS] : [...RAMP_STEPS].reverse();
+  for (const s of steps) {
+    if (bgs.every((bg) => contrastRatio(rgbOf(ramp[s]), rgbOf(bg)) >= min)) return ramp[s];
+  }
+  return direction === 'darker' ? ramp[900] : ramp[50];
+}
+
+function controlColors(primary: Ramp, neutral: Ramp, theme: SemanticTheme, tints: Record<string, string>, direction: 'darker' | 'lighter'): ControlColors {
+  const surfaces = [theme['bg-primary'], theme['bg-surface'], theme['bg-elevated']];
+  return {
+    'focus-ring': pickStepAll(primary, [...surfaces, ...Object.values(tints)], 3, direction),
+    'border-strong': pickStepAll(neutral, [theme['bg-primary'], theme['bg-surface']], 3, direction),
+  };
+}
+
 /** The full system from one seed — what generate_color_system writes/reports.
  * The dark layer includes STATUS overrides (dogfood fix): the light-tuned
  * status colors are re-lit for AA against the dark surface. */
@@ -313,8 +337,10 @@ export function generateColorSystem(seedHex: string): {
   categorical: CategoricalPalette;
   /** Phase 28 — the tint layer (accent/success/warning/danger/neutral-tint), light values. */
   tints: TintLayer;
-  /** Dark counterparts for categorical + tints (merged into dark.colors by callers). */
-  darkRange: CategoricalPalette & TintLayer;
+  /** Phase 31 — focus-ring + border-strong, light values. */
+  controls: ControlColors;
+  /** Dark counterparts for categorical + tints + controls (merged into dark.colors by callers). */
+  darkRange: CategoricalPalette & TintLayer & ControlColors;
   /** Present when the palette degraded deliberately (near-neutral seed, fewer hues). */
   rangeNote?: string;
 } {
@@ -347,12 +373,15 @@ export function generateColorSystem(seedHex: string): {
     'danger-tint': darkStatus.danger,
     'neutral-tint': darkFull['text-secondary'],
   }, 'dark');
+  const controls = controlColors(primary, neutral, light, tints, 'darker');
+  const darkControls = controlColors(primary, neutral, darkFull, darkTints, 'lighter');
   return {
     seed: { hex: seedHex, oklch: hexToOklch(seedHex) }, primary, neutral, status, light,
     dark: darkFull,
     categorical: cat.palette,
     tints,
-    darkRange: { ...cat.darkPalette, ...darkTints },
+    controls,
+    darkRange: { ...cat.darkPalette, ...darkTints, ...darkControls },
     ...(cat.note ? { rangeNote: cat.note } : {}),
   };
 }

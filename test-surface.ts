@@ -180,7 +180,7 @@ function rootStyle(canvas: Canvas): string {
   check('surface report present with the documented shape', JSON.stringify(Object.keys(ev.surface).sort()) === JSON.stringify(['conflicts', 'device', 'rulesOff', 'rulesOn', 'source', 'type']));
   check('mobile report', ev.surface.type === 'mobile' && ev.surface.device === 'iphone-390' && ev.surface.source === 'declared');
   // Slice C registered the mobile ruleset (FR-B3: every mobile rule id is listed).
-  check('mobile rulesOn lists every mobile rule id plus the base mobile-artboard', JSON.stringify(ev.surface.rulesOn) === JSON.stringify([...MOBILE_RULES, 'mobile-artboard'].sort()) && ev.surface.rulesOff.length === 0 && ev.surface.conflicts.length === 0, JSON.stringify(ev.surface.rulesOn));
+  check('mobile rulesOn lists every mobile rule id plus the base artboard rules', JSON.stringify(ev.surface.rulesOn) === JSON.stringify([...MOBILE_RULES, 'mobile-artboard', 'desktop-app-artboard'].sort()) && ev.surface.rulesOff.length === 0 && ev.surface.conflicts.length === 0, JSON.stringify(ev.surface.rulesOn));
   const filtered = await evaluateCanvas(m, { mode: 'fast', categories: ['spacing'] });
   check('surface present even without the cliche category', filtered.surface?.type === 'mobile' && filtered.genre === undefined);
   const empty = createCanvas('Empty', undefined, {}, { type: 'mobile' });
@@ -190,7 +190,7 @@ function rootStyle(canvas: Canvas): string {
   addContent(plain);
   const evPlain = await evaluateCanvas(plain, { mode: 'fast' });
   check('undeclared canvas reports web / default', evPlain.surface.type === 'web' && evPlain.surface.source === 'default' && evPlain.surface.device === null);
-  check('web rulesOn is only the base mobile-artboard', JSON.stringify(evPlain.surface.rulesOn) === JSON.stringify(['mobile-artboard']), JSON.stringify(evPlain.surface.rulesOn));
+  check('web rulesOn is only the base artboard rules', JSON.stringify(evPlain.surface.rulesOn) === JSON.stringify(['desktop-app-artboard', 'mobile-artboard']), JSON.stringify(evPlain.surface.rulesOn));
 
   // FR-A2 survives the table: material preset + commerce genre relax together.
   m.metadata = { ...m.metadata, provenance: { preset: 'material', genre: 'commerce' } as never };

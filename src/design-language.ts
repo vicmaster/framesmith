@@ -15,7 +15,7 @@
 import { generateColorSystem } from './color-system.js';
 import { generateTypeScale, generateSpaceScale, type RatioName } from './scales.js';
 import type { DesignVariables, ShadowSpec } from './types.js';
-import { DEVICE_PROFILES, DEFAULT_DEVICE, deviceProfile, type SurfaceType } from './surfaces.js';
+import { DEVICE_PROFILES, DEFAULT_DEVICE, deviceProfile, WINDOW_PROFILES, DEFAULT_WINDOW, windowProfile, type SurfaceType } from './surfaces.js';
 
 export type PersonalityName = 'technical' | 'editorial' | 'soft' | 'data-dense';
 export const PERSONALITY_NAMES: PersonalityName[] = ['technical', 'editorial', 'soft', 'data-dense'];
@@ -165,12 +165,22 @@ export interface DesignSystemOptions {
   device?: string;
 }
 
+/** Phase 31 FR-A8 — Material 3's current state-layer and disabled
+ * opacities (Flutter gen_defaults token files; an older M3 set used 0.12 for
+ * focus and pressed). */
+export const STATE_LAYERS = { hover: 0.08, focus: 0.10, pressed: 0.10, disabledContent: 0.38, disabledContainer: 0.12 } as const;
+
 /** Where a generated system's type pivot came from. */
-export function typeBase(personalityName: PersonalityName, opts: DesignSystemOptions = {}): { size: number; source: 'explicit' | 'personality' | 'mobile' } {
+export function typeBase(personalityName: PersonalityName, opts: DesignSystemOptions = {}): { size: number; source: 'explicit' | 'personality' | 'mobile' | 'desktop-app' } {
   if (opts.baseSize !== undefined) return { size: opts.baseSize, source: 'explicit' };
   if (opts.surface === 'mobile') {
     const profile = deviceProfile(opts.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE];
     return { size: personalityName === 'data-dense' ? profile.bodyFloor : profile.bodySize, source: 'mobile' };
+  }
+  // Phase 31 — a desktop app reads at 14 (Carbon), 13 for data-dense.
+  if (opts.surface === 'desktop-app') {
+    const window = windowProfile(opts.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW];
+    return { size: personalityName === 'data-dense' ? window.bodyDense : window.bodySize, source: 'desktop-app' };
   }
   return { size: PERSONALITIES[personalityName].type.baseSize, source: 'personality' };
 }
@@ -194,7 +204,7 @@ export function generateDesignSystem(
   for (const [step, hex] of Object.entries(colorSystem.neutral)) colors[`neutral-${step}`] = hex;
   Object.assign(colors, colorSystem.status, colorSystem.light);
   // Phase 28 — the color range: categorical series + tint layer ride along.
-  Object.assign(colors, colorSystem.categorical, colorSystem.tints);
+  Object.assign(colors, colorSystem.categorical, colorSystem.tints, colorSystem.controls);
 
   // Type scale — the existing engine, pivoted by the personality.
   const baseSize = typeBase(personalityName, opts).size;
@@ -248,6 +258,7 @@ export function generateDesignSystem(
     radius,
     elevation: p.elevation.light,
     motion: p.motion,
+    state: { ...STATE_LAYERS },
     dark: { colors: { ...colorSystem.dark, ...colorSystem.darkRange }, elevation: p.elevation.dark },
   };
 

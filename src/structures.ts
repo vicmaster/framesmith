@@ -1862,7 +1862,6 @@ export function registerStructure(structure: Structure): void {
  * @throws naming what is available when nothing fits. */
 export function resolveStructure(name: string, type: SurfaceType): Structure {
   const all = Array.from(structureMap.values());
-  const other: SurfaceType = type === 'web' ? 'mobile' : 'web';
   const available = (kind: Structure['kind']): string => {
     const k = kind ?? 'page';
     const names = [...new Set(all.filter((s) => (s.kind ?? 'page') === k && covers(structureSurface(s), type)).map(structureAnatomy))];
@@ -1875,8 +1874,10 @@ export function resolveStructure(name: string, type: SurfaceType): Structure {
   if (realisations.length > 0) {
     const fit = realisations.find((s) => covers(structureSurface(s), type));
     if (fit) return fit;
-    // Every realisation of it covers the other type, or one would fit.
-    throw new Error(`"${name}" has no ${type} realisation. ${available(realisations[0].kind)} Pass realisation: "${other}" to stamp its ${other} realisation anyway.`);
+    // Name every type it IS realised on (Phase 31: there are three types).
+    const realisedOn = SURFACE_TYPES.filter((t) => realisations.some((s) => covers(structureSurface(s), t)));
+    const force = realisedOn.map((t) => `realisation: "${t}"`).join(' or ');
+    throw new Error(`"${name}" has no ${type} realisation. ${available(realisations[0].kind)} Pass ${force} to stamp its ${realisedOn.join(' / ')} realisation anyway.`);
   }
 
   const structure = structureMap.get(name);
@@ -2009,7 +2010,7 @@ export interface ApplyStructureResult {
   kind: 'page' | 'component';
   /** Phase 30 — the anatomy stamped and the surface of its realisation. */
   anatomy: string;
-  surface: 'web' | 'mobile' | 'any';
+  surface: 'web' | 'mobile' | 'desktop-app' | 'any';
   axes?: StructureAxes;
   /** Top-level node ids inserted under the canvas root (page) or target (component). */
   insertedNodeIds: string[];

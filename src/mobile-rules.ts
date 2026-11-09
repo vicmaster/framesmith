@@ -683,6 +683,6 @@ export function checkArtboard(ctx: MobileContext, surface: SurfaceDeclaration): 
       'Declare it: canvas_set_type({ type: "mobile" }) for a phone app screen (then add the safe-area insets its hint names), or canvas_set_type({ type: "web" }) for a responsive web page designed at this width.')];
   }
   return [issue('structure', rule, 'info', root,
-    `Declared web, but ${why}. A phone app screen should declare mobile so the mobile ruleset judges it.`,
+    `Declared ${surface.type}, but ${why}. A phone app screen should declare mobile so the mobile ruleset judges it.`,
     'canvas_set_type({ type: "mobile" }) if this is a phone app screen.')];
 }

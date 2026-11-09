@@ -122,6 +122,11 @@ function detectTable(node: SceneNode): { columnCount: number; headers: string[];
   // rare real header-plus-one-row table loses detection — accepted trade,
   // recorded in the drift docs. Import-named Tables keep the loose shape.
   if (rows.length < (named0 ? 2 : 3)) return null;
+  // Phase 31 FR-A5 — a list whose every row LEADS with a mark (an icon, a
+  // dot, a small image) is navigation, not data: a sidebar of projects with
+  // an identity dot, a name and a count. A table with a text header row never
+  // matches, since its header row leads with text.
+  if (!named0 && rows.every((r) => isLeadingMark(r.children![0]))) return null;
   const named = named0;
   // Modal cell count across candidate rows; require it to dominate unless the
   // frame is an import-named Table (trusted shape).
@@ -138,6 +143,20 @@ function detectTable(node: SceneNode): { columnCount: number; headers: string[];
   // only claim table when the first row reads as a header (unless import-named).
   if (!named && headers.length < 2) return null;
   return { columnCount: modalCount, headers: headers.map((h) => h.trim()), rowCount: rows.length };
+}
+
+/** An icon, a dot (an ellipse, or a childless frame or rectangle whose known
+ * dimensions are all 12px or less — import can drop one of them), or an image
+ * of 24px or less. */
+function isLeadingMark(node: SceneNode | undefined): boolean {
+  if (!node) return false;
+  if (node.type === 'icon' || node.type === 'ellipse') return true;
+  const dims = [node.width, node.height].filter((d): d is number => typeof d === 'number');
+  if ((node.type === 'frame' || node.type === 'rectangle') && !(node.children?.length)) {
+    return dims.length > 0 && dims.every((d) => d <= 12);
+  }
+  if (node.type === 'image') return dims.length > 0 && dims.every((d) => d <= 24);
+  return false;
 }
 
 function firstText(node: SceneNode): string | null {

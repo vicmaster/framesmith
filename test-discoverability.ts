@@ -18,7 +18,7 @@ import './test-env.js';
 import { readFileSync } from 'node:fs';
 import { domToSceneGraph, type RawDomNode } from './src/import.js';
 import { listStructures } from './src/structures.js';
-import { RULESETS, GENRE_ALIASES, SURFACE_TYPES, DEVICE_PROFILES } from './src/surfaces.js';
+import { RULESETS, GENRE_ALIASES, SURFACE_TYPES, DEVICE_PROFILES, WINDOW_PROFILES } from './src/surfaces.js';
 
 interface Check { name: string; ok: boolean; detail?: string }
 const checks: Check[] = [];
@@ -395,6 +395,9 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
     expect(`every canvas type named (type: "…") in ${label}`, types.length === 0, types.join(', '));
     const devices = Object.keys(DEVICE_PROFILES).filter((d) => !src.includes(`"${d}"`));
     expect(`every device profile named in ${label}`, devices.length === 0, devices.join(', '));
+    // Phase 31 — window profiles for desktop-app canvases.
+    const windows = Object.keys(WINDOW_PROFILES).filter((d) => !src.includes(`"${d}"`));
+    expect(`every window profile named in ${label}`, windows.length === 0, windows.join(', '));
     const fields = ['rulesOn', 'rulesOff', 'conflicts', 'typeSource', 'safeArea'].filter((f) => !src.includes(f));
     expect(`surface fields documented in ${label}`, fields.length === 0, fields.join(', '));
   }

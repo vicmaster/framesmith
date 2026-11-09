@@ -258,6 +258,7 @@ export function setVariables(canvas: Canvas, vars: Partial<DesignVariables>): De
   }
   if (vars.motion) canvas.variables.motion = { ...canvas.variables.motion, ...vars.motion };
   if (vars.elevation) canvas.variables.elevation = { ...canvas.variables.elevation, ...vars.elevation };
+  if (vars.state) canvas.variables.state = { ...canvas.variables.state, ...vars.state };
   return canvas.variables;
 }
 
@@ -379,6 +380,7 @@ export function mergeDesignTokens(...layers: Array<DesignVariables | undefined>)
     }
     if (layer.motion) out.motion = { ...(out.motion ?? {}), ...layer.motion };
     if (layer.elevation) out.elevation = { ...(out.elevation ?? {}), ...layer.elevation };
+    if (layer.state) out.state = { ...(out.state ?? {}), ...layer.state };
   }
   return out;
 }

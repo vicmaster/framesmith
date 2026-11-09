@@ -6,7 +6,7 @@ import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDe
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { evaluateCanvas, resolveGenre, type EvaluationResult, type EvaluationIssue } from './evaluate.js';
-import { resolveSurface, usableSafeArea, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, type DeviceProfile } from './surfaces.js';
+import { resolveSurface, usableSafeArea, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, windowProfile, WINDOW_PROFILES, DEFAULT_WINDOW, type DeviceProfile } from './surfaces.js';
 import { isPresetName } from './genre.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
 
@@ -1174,6 +1174,10 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
   // canvas keeps the breakpoint buttons, sized from the device profile table.
   const surface = resolveSurface(canvas);
   const isMobile = surface.type === 'mobile';
+  // Phase 31 FR-I1 — a desktop-app canvas's breakpoints are window widths
+  // from its window profile (narrower than the artboard), not phone/tablet.
+  const window = surface.type === 'desktop-app' ? windowProfile(surface.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW] : undefined;
+  const windowWidths = window ? window.breakpoints.filter((bw) => bw < w) : [];
   const deviceId = surface.device ?? DEFAULT_DEVICE;
   const profile = deviceProfile(deviceId) ?? PHONE;
 
@@ -1424,7 +1428,7 @@ ${FAVICON_HTML}
   <div class="toolbar">
     <a href="/project/${canvas.projectId}">&larr; Back</a>
     <span class="title">${esc(canvas.name)}</span>
-    <span class="dim">${w} x ${h}${isMobile ? ` &middot; ${esc(deviceId)}` : ''}</span>
+    <span class="dim">${w} x ${h}${isMobile ? ` &middot; ${esc(deviceId)}` : window ? ` &middot; ${esc(window.id)}` : ''}</span>
     ${stateChips}
     ${provChip}
     ${verdictChip}
@@ -1433,6 +1437,10 @@ ${FAVICON_HTML}
       ${hasDark ? '<button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Render the dark token layer">Dark</button>' : ''}
       ${isMobile
         ? '<button class="btn" onclick="toggleSafeArea()" id="btn-safe" title="Show where the status bar and home indicator sit">Safe area</button>'
+        : window
+        ? `${windowWidths.map((bw) => `<button class="btn bp-btn" onclick="setViewport(${bw}, ${h}, 'w${bw}')" id="bp-w${bw}" title="A ${bw}px window">${bw}</button>`).join('\n      ')}
+      <button class="btn bp-btn active" onclick="setViewport(${w}, ${h}, 'desktop')" id="bp-desktop" title="The artboard's window">${w}</button>
+      <button class="btn bp-btn" onclick="setCompareMode()" id="bp-compare">Compare</button>`
         : `<button class="btn bp-btn" onclick="setViewport(${PHONE.width}, ${PHONE.height}, 'mobile')" id="bp-mobile">Mobile</button>
       <button class="btn bp-btn" onclick="setViewport(768, 1024, 'tablet')" id="bp-tablet">Tablet</button>
       <button class="btn bp-btn active" onclick="setViewport(${w}, ${h}, 'desktop')" id="bp-desktop">Desktop</button>
@@ -1458,16 +1466,19 @@ ${FAVICON_HTML}
   ${isMobile ? renderDevice(canvas, w, h, deviceId, profile) : `<div class="viewport" id="viewport">
     <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
     <div class="compare-grid" id="compare-grid">
-      <div class="compare-cell" style="--bp-w: ${PHONE.width}; --bp-h: ${PHONE.height};">
+      ${window ? windowWidths.map((bw) => `<div class="compare-cell" style="--bp-w: ${bw}; --bp-h: ${h};">
+        <div class="bp-label">Window · ${bw}×${h}</div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${bw}&h=${h}" data-bp="w${bw}"></iframe></div>
+      </div>`).join('\n      ') : `<div class="compare-cell" style="--bp-w: ${PHONE.width}; --bp-h: ${PHONE.height};">
         <div class="bp-label">Mobile · ${PHONE.width}×${PHONE.height}</div>
         <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile"></iframe></div>
       </div>
       <div class="compare-cell" style="--bp-w: 768; --bp-h: 1024;">
         <div class="bp-label">Tablet · 768×1024</div>
         <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet"></iframe></div>
-      </div>
+      </div>`}
       <div class="compare-cell" style="--bp-w: ${w}; --bp-h: ${h};">
-        <div class="bp-label">Desktop · ${w}×${h}</div>
+        <div class="bp-label">${window ? "Window" : "Desktop"} · ${w}×${h}</div>
         <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
       </div>
     </div>
