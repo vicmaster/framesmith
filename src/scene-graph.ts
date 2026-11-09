@@ -6,7 +6,7 @@ import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
 import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile } from './repo-store.js';
 import { canvasVersionHash } from './version.js';
 import { migrateProvenance } from './genre.js';
-import { deviceProfile, DEFAULT_DEVICE, type SurfaceType } from './surfaces.js';
+import { deviceProfile, windowProfile, DEFAULT_DEVICE, DEFAULT_WINDOW, type SurfaceType } from './surfaces.js';
 
 const store = new Map<string, Canvas>();
 
@@ -140,6 +140,8 @@ export function createCanvas(
   // explicit width/height wins per side) and reserves the device insets on
   // the root, so in-flow content can never reach them.
   const profile = surface?.type === 'mobile' ? deviceProfile(surface.device ?? DEFAULT_DEVICE) : undefined;
+  // Phase 31 — a desktop-app canvas takes its window's artboard; no insets.
+  const window = surface?.type === 'desktop-app' ? windowProfile(surface.device ?? DEFAULT_WINDOW) : undefined;
   const canvas: Canvas = {
     id,
     name: name ?? `Canvas ${store.size + 1}`,
@@ -148,8 +150,8 @@ export function createCanvas(
       type: 'document',
       name: 'Document',
       children: [],
-      width: size.width ?? profile?.width ?? 1440,
-      height: size.height ?? profile?.height ?? 900,
+      width: size.width ?? profile?.width ?? window?.width ?? 1440,
+      height: size.height ?? profile?.height ?? window?.height ?? 900,
       fill: '#FFFFFF',
       ...(profile ? { safeArea: { ...profile.safeArea } } : {}),
     },

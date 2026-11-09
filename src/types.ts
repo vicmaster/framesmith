@@ -337,10 +337,24 @@ export interface DesignVariables {
    * duration + easing packaged under a name, referenced from `transition`
    * as the string "$motion.<name>". */
   motion?: Record<string, { duration: number; easing: string }>;
+  /** Phase 31 FR-A8 — element-state opacities: hover/focus/pressed are the
+   * share of the ink layered over a control's fill, disabledContent and
+   * disabledContainer the opacities a disabled control renders at (Material 3
+   * state tokens). Layered workspace → project → canvas like motion. */
+  state?: StateTokens;
   /** Phase 27 — elevation (shadow) tokens, referenced from a node as
    * `shadow: "$elevation.<name>"` (the `$motion` dotted pattern). Semantic
    * names by convention: flat / raised / floating / overlay. */
   elevation?: Record<string, ShadowSpec[]>;
+}
+
+/** Phase 31 FR-A8 — see DesignVariables.state. Each value is 0–1. */
+export interface StateTokens {
+  hover?: number;
+  focus?: number;
+  pressed?: number;
+  disabledContent?: number;
+  disabledContainer?: number;
 }
 
 /** Custom font face declaration. Renderer emits a single `@font-face` rule
@@ -388,7 +402,7 @@ export interface Structure {
   anatomy?: string;
   /** Phase 30 — the canvas type this realisation is for (default `web`);
    * `any` stamps on every type. (anatomy, surface) is unique in the registry. */
-  surface?: 'web' | 'mobile' | 'any';
+  surface?: 'web' | 'mobile' | 'desktop-app' | 'any';
   /** Placeholder children inserted under `canvas.root` by `apply_structure`. */
   nodes: SceneNode[];
 }
@@ -500,7 +514,7 @@ export interface Canvas {
      * / canvas_set_type). Absent means `web`, never declared. It selects
      * rules, generator defaults and presentation, never the render — the
      * insets a phone needs live on the root as `safeArea`. */
-    surface?: { type: 'web' | 'mobile'; device?: string };
+    surface?: { type: 'web' | 'mobile' | 'desktop-app'; device?: string };
     [key: string]: unknown;
   };
 }

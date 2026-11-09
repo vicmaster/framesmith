@@ -112,7 +112,7 @@ for (const anatomy of ['dashboard', 'settings', 'auth', 'onboarding', 'feed', 'd
 }
 check(JSON.stringify(byName.get('dashboard')?.surfaces) === '["web","mobile"]', 'dashboard is realised on web and mobile');
 check(JSON.stringify(byName.get('feed-mobile')?.surfaces) === '["mobile"]', 'feed is realised on mobile only');
-check(JSON.stringify(byName.get('empty-state')?.surfaces) === '["web","mobile"]' && byName.get('empty-state')?.surface === 'any', 'an any component counts for both types');
+check(JSON.stringify(byName.get('empty-state')?.surfaces) === '["web","mobile","desktop-app"]' && byName.get('empty-state')?.surface === 'any', 'an any component counts for every type');
 
 const ANY = ['form-field', 'stat-card', 'empty-state', 'skeleton-card', 'skeleton-stat-card', 'kpi-card', 'status-chip', 'initials-avatar'];
 check(JSON.stringify(all.filter((s) => s.surface === 'any').map((s) => s.name).sort()) === JSON.stringify([...ANY].sort()), 'exactly the eight documented components stamp on every type');

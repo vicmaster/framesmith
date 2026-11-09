@@ -3,6 +3,7 @@ import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, resolveInstance } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
+import { checkDesktopArtboard } from './desktop-app-rules.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
@@ -44,6 +45,13 @@ export interface EvaluationIssue {
   severity: IssueSeverity;
   nodeId: string;
   nodeName?: string;
+  /** Phase 31 FR-A7 — on a FOLDED finding (canvas_evaluate's serialised result
+   * only): every node the repeated finding names, nodeId being the first. */
+  nodeIds?: string[];
+  /** Phase 31 FR-A7 — on a folded finding: how many findings it stands for. */
+  count?: number;
+  /** Phase 31 FR-A7 — on a folded finding: each member's fix op, by node. */
+  fixes?: { nodeId: string; op: string }[];
   message: string;
   suggestion?: string;
   /**
@@ -540,6 +548,8 @@ function checkColorContrast(entries: NodeEntry[], theme?: 'dark'): CheckResult {
  * with contrast/coverage; these raise craft, not gates (measure's >90ch case
  * is the one warning, and warnings block the directive on their own). */
 interface TypographyContext {
+  /** Phase 31 — false when an active ruleset disables `type-scale-ratio`. */
+  ratioCheck?: boolean;
   rootWidth?: number;
   layout?: LayoutRect[];
   tables?: { nodeId: string }[];
@@ -564,8 +574,8 @@ function checkTypography(entries: NodeEntry[], variables: DesignVariables = {}, 
 
   let score = 100;
 
-  // Check type scale ratios
-  if (uniqueSizes.length >= 2) {
+  // Check type scale ratios (rule `type-scale-ratio`; a ruleset can switch it off)
+  if (uniqueSizes.length >= 2 && ctx.ratioCheck !== false) {
     for (let i = 0; i < uniqueSizes.length - 1; i++) {
       if (pinnedSizes.has(uniqueSizes[i]) && pinnedSizes.has(uniqueSizes[i + 1])) continue;
       const ratio = uniqueSizes[i] / uniqueSizes[i + 1];
@@ -573,6 +583,7 @@ function checkTypography(entries: NodeEntry[], variables: DesignVariables = {}, 
         score -= 10;
         issues.push({
           category: 'typography',
+          rule: 'type-scale-ratio',
           severity: 'warning',
           nodeId: textNodes.find((e) => e.node.fontSize === uniqueSizes[i])?.node.id ?? entries[0].node.id,
           message: `Font sizes ${uniqueSizes[i]}px → ${uniqueSizes[i + 1]}px have ratio ${ratio.toFixed(2)} (expected 1.1-2.0).`,
@@ -1976,6 +1987,126 @@ function primitiveTargets(
   return [];
 }
 
+/** One pointer target for the 24px census: its id, what to call it, the
+ * effective size after the padded-row step, and whether it is disabled. */
+interface PointerTarget { node: SceneNode; what: string; w: number; h: number; disabled: boolean }
+
+/** Phase 31 FR-A4 — the 24px floor on web and desktop-app canvases. The four
+ * controls keep their padded-row step (a lone control grows to its padded
+ * row, two hops); the clickable primitives are measured by their own box.
+ * What is still below 24 passes only by WCAG 2.5.8's spacing exception, which
+ * needs rendered rects: detailed mode runs the circle test (error when it
+ * fails), fast mode warns and names detailed mode. Reads the tree with
+ * instances expanded; callers map findings back to instances. */
+export function pointerTargets(entries: NodeEntry[], rootWidth: number): PointerTarget[] {
+  const parentOf = new Map<string, SceneNode | null>();
+  for (const en of entries) parentOf.set(en.node.id, en.parent);
+  const countControls = (n: SceneNode): number => {
+    let c = CONTROL_TYPES.has(n.type) ? 1 : 0;
+    for (const ch of n.children ?? []) c += countControls(ch);
+    return c;
+  };
+  const targets: PointerTarget[] = [];
+  for (const { node } of entries) {
+    const disabled = node.disabled === true;
+    if (CONTROL_TYPES.has(node.type)) {
+      const def = CONTROL_DEFAULT_SIZE[node.type];
+      let w = typeof node.width === 'number' ? node.width : def.w;
+      let h = typeof node.height === 'number' ? node.height : def.h;
+      let cur = parentOf.get(node.id) ?? null;
+      for (let hop = 0; hop < 2 && cur && Math.min(w, h) < 24; hop++) {
+        if (countControls(cur) === 1) {
+          const pad = paddingBox(cur);
+          w += pad.h;
+          h += pad.v;
+        }
+        cur = parentOf.get(cur.id) ?? null;
+      }
+      targets.push({ node, what: node.type, w, h, disabled });
+    } else if (TAPPABLE_PRIMITIVES.has(node.type)) {
+      for (const t of primitiveTargets(node, parentOf, rootWidth)) {
+        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled });
+      }
+    }
+  }
+  return targets;
+}
+
+/** The ids of every target node a rendered layout must place for the circle
+ * test, or [] when nothing is undersized (no render needed). */
+export function undersizedTargets(targets: PointerTarget[]): PointerTarget[] {
+  return targets.filter((t) => !t.disabled && Math.min(t.w, t.h) < 24);
+}
+
+function checkPointerTargets(
+  targets: PointerTarget[], parentOf: Map<string, SceneNode | null>, rootWidth: number, rects?: Map<string, LayoutRect>,
+): CheckResult {
+  const issues: EvaluationIssue[] = [];
+  let score = 100;
+  const touchFirst = rootWidth > 0 && rootWidth < 500; // a phone-width artboard
+  const live = targets.filter((t) => !t.disabled);
+  const small = undersizedTargets(targets);
+  const isAncestor = (a: SceneNode, b: SceneNode): boolean => {
+    for (let cur = parentOf.get(b.id) ?? null; cur; cur = parentOf.get(cur.id) ?? null) if (cur.id === a.id) return true;
+    return false;
+  };
+  const nested = (a: SceneNode, b: SceneNode) => a.id === b.id || isAncestor(a, b) || isAncestor(b, a);
+  const centre = (r: LayoutRect) => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+  // Distance from a point to a box; 0 inside it.
+  const toBox = (p: { x: number; y: number }, r: LayoutRect) =>
+    Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.width)), Math.max(r.y - p.y, 0, p.y - (r.y + r.height)));
+
+  for (const t of small) {
+    const size = `${Number.isFinite(t.w) ? Math.round(t.w) : '?'}×${Math.round(t.h)}px`;
+    const rect = rects?.get(t.node.id);
+    if (!rects || !rect) {
+      score -= 10;
+      issues.push({
+        category: 'usability',
+        severity: 'warning',
+        nodeId: t.node.id,
+        nodeName: t.node.name,
+        message: `${t.what} has a ${size} effective hit target — below the 24px floor (WCAG 2.5.8). It passes only by the spacing exception: when a 24px circle centred on it reaches no other target. ${rects ? 'Detailed mode could not place it in the render, so spacing is unmeasured.' : 'Fast mode cannot measure spacing.'}`,
+        suggestion: 'Grow it to 24px (or give a lone control a padded row), or run canvas_evaluate with mode "detailed" to apply the spacing exception.',
+      });
+      continue;
+    }
+    const c = centre(rect);
+    const blocker = live.find((o) => {
+      if (nested(o.node, t.node)) return false;
+      const r = rects.get(o.node.id);
+      if (!r) return false;
+      // Its circle reaches the other target's box, or (both undersized) the
+      // two circles overlap. Touching (exactly 12 / 24 away) is not overlap.
+      if (toBox(c, r) < 12) return true;
+      return small.includes(o) && Math.hypot(centre(r).x - c.x, centre(r).y - c.y) < 24;
+    });
+    if (blocker) {
+      score -= 25;
+      issues.push({
+        category: 'usability',
+        severity: 'error',
+        nodeId: t.node.id,
+        nodeName: t.node.name,
+        message: `${t.what} has a ${size} hit target, below the 24px floor, and the spacing exception does not save it: a 24px circle centred on it reaches ${blocker.what} "${blocker.node.name ?? blocker.node.id}" (WCAG 2.5.8).`,
+        suggestion: 'Grow it to 24px, or move its neighbours out of its 24px circle.',
+      });
+    }
+  }
+  for (const t of live) {
+    if (touchFirst && CONTROL_TYPES.has(t.node.type) && Math.min(t.w, t.h) >= 24 && Math.min(t.w, t.h) < 44) {
+      issues.push({
+        category: 'usability',
+        severity: 'info',
+        nodeId: t.node.id,
+        nodeName: t.node.name,
+        message: `${t.what} has a ${Math.round(t.w)}×${Math.round(t.h)}px effective hit target — fine for pointer input, but this looks like a touch-first screen (44px is the comfortable floor there).`,
+      });
+    }
+  }
+  return { score: Math.max(0, score), issues };
+}
+
 function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor: number }): CheckResult {
   const issues: EvaluationIssue[] = [];
   let score = 100;
@@ -1992,8 +2123,6 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
   const hasText = (n: SceneNode): boolean =>
     (n.type === 'text' && typeof n.content === 'string' && n.content.trim().length > 0)
     || (n.children ?? []).some(hasText);
-
-  const touchFirst = rootWidth > 0 && rootWidth < 500;   // a phone-width artboard
 
   for (const { node } of entries) {
     if (touch && TAPPABLE_PRIMITIVES.has(node.type)) {
@@ -2032,40 +2161,9 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             suggestion: `Grow the control, or put it alone in a row (a horizontal frame) at least ${touch.floor}px tall — a lone control's row is its target.`,
           });
         }
-      } else {
-        // The effective target extends to a padded ancestor row when the
-        // control is the only control inside it (the whole row is tappable by
-        // convention) — the WCAG 2.5.8 spacing model, applied structurally.
-        let cur = parentOf.get(node.id) ?? null;
-        for (let hop = 0; hop < 2 && cur && Math.min(w, h) < 24; hop++) {
-          if (countControls(cur) === 1) {
-            const pad = paddingBox(cur);
-            w += pad.h;
-            h += pad.v;
-          }
-          cur = parentOf.get(cur.id) ?? null;
-        }
-
-        if (Math.min(w, h) < 24) {
-          score -= 25;
-          issues.push({
-            category: 'usability',
-            severity: 'error',
-            nodeId: node.id,
-            nodeName: node.name,
-            message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — below the 24px floor (WCAG 2.5.8).`,
-            suggestion: 'Grow the control, or give its row enough padding that the whole row is the target (a lone control inherits its padded row\'s box).',
-          });
-        } else if (touchFirst && Math.min(w, h) < 44) {
-          issues.push({
-            category: 'usability',
-            severity: 'info',
-            nodeId: node.id,
-            nodeName: node.name,
-            message: `${node.type} has a ${Math.round(w)}×${Math.round(h)}px effective hit target — fine for pointer input, but this looks like a touch-first screen (44px is the comfortable floor there).`,
-          });
-        }
       }
+      // Web and desktop-app targets are judged by checkPointerTargets
+      // (Phase 31 FR-A4): the padded-row step, then the spacing exception.
 
       // Label association: a control the user can't name is a guess. The
       // label may sit anywhere in the padded row/group around the control
@@ -2113,6 +2211,41 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
 
 /** Fold ruleset findings into a category result: −10 per warning (errors
  * score themselves inside their check), infos free. */
+/** Phase 31 FR-A7 — fold repeated findings for the serialised result.
+ * Warnings and infos that share a severity, a category, a rule or tell, a
+ * theme and a message template (quoted text and numbers stripped) fold into
+ * ONE entry once three or more share a key: it sits where the first one did,
+ * keeps the first one's message and suggestion, and carries nodeIds, count,
+ * and `fixes` ({ nodeId, op } for every member that had a fix) so nothing an
+ * agent could act on node by node is lost. Errors never fold. canvas_autofix
+ * and the directive read the unfolded list; only canvas_evaluate's output
+ * folds. */
+export function foldIssues(issues: EvaluationIssue[]): EvaluationIssue[] {
+  const keyOf = (i: EvaluationIssue): string | null => {
+    if (i.severity === 'error') return null;
+    const template = i.message.replace(/"[^"]*"/g, '"…"').replace(/\d+(\.\d+)?/g, 'N');
+    return `${i.severity}|${i.category}|${i.rule ?? i.tell ?? ''}|${i.theme ?? ''}|${template}`;
+  };
+  const groups = new Map<string, EvaluationIssue[]>();
+  for (const i of issues) {
+    const k = keyOf(i);
+    if (k) groups.set(k, [...(groups.get(k) ?? []), i]);
+  }
+  const out: EvaluationIssue[] = [];
+  const emitted = new Set<string>();
+  for (const i of issues) {
+    const k = keyOf(i);
+    const group = k ? groups.get(k)! : undefined;
+    if (!group || group.length < 3) { out.push(i); continue; }
+    if (emitted.has(k!)) continue;
+    emitted.add(k!);
+    const { nodeName: _name, fix: _fix, ...first } = group[0];
+    const fixes = group.filter((g) => g.fix).map((g) => ({ nodeId: g.nodeId, op: g.fix!.op }));
+    out.push({ ...first, nodeIds: group.map((g) => g.nodeId), count: group.length, ...(fixes.length ? { fixes } : {}) });
+  }
+  return out;
+}
+
 function withRuleIssues(result: CheckResult, extra: EvaluationIssue[]): CheckResult {
   if (extra.length === 0) return result;
   const warnings = extra.filter((i) => i.severity === 'warning').length;
@@ -2354,6 +2487,7 @@ export async function evaluateCanvas(
   }
   if (activeCategories.includes('typography')) {
     const typography = checkTypography(entries, mergedTokens, {
+      ratioCheck: !rules.off.includes('type-scale-ratio'),
       rootWidth: typeof canvas.root.width === 'number' ? canvas.root.width : undefined,
       layout: detailedLayout,
       tables: extractInventory(resolvedRoot).tables,
@@ -2362,7 +2496,10 @@ export async function evaluateCanvas(
     results.set('typography', withRuleIssues(typography, ruleOn.has('mobile-type-floor') ? reportOnInstances(checkTypeFloor(mobile, rawById), owners) : []));
   }
   if (activeCategories.includes('structure')) {
-    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []));
+    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), [
+      ...(ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []),
+      ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(resolvedRoot, declared) : []),
+    ]));
   }
   if (activeCategories.includes('consistency')) {
     const consistencyCtx = { rawEntries, tokens: mergedTokens };
@@ -2376,9 +2513,30 @@ export async function evaluateCanvas(
     const touch = ruleOn.has('mobile-touch-target') ? { floor: mobile.profile.touchTarget } : undefined;
     // On a mobile canvas the whole usability check reads the expanded tree;
     // web keeps the unexpanded one.
-    const usability = mobileTypeRules
+    let usability = mobileTypeRules
       ? (({ score, issues }) => ({ score, issues: reportOnInstances(issues, owners) }))(checkUsability(buildTreeContext(mobileRoot), mobile.width, touch))
       : checkUsability(entries, mobile.width, touch);
+    if (!touch) {
+      // Phase 31 FR-A4 — web and desktop-app: the pointer-target census reads
+      // the tree with instances expanded. Detailed mode renders that tree
+      // only when something is undersized, so the circle test has rects.
+      const targetEntries = buildTreeContext(mobileRoot);
+      const targets = pointerTargets(targetEntries, mobile.width);
+      let rects: Map<string, LayoutRect> | undefined;
+      if (options.mode === 'detailed' && undersizedTargets(targets).length > 0) {
+        const layout = await computeLayout(renderToHtml(mobileRoot, mobile.width, mobile.height, canvas), undefined, 25, { width: mobile.width, height: mobile.height });
+        // computeLayout returns a tree (each rect nests its children).
+        rects = new Map();
+        const index = (r: LayoutRect) => { rects!.set(r.nodeId, r); r.children?.forEach(index); };
+        layout.forEach(index);
+      }
+      const parentOf = new Map(targetEntries.map((en) => [en.node.id, en.parent] as const));
+      const pointer = checkPointerTargets(targets, parentOf, mobile.width, rects);
+      usability = {
+        score: Math.max(0, usability.score - (100 - pointer.score)),
+        issues: [...usability.issues, ...reportOnInstances(pointer.issues, owners)],
+      };
+    }
     const extra = reportOnInstances([
       ...(ruleOn.has('mobile-handbuilt-target') ? checkHandbuiltTargets(mobile) : []),
       ...(ruleOn.has('mobile-safe-area') ? (detailedLayout ? checkSafeAreaDetailed(mobile, detailedLayout) : checkSafeAreaFast(mobile)) : []),

@@ -6,8 +6,11 @@
 import type { Canvas } from './types.js';
 import type { ClicheTell } from './evaluate.js';
 
-export type SurfaceType = 'web' | 'mobile';
-export const SURFACE_TYPES: readonly SurfaceType[] = ['web', 'mobile'];
+// Phase 31: `desktop-app` is a tool you work in (persistent chrome, panes,
+// dense controls, a current selection), in a browser tab or a native window.
+// `web` is a page you read and scroll.
+export type SurfaceType = 'web' | 'mobile' | 'desktop-app';
+export const SURFACE_TYPES: readonly SurfaceType[] = ['web', 'mobile', 'desktop-app'];
 
 /** One device a `mobile` canvas can target. CSS px (1pt = 1px). Apple's HIG
  * confirms the 44pt target and the 17/11 type sizes; the insets come from
@@ -56,6 +59,48 @@ export const DEVICE_PROFILES: Record<string, DeviceProfile> = {
 
 export const DEFAULT_DEVICE = 'iphone-390';
 
+/** Phase 31: one window a `desktop-app` canvas targets. CSS px. The research
+ * sources and confidence per value are in the Phase 31 spec's window profile
+ * table; the smallest-text, prose-floor and data-dense body values are house
+ * values. */
+export interface WindowProfile {
+  id: string;
+  width: number;
+  height: number;
+  /** The WCAG 2.5.8 floor; smaller targets pass only by the spacing exception. */
+  targetFloor: number;
+  /** Control and row heights a desktop app stacks on (Carbon, Primer). */
+  densityLadder: readonly number[];
+  bodySize: number;
+  /** The `data-dense` personality's body. */
+  bodyDense: number;
+  smallestText: number;
+  /** Text of five or more words below this warns. */
+  proseFloor: number;
+  /** The narrowest window the desktop-app layouts are built for. */
+  minWidth: number;
+  /** Detail-view breakpoint widths. */
+  breakpoints: readonly number[];
+}
+
+export const WINDOW_PROFILES: Record<string, WindowProfile> = {
+  'window-1440': {
+    id: 'window-1440',
+    width: 1440,
+    height: 900,
+    targetFloor: 24,
+    densityLadder: [24, 32, 40, 48, 64],
+    bodySize: 14,
+    bodyDense: 13,
+    smallestText: 11,
+    proseFloor: 12,
+    minWidth: 1024,
+    breakpoints: [1024, 1280, 1440],
+  },
+};
+
+export const DEFAULT_WINDOW = 'window-1440';
+
 export function isSurfaceType(value: unknown): value is SurfaceType {
   return typeof value === 'string' && (SURFACE_TYPES as readonly string[]).includes(value);
 }
@@ -64,6 +109,16 @@ export function deviceProfile(id: string): DeviceProfile | undefined {
   return Object.hasOwn(DEVICE_PROFILES, id) ? DEVICE_PROFILES[id] : undefined;
 }
 
+export function windowProfile(id: string): WindowProfile | undefined {
+  return Object.hasOwn(WINDOW_PROFILES, id) ? WINDOW_PROFILES[id] : undefined;
+}
+
+/** The profile table each type draws its `device` from; web has none. */
+const PROFILE_TABLES: Partial<Record<SurfaceType, { table: Record<string, unknown>; fallback: string }>> = {
+  mobile: { table: DEVICE_PROFILES, fallback: DEFAULT_DEVICE },
+  'desktop-app': { table: WINDOW_PROFILES, fallback: DEFAULT_WINDOW },
+};
+
 export interface SurfaceDeclaration {
   type: SurfaceType;
   device: string | null;
@@ -71,13 +126,16 @@ export interface SurfaceDeclaration {
 }
 
 /** The canvas's type. Absent (or unreadable) means `web`, source `default` —
- * a canvas nobody declared. A mobile canvas with no stored device targets the
+ * a canvas nobody declared. A mobile or desktop-app canvas whose stored device
+ * is missing, or is not in that type's profile table, targets the type's
  * default profile. */
 export function resolveSurface(canvas: Canvas): SurfaceDeclaration {
   const stored = canvas.metadata?.surface;
   if (!stored || !isSurfaceType(stored.type)) return { type: 'web', device: null, source: 'default' };
-  if (stored.type === 'web') return { type: 'web', device: null, source: 'declared' };
-  return { type: 'mobile', device: typeof stored.device === 'string' ? stored.device : DEFAULT_DEVICE, source: 'declared' };
+  const profiles = PROFILE_TABLES[stored.type];
+  if (!profiles) return { type: stored.type, device: null, source: 'declared' };
+  const known = typeof stored.device === 'string' && Object.hasOwn(profiles.table, stored.device);
+  return { type: stored.type, device: known ? stored.device! : profiles.fallback, source: 'declared' };
 }
 
 /** The root safeArea sides the renderer honours: each side only when it is a
@@ -93,15 +151,16 @@ export function usableSafeArea(value: unknown): { top?: number; bottom?: number 
 /** Validate a type + device pair for canvas_create / canvas_set_type. Returns
  * the metadata to store, or an error message. */
 export function surfaceFor(type: SurfaceType, device?: string): { surface: { type: SurfaceType; device?: string } } | { error: string } {
-  if (device !== undefined && type !== 'mobile') {
-    return { error: `device only applies to type "mobile" (got type "${type}").` };
+  const profiles = PROFILE_TABLES[type];
+  if (!profiles) {
+    if (device !== undefined) return { error: `device does not apply to type "${type}" (got "${device}").` };
+    return { surface: { type } };
   }
-  if (type === 'web') return { surface: { type: 'web' } };
-  const id = device ?? DEFAULT_DEVICE;
-  if (!deviceProfile(id)) {
-    return { error: `Unknown device "${id}". Known devices: ${Object.keys(DEVICE_PROFILES).join(', ')}.` };
+  const id = device ?? profiles.fallback;
+  if (!Object.hasOwn(profiles.table, id)) {
+    return { error: `Unknown ${type} device "${id}". Known for "${type}": ${Object.keys(profiles.table).join(', ')}.` };
   }
-  return { surface: { type: 'mobile', device: id } };
+  return { surface: { type, device: id } };
 }
 
 // --- Rulesets ---
@@ -128,16 +187,27 @@ export const MOBILE_RULES = [
   'mobile-tab-bar',
 ] as const;
 
+/** Phase 31: the desktop-app ruleset's rule ids, each registered in the same
+ * change as the check that honours it. `desktop-app-artboard` lives in the
+ * base row (it must run on every type), so it is not listed here. */
+export const DESKTOP_APP_RULES: readonly string[] = [];
+
+/** Phase 31: default rules — they run unless an active ruleset disables them.
+ * A rule id appears here when some type replaces the check. */
+export const DEFAULT_RULES = ['type-scale-ratio'] as const;
+
 /** Keyed by axis, then value. Genre rows are canonical names only; aliases
  * fold through GENRE_ALIASES first. A rule id lands here in the same change as
  * the check that honours it. */
 export const RULESETS: Record<RulesetAxis, Record<string, Ruleset>> = {
-  // mobile-artboard is on for every type: its job is to catch phone-shaped
-  // canvases the mobile ruleset is not on for.
-  base: { all: { enable: ['mobile-artboard'] } },
+  // mobile-artboard and desktop-app-artboard are on for every type: their job
+  // is to catch canvases whose declaration does not match their artboard.
+  base: { all: { enable: ['mobile-artboard', 'desktop-app-artboard'] } },
   // The mobile disable list stays empty until a web-shaped rule is shown to
   // misfire on a correct mobile idiom (FR-C7).
-  type: { web: {}, mobile: { enable: [...MOBILE_RULES] } },
+  // desktop-app replaces the adjacent-ratio check (dense apps step 12/13/14
+  // on purpose); its own type ladder lands with the app rules.
+  type: { web: {}, mobile: { enable: [...MOBILE_RULES] }, 'desktop-app': { enable: [...DESKTOP_APP_RULES], disable: ['type-scale-ratio'] } },
   genre: {
     // Material Design legitimately uses a purple accent AND white elevated
     // surfaces (cards on an off-white background), so both are intentional

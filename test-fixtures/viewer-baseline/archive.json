@@ -1,0 +1,639 @@
+{
+  "components": {},
+  "createdAt": "2026-11-08T19:07:06.482Z",
+  "id": "r0syKSM6YZ",
+  "lastModified": "2026-11-08T19:07:06.484Z",
+  "metadata": {
+    "fixtureNote": "Phase 31 FR-A9: framesmith 2.4.0 canvas_import_url of the live viewer (2026-11-08), with the repo workspace design system embedded so it resolves anywhere.",
+    "provenance": {
+      "at": "2026-11-08T19:07:06.484Z",
+      "importedFrom": "http://localhost:3001/archive"
+    }
+  },
+  "name": "Viewer: archive",
+  "projectId": "viewer-baseline",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$textPrimary",
+                        "content": "Framesmith",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 14,
+                        "fontWeight": 600,
+                        "id": "imp-text-1",
+                        "letterSpacing": -0.1,
+                        "type": "text"
+                      }
+                    ],
+                    "gap": 11,
+                    "id": "imp-frame-2",
+                    "layout": "horizontal",
+                    "padding": [
+                      22,
+                      20
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "color": "$textMuted",
+                            "content": "framesmith",
+                            "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                            "fontSize": 10,
+                            "fontWeight": 600,
+                            "id": "imp-text-3",
+                            "letterSpacing": 0.9,
+                            "textTransform": "uppercase",
+                            "type": "text"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "$success",
+                                "id": "imp-frame-4",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Design system",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-5",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "1",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-6",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-7",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "$info",
+                                "id": "imp-frame-8",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "UI",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-9",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "5",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-10",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-11",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "$danger",
+                                "id": "imp-frame-12",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Releases",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-13",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "2",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-14",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-15",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "$chartBar1",
+                                "id": "imp-frame-16",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Pattern library",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-17",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "11",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-18",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-19",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "$success",
+                                "id": "imp-frame-20",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Foundations",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-21",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "0",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-22",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-23",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "rgb(236, 72, 153)",
+                                "id": "imp-frame-24",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Mobile surface attempt",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-25",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "4",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-26",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-27",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          },
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "cornerRadius": 3,
+                                "fill": "rgb(236, 72, 153)",
+                                "id": "imp-frame-28",
+                                "type": "frame",
+                                "width": 6
+                              },
+                              {
+                                "color": "$textSecondary",
+                                "content": "Viewer baseline",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 13,
+                                "fontWeight": 500,
+                                "id": "imp-text-29",
+                                "type": "text"
+                              },
+                              {
+                                "color": "$textMuted",
+                                "content": "0",
+                                "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                                "fontSize": 11,
+                                "fontWeight": 500,
+                                "id": "imp-text-30",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 6,
+                            "gap": 10,
+                            "id": "imp-frame-31",
+                            "layout": "horizontal",
+                            "padding": [
+                              8,
+                              12
+                            ],
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "imp-frame-32",
+                        "layout": "vertical",
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "id": "imp-frame-33",
+                    "padding": [
+                      4,
+                      8,
+                      0,
+                      8
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "d": "M21 8v13H3V8",
+                            "fill": "$textPrimary",
+                            "height": 16,
+                            "id": "imp-path-34",
+                            "type": "path",
+                            "viewBox": "0 0 24 24",
+                            "width": 16
+                          },
+                          {
+                            "color": "$textPrimary",
+                            "content": "Archive",
+                            "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                            "fontSize": 13,
+                            "fontWeight": 600,
+                            "id": "imp-text-35",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$chartBar2",
+                            "content": "0",
+                            "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                            "fontSize": 11,
+                            "fontWeight": 600,
+                            "id": "imp-text-36",
+                            "type": "text"
+                          }
+                        ],
+                        "cornerRadius": 6,
+                        "fill": "rgba(245, 158, 11, 0.08)",
+                        "gap": 10,
+                        "id": "imp-frame-37",
+                        "layout": "horizontal",
+                        "padding": [
+                          9,
+                          12
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "id": "imp-frame-38",
+                    "padding": [
+                      10,
+                      8,
+                      14,
+                      8
+                    ],
+                    "stroke": "$borderSubtle",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "fill": "$surface",
+                "id": "imp-frame-39",
+                "layout": "vertical",
+                "type": "frame"
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "color": "$textTertiary",
+                        "content": "Archive",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 12,
+                        "fontWeight": 500,
+                        "id": "imp-text-40",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textPrimary",
+                        "content": "Archived canvases",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 36,
+                        "fontWeight": 700,
+                        "id": "imp-text-41",
+                        "letterSpacing": -0.6,
+                        "lineHeight": "39.6px",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textTertiary",
+                        "content": "0 canvases across all projects",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 13,
+                        "fontWeight": 500,
+                        "id": "imp-text-42",
+                        "type": "text"
+                      }
+                    ],
+                    "id": "imp-frame-43",
+                    "layout": "vertical",
+                    "padding": [
+                      28,
+                      36,
+                      24,
+                      36
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$textTertiary",
+                        "content": "\u25a2",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 44,
+                        "id": "imp-text-44",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$textTertiary",
+                        "content": "No archived canvases",
+                        "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                        "fontSize": 15,
+                        "id": "imp-text-45",
+                        "type": "text"
+                      },
+                      {
+                        "children": [
+                          {
+                            "color": "$textMuted",
+                            "content": "Archive a canvas with or the Archive button on a canvas page.",
+                            "fontFamily": "-apple-system, \"system-ui\", \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif",
+                            "fontSize": 13,
+                            "id": "imp-text-46",
+                            "textAlign": "center",
+                            "type": "text"
+                          },
+                          {
+                            "children": [
+                              {
+                                "color": "$textSecondary",
+                                "content": "canvas_archive({ canvasId })",
+                                "fontFamily": "monospace",
+                                "fontSize": 12,
+                                "id": "imp-text-47",
+                                "textAlign": "center",
+                                "type": "text"
+                              }
+                            ],
+                            "cornerRadius": 4,
+                            "fill": "rgb(26, 22, 15)",
+                            "id": "imp-frame-48",
+                            "layout": "vertical",
+                            "padding": [
+                              2,
+                              6
+                            ],
+                            "type": "frame"
+                          }
+                        ],
+                        "id": "imp-frame-49",
+                        "layout": "vertical",
+                        "maxWidth": 480,
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "gap": 14,
+                    "id": "imp-frame-50",
+                    "justifyContent": "center",
+                    "layout": "vertical",
+                    "padding": [
+                      120,
+                      32
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "fill": "rgb(13, 11, 10)",
+                "id": "imp-frame-51",
+                "layout": "vertical",
+                "type": "frame"
+              }
+            ],
+            "id": "imp-frame-52",
+            "layout": "horizontal",
+            "type": "frame",
+            "width": "100%"
+          }
+        ],
+        "fill": "$bg",
+        "id": "imp-frame-53",
+        "layout": "vertical",
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "#FFFFFF",
+    "height": 900,
+    "id": "9_WTszyo16",
+    "name": "Document",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {
+    "colors": {
+      "bg": "#09070a",
+      "border": "#2a241a",
+      "borderSubtle": "#1f1b13",
+      "chartBar1": "#f59e0b",
+      "chartBar2": "#fde68a",
+      "chartTrack": "#231d13",
+      "danger": "#ef4444",
+      "glassRim": "rgba(255, 255, 255, 0.06)",
+      "info": "#3b82f6",
+      "primary": "#f59e0b",
+      "primaryDeep": "#b45309",
+      "primarySoft": "#fde68a",
+      "success": "#22c55e",
+      "surface": "#14110c",
+      "surfaceElevated": "#1f1a12",
+      "surfaceHover": "#251f15",
+      "textMuted": "#4f4a3e",
+      "textPrimary": "#fafaf5",
+      "textSecondary": "#b8b3a6",
+      "textTertiary": "#7a7464"
+    },
+    "radius": {
+      "lg": 14,
+      "md": 10,
+      "sm": 6
+    },
+    "spacing": {
+      "lg": 24,
+      "md": 16,
+      "sm": 10,
+      "xl": 32,
+      "xs": 6
+    },
+    "typography": {
+      "body": {
+        "fontSize": 13,
+        "fontWeight": 400,
+        "lineHeight": 1.5
+      },
+      "h1": {
+        "fontSize": 26,
+        "fontWeight": 700,
+        "lineHeight": 1.15
+      },
+      "h2": {
+        "fontSize": 15,
+        "fontWeight": 600,
+        "lineHeight": 1.4
+      },
+      "kpi": {
+        "fontSize": 28,
+        "fontWeight": 700,
+        "lineHeight": 1
+      },
+      "label": {
+        "fontSize": 11,
+        "fontWeight": 600,
+        "lineHeight": 1.3
+      },
+      "mono": {
+        "fontSize": 13,
+        "fontWeight": 500,
+        "lineHeight": 1.4
+      },
+      "tabular": {
+        "fontSize": 12,
+        "fontWeight": 500,
+        "lineHeight": 1.2
+      }
+    }
+  }
+}
