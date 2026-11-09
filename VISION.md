@@ -557,6 +557,22 @@ All seven slices are merged and the acceptance re-run passed. The phase is close
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 
+### Phase 31 — The desktop-app surface (v2.5)
+
+Run on its own viewer (2026-11-08), framesmith scored every page's usability 100 with zero findings: the viewer has a 17px Back link and 21 click targets that are plain spans, but the web hit-target rule only measures form controls. Meanwhile page rules misfired on the app: the sidebar project list read as a data table, the dense 13/14px type steps failed the scale ratio, and the projects' identity dots counted as competing accents. framesmith judges an application as if it were a marketing page, and has no words for what makes it an application. This phase adds a third type, `desktop-app` (a tool you work in, in a browser or a native window), with the vocabulary, rules, layouts, overlays and element states an app needs. Acceptance is literal: the viewer itself rebuilt as canvases, CLEAN, with every click target a primitive.
+
+- [ ] Slice A — the type: `desktop-app` with a 1440×900 window profile, a ruleset that can switch off the type-scale ratio, the WCAG 2.5.8 spacing exception on the 24px floor, navigation lists that never read as tables and identity colors that never count as accents (both on every type), evaluate and import results an agent can read, type-aware generation with state tokens, and the baseline canvases committed as fixtures
+- [ ] Slice B — vocabulary: a 24px `button` with an accessible name, `link`, `text-input`, `nav-item`, `tabs`, `tree-row`, `menu-row`, `property-row` and `divider`
+- [ ] Slice C — app rules: every click target measured, hand-built targets named, icon-only actions named, one current item per navigation group, a dense type ladder, row rhythm, honest truncation, one primary per region, and the declaration matching the window
+- [ ] Slice D — panes: resolution for any number of types and six desktop-app realisations (workbench, list-detail, editor-inspector, browser, dashboard, settings) under the pattern gate
+- [ ] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
+- [ ] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, and advisories on stacked toasts and error toasts
+- [ ] Slice G — element states: hover, focus, pressed and disabled as a primitive property, drawn from state tokens
+- [ ] Slice H — state checks: focus rings, active indicators, disabled renders and control boundaries checked analytically on every interactive primitive, without being drawn
+- [ ] Slice I — the acceptance re-run: the viewer's gallery, detail with inspector and archive rebuilt as canvases, with the comment popover and delete-confirm states
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-31-SPEC.md`](docs/specs/PHASE-31-SPEC.md). Deliberately out of scope: porting the viewer's code, anchored overlay rendering, keyboard behaviour, narrow-window collapse, the command palette and bulk-selection variants, importer work, and desktop-app rules on web._
+
 ### Continuous integration (infrastructure)
 
 Nothing runs on a pull request today: no workflow, no branch protection, no checks. That held because a single disciplined maintainer ran things by hand, but it has already failed silently — the repository has 102 test files and no `test` script to run them as a suite, and two tests were found failing at the v2.0.0 tag itself. The missing runner is the root cause; a pipeline that is red on its first run only teaches you to ignore the red X. Running the suite together for the first time turned up three failing tests, two of them red at the v2.0.0 tag itself; all three are fixed.
