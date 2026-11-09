@@ -74,6 +74,11 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   check('a 900px desktop-app canvas warns (desktop-app-artboard)', art(narrow).length === 1 && art(narrow)[0].severity === 'warning');
   check('a 1440 desktop-app canvas is silent', art(wide).length === 0);
   check('a 900px web canvas is silent', art(web900).length === 0);
+  const at1024 = await evaluateCanvas(canvasWith([text('t', 'Hi', 14)], { type: 'desktop-app', device: 'window-1440' }, 1024), { mode: 'fast', categories: ['structure'] });
+  const at1023 = await evaluateCanvas(canvasWith([text('t', 'Hi', 14)], { type: 'desktop-app', device: 'window-1440' }, 1023), { mode: 'fast', categories: ['structure'] });
+  const at1280 = await evaluateCanvas(canvasWith([text('t', 'Hi', 14)], { type: 'desktop-app', device: 'window-1440' }, 1280), { mode: 'fast', categories: ['structure'] });
+  check('the 1024 minimum is inclusive (1024 silent, 1023 warns)', art(at1024).length === 0 && art(at1023).length === 1);
+  check('a 1280 window is not judged against the 1440 artboard', art(at1280).length === 0);
 }
 
 // ── FR-A4: the 24px census, fast mode ──────────────────────────────────────
@@ -131,6 +136,13 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   check('an avatar-led users table under a text header still detects', extractInventory(users).tables.length === 1);
   const icons: SceneNode = { id: 'nav', name: 'nav', type: 'frame', layout: 'vertical', children: ['Home', 'Files', 'Shared'].map((l, i) => hrow(`n${i}`, [{ id: `i${i}`, name: 'i', type: 'icon', icon: 'home' }, text(`l${i}`, l, 14), text(`k${i}`, String(i + 1), 12)])) };
   check('an icon-led navigation list is not a table', extractInventory(icons).tables.length === 0);
+  const ledBy = (lead: (i: number) => SceneNode, name = 'list'): SceneNode => ({ id: name, name, type: 'frame', layout: 'vertical', children: ['Alpha', 'Beta', 'Gamma'].map((l, i) => hrow(`${name}${i}`, [lead(i), text(`${name}t${i}`, l, 14), text(`${name}c${i}`, String(i + 1), 12)])) });
+  check('an ellipse-led list is not a table', extractInventory(ledBy((i) => ({ id: `e${i}`, name: 'e', type: 'ellipse', width: 8, height: 8 }))).tables.length === 0);
+  check('a 30px childless frame is not a mark: the list still reads as a table', extractInventory(ledBy((i) => ({ id: `f${i}`, name: 'f', type: 'frame', width: 30, height: 30 }))).tables.length === 1);
+  check('a 13px dot is not a mark', extractInventory(ledBy((i) => ({ id: `d${i}`, name: 'd', type: 'frame', width: 13, height: 13 }))).tables.length === 1);
+  check('a 40px image is not a mark', extractInventory(ledBy((i) => ({ id: `g${i}`, name: 'g', type: 'image', width: 40, height: 40, src: 'data:image/png;base64,' }))).tables.length === 1);
+  check('a dot with no known size is not a mark', extractInventory(ledBy((i) => ({ id: `n${i}`, name: 'n', type: 'frame' }))).tables.length === 1);
+  check('an import-named Table keeps detection even when its rows lead with dots', extractInventory(ledBy((i) => ({ id: `t${i}`, name: 'dot', type: 'frame', width: 6, height: 6 }), 'Table')).tables.length === 1);
 }
 
 // ── FR-A7: folding and the import summary ──────────────────────────────────
@@ -149,10 +161,24 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   const folded = foldIssues(issues);
   check('errors never fold', folded.filter((i) => i.severity === 'error').length === 3);
   const spacing = folded.filter((i) => i.category === 'spacing');
-  check('same-shaped warnings fold into one entry; fixes lists the members that had one', spacing.length === 1 && spacing[0].count === 5 && JSON.stringify(spacing[0].nodeIds) === '["a","b","c","x","y"]' && spacing[0].fixes?.length === 3 && spacing[0].fix === undefined, JSON.stringify(spacing));
+  check('fixable warnings fold on their shape, keeping every fix; unfixed ones with different numbers stay apart', spacing.length === 3 && spacing[0].count === 3 && JSON.stringify(spacing[0].nodeIds) === '["a","b","c"]' && spacing[0].fixes?.length === 3 && spacing[0].fix === undefined && spacing[1].nodeId === 'x' && spacing[2].nodeId === 'y', JSON.stringify(spacing));
   check('two of a kind do not fold', foldIssues([w('p', 11), w('q', 13)]).length === 2);
   const apca = folded.filter((i) => i.category === 'color' && i.severity === 'info');
-  check('three infos fold, with no fixes field', apca.length === 1 && apca[0].count === 3 && apca[0].fixes === undefined);
+  check('unfixed infos with different numbers never fold (Lc 60.8 / 59.1 / 57.0)', apca.length === 3 && apca.every((i) => i.count === undefined));
+  const same = foldIssues(['p', 'q', 'r'].map((id) => ({ category: 'color', severity: 'info' as const, nodeId: id, message: `APCA advisory on "${id}": Lc 60.8`, suggestion: 'A step more contrast.' })));
+  check('unfixed infos that read the same (quoted text aside) fold, with no fixes field', same.length === 1 && same[0].count === 3 && same[0].fixes === undefined);
+  const ratios = foldIssues([
+    { category: 'typography', rule: 'type-scale-ratio', severity: 'warning', nodeId: 't1', message: 'Font sizes 40px → 15px have ratio 2.67 (expected 1.1-2.0).' },
+    { category: 'typography', rule: 'type-scale-ratio', severity: 'warning', nodeId: 't2', message: 'Font sizes 15px → 14px have ratio 1.07 (expected 1.1-2.0).' },
+    { category: 'typography', rule: 'type-scale-ratio', severity: 'warning', nodeId: 't3', message: 'Font sizes 14px → 13px have ratio 1.08 (expected 1.1-2.0).' },
+  ]);
+  check('distinct type-scale-ratio warnings never fold into one message', ratios.length === 3);
+  const dup = foldIssues(['n', 'n', 'm'].map((id, k) => ({ category: 'spacing', severity: 'warning' as const, nodeId: id, message: `gap: ${11 + k}px is off`, fix: { op: `U("${id}", {})`, rationale: '' } })));
+  const mk = (over: Partial<EvaluationIssue>, n: number): EvaluationIssue => ({ category: 'spacing', severity: 'warning', nodeId: `k${n}`, message: `gap: ${10 + n}px is off`, fix: { op: `U("k${n}", {})`, rationale: '' }, ...over });
+  check('the fold key separates severities', foldIssues([mk({}, 1), mk({}, 2), mk({ severity: 'info' }, 3)]).length === 3);
+  check('the fold key separates rules', foldIssues([mk({ rule: 'a' }, 1), mk({ rule: 'a' }, 2), mk({ rule: 'b' }, 3)]).length === 3);
+  check('the fold key separates themes', foldIssues([mk({}, 1), mk({}, 2), mk({ theme: 'dark' }, 3)]).length === 3);
+  check('a node named by several members is listed once', JSON.stringify(dup[0].nodeIds) === '["n","m"]' && dup[0].count === 3);
   check('the folded entry sits where the first member was', folded.findIndex((i) => i.nodeIds?.includes('a')) === 3);
 
   const ds = JSON.parse(readFileSync('test-fixtures/viewer-baseline/detail-web-dashboard.json', 'utf-8')) as Canvas;
@@ -163,7 +189,7 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   check('every fix op survives folding on the baseline detail page', JSON.stringify(opsBefore) === JSON.stringify(opsAfter), `${opsBefore.length} vs ${opsAfter.length}`);
   const before = JSON.stringify(r, null, 2).length;
   const after = JSON.stringify({ ...r, issues: f }, null, 2).length;
-  check('the baseline detail result folds to about half (≤ 55%)', after <= before * 0.55, `${before} → ${after}`);
+  check('the baseline detail result folds to at most 58% (FR-A7 as amended)', after <= before * 0.58, `${before} → ${after}`);
 
   const report: ImportReport = { counts: { nodes: 1, frames: 1, text: 0, maxDepth: 1, dropped: 0 }, snapped: [], literals: [], scaleMatches: [], layout: [], unmatchedFonts: [], unmatchedIcons: [], warnings: [] };
   for (let i = 0; i < 40; i++) report.snapped.push({ nodeId: `n${i}`, prop: 'fill', from: 'rgb(0,0,0)', token: i % 2 ? '$bg' : '$surface' });
@@ -171,6 +197,7 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   for (let i = 0; i < 50; i++) report.scaleMatches.push({ nodeId: `s${i}`, prop: 'gap', value: 8, token: '$sm' });
   const sum = summarizeImportReport(report);
   check('snapped groups per token with counts and five ids', sum.snapped.length === 2 && sum.snapped.every((g) => g.count === 20 && g.nodeIds.length === 5) && sum.summarized === true);
+  check('scaleMatches group per token', sum.scaleMatches.length === 1 && sum.scaleMatches[0].token === '$sm' && sum.scaleMatches[0].count === 50 && sum.scaleMatches[0].nodeIds.length === 5);
   check('literals group per value', sum.literals.length === 1 && sum.literals[0].value === 'rgb(26, 22, 15)' && sum.literals[0].count === 30);
   check('the summary is under half the full report', JSON.stringify(sum, null, 2).length <= JSON.stringify(report, null, 2).length / 2);
 }
@@ -200,7 +227,9 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   check('state tokens layer workspace → canvas like motion', merged.state?.hover === 0.12 && merged.state?.focus === 0.1);
   const c = canvasWith([]);
   setVariables(c, { state: { pressed: 0.2 } });
-  check('set_variables writes state', c.variables.state?.pressed === 0.2);
+  setVariables(c, { state: { hover: 0.05 } });
+  check('set_variables merges state keys', c.variables.state?.pressed === 0.2 && c.variables.state?.hover === 0.05);
+  check('the state layers are Material 3\'s values', JSON.stringify(STATE_LAYERS) === JSON.stringify({ hover: 0.08, focus: 0.10, pressed: 0.10, disabledContent: 0.38, disabledContainer: 0.12 }));
 }
 
 // ── FR-A9: the fixtures ─────────────────────────────────────────────────────
@@ -228,6 +257,7 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
 {
   const html = await renderDetailPage(canvasWith([text('t', 'Hi', 14)], { type: 'desktop-app', device: 'window-1440' }), 0);
   check('the detail page offers 1024 and 1280 window buttons plus the artboard', /id="bp-w1024"/.test(html) && /id="bp-w1280"/.test(html) && /id="bp-desktop"[^>]*>1440</.test(html));
+  check('the artboard width is not repeated as a window button', !/id="bp-w1440"/.test(html) && (html.match(/class="btn bp-btn/g) ?? []).length === 4);
   check('no phone or tablet buttons on a desktop-app canvas', !/id="bp-mobile"/.test(html) && !/id="bp-tablet"/.test(html));
   const web = await renderDetailPage(canvasWith([text('t', 'Hi', 14)]), 0);
   check('a web canvas keeps Mobile / Tablet / Desktop', /id="bp-mobile"/.test(web) && /id="bp-tablet"/.test(web));

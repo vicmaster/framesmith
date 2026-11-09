@@ -62,7 +62,7 @@ Left to itself, an AI agent tends to produce UI that *looks* AI-generated — ge
 
 ## Viewer
 
-Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (it takes the first free port from 3001 up; pass a port to pin one). Open a web canvas to review it at multiple breakpoints and compare them side-by-side; open any canvas to inspect its JSON, leave comments, or archive / delete it. Cards keep each artboard's proportions (between a phone held upright and 2:1; a longer page shows its top), so phone screens are portrait cards. A canvas declared `mobile` opens at 1:1 in a device frame instead of the breakpoint buttons, with a **Safe area** toggle that shades the status-bar and home-indicator insets (47 and 34 on the default `iphone-390`). The overlay is viewer-only: it never changes a screenshot.
+Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer (it takes the first free port from 3001 up; pass a port to pin one). Open a web canvas to review it at multiple breakpoints and compare them side-by-side (a canvas declared `desktop-app` offers the narrower windows of its profile instead, 1024 and 1280 under a 1440 artboard); open any canvas to inspect its JSON, leave comments, or archive / delete it. Cards keep each artboard's proportions (between a phone held upright and 2:1; a longer page shows its top), so phone screens are portrait cards. A canvas declared `mobile` opens at 1:1 in a device frame instead of the breakpoint buttons, with a **Safe area** toggle that shades the status-bar and home-indicator insets (47 and 34 on the default `iphone-390`). The overlay is viewer-only: it never changes a screenshot.
 
 ![framesmith canvas detail view — the dashboard pattern rendered (grouped sidebar navigation with an account row, KPI cards with sparklines and delta pills, a real multi-series line chart with an area fill and a dashed reference line beside a recent-activity feed) with the Quality inspector open on the right: a 99/100 "Excellent" score, per-category bars (spacing, color, typography, structure, consistency, usability, coverage, cliche), and honest APCA advisories in the issue list. The toolbar shows the canvas's designed states (default / loading / empty), theme and viewport toggles, and a Comment toggle.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-canvas.png?v=2.0)
 
@@ -496,6 +496,7 @@ The headline call for a new project's look: **one seed color + one personality �
 - **`chart-1`…`chart-6`** — a categorical series palette hue-walked from the seed (≥ 30° apart, purple band avoided unless the seed itself is purple, each ≥ 3:1 on both themes' surfaces per WCAG 1.4.11) for chart segments, series, and legend dots. Near-neutral seeds anchor at a stable blue and say so in the result (`rangeNote`).
 - **`accent-tint` / `success-tint` / `warning-tint` / `danger-tint` / `neutral-tint`** — the tint layer: soft same-hue surfaces for status chips, icon tiles, pill badges, and initials avatars. One pairing rule: tint as the fill, base color as the ink (`fill: "$success-tint"` + `color: "$success"`) — AA by construction, dark layer included.
 - **`focus-ring` / `border-strong`** — the control colors, each at 3:1 or more (WCAG 1.4.11) in both themes: `focus-ring` against every `bg-*` and `-tint` token, `border-strong` against `bg-primary` and `bg-surface`, for a control whose border is its only boundary.
+- **`state`** — element-state opacities (`hover` 0.08, `focus` 0.10, `pressed` 0.10, `disabledContent` 0.38, `disabledContainer` 0.12; Material 3's values), written to the layer's `state` section. The result reports them as `state`, and the two control colors as `controls`.
 - **`$elevation.flat` / `raised` / `floating` / `overlay`** — layered soft shadow tokens referenced from any node as `shadow: "$elevation.raised"`. The dark layer **re-states** each depth (stronger black ink) so elevation reads on dark surfaces instead of vanishing.
 - **`$motion` defaults** (`fast` / `base` / `slow`) tuned to the personality's temperament.
 
@@ -634,7 +635,7 @@ List available layout structures — named scaffolds you stamp onto a canvas and
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string? | List what stamps on this canvas: its declared type picks the realisations (an undeclared canvas lists web). Passing it with `type` is an error. |
-| `type` | `"web"` \| `"mobile"`? | List for this canvas type instead. With neither, the web listing. |
+| `type` | `"web"` \| `"mobile"` \| `"desktop-app"`? | List for this canvas type instead. With neither, the web listing. |
 | `projectId` | string? | If given, also return a `diversification` signal for the project (recently-built structures + a hint to differ on ≥ 1 axis), so you pick a shape that contrasts with recent work. Omit it to get just the structure list. |
 
 Two kinds:
@@ -658,7 +659,7 @@ Stamp a layout structure onto a canvas and return the placeholder node IDs to po
 | `structure` | string | Structure name (use `list_structures`, e.g. `"marquee-hero"`, `"data-table"`) |
 | `replace` | boolean? | Page scaffolds: if the root already has children, clear them before stamping. Default `false` (refuses on a non-empty canvas) |
 | `targetId` | string? | Component scaffolds: node to stamp under (default `"document"`) |
-| `realisation` | `"web"` \| `"mobile"`? | Stamp the realisation for this type instead of the canvas's own (e.g. `"web"` for the web dashboard on a phone canvas) |
+| `realisation` | `"web"` \| `"mobile"` \| `"desktop-app"`? | Stamp the realisation for this type instead of the canvas's own (e.g. `"web"` for the web dashboard on a phone canvas) |
 
 ### `canvas_import_html`
 
@@ -880,7 +881,7 @@ Every result also carries a **`surface`** field: `{ type, device, source, rulesO
 | `desktop-app-artboard` | structure | warning | Runs on every type. A desktop-app canvas narrower than 1024px, the narrowest window the desktop-app layouts are built for. |
 | `type-scale-ratio` | typography | warning | On by default: adjacent font sizes stepping by a ratio below 1.1 or above 2.0 (pinned typography tokens skip it). The desktop-app ruleset turns it off, since dense apps step 12 / 13 / 14 on purpose; it then appears in `rulesOff`. |
 
-Repeated findings fold in this result: three or more warnings or infos with the same severity, category, rule (or tell), theme and message shape come back as one entry that keeps the first one's message and adds `nodeIds`, `count` and, when they had fixes, `fixes: [{ nodeId, op }]`. Errors never fold, and `canvas_autofix` works from the unfolded list.
+Repeated findings fold in this result: three or more warnings or infos with the same severity, category, rule (or tell) and theme come back as one entry when they also share their message — on its shape for members that carry a fix (each fix op holds its node's specifics), word for word apart from quoted node text for members without one. The entry keeps the first one's message and adds `nodeIds` (distinct), `count` and, when they had fixes, `fixes: [{ nodeId, op }]`. Errors never fold, and `canvas_autofix` works from the unfolded list.
 
 Whenever the `coverage` category runs on a **base** canvas, the result also carries a **`coverage`** field: `{ dataBearing, states, missing }` — whether the screen carries data-bearing content, which state variants (`canvas_add_variant`) already exist, and which demanded states are missing. It's absent on variant canvases (a variant *is* a designed state, so it doesn't demand states of itself).
 
@@ -889,7 +890,7 @@ Whenever the `coverage` category runs on a **base** canvas, the result also carr
 | `canvasId` | string | Canvas ID to evaluate |
 | `mode` | `"fast"` \| `"detailed"` \| `"llm"` | `"fast"` = JSON-tree analysis only (<100ms). `"detailed"` adds Puppeteer-based pixel-level overlap checks, laid out at the canvas's artboard size. `"llm"` runs fast-mode heuristics plus a vision-model critique (provider picked from `FRAMESMITH_LLM_PROVIDER` or whichever of `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` is set — costs one paid API call per invocation). Default `"fast"`. |
 | `categories` | string[]? | Subset of `spacing`, `color`, `typography`, `structure`, `consistency`, `cliche`, `coverage`, `usability`. Defaults to all. |
-| `genre` | string? | Style that relaxes specific `cliche` gates — `"material"` allows purple and white elevated surfaces; `"data"` (alias `"dashboard"`) allows realistic figures on a screen whose numbers are the user's own data (dashboards, activity, finance, fitness, logistics); `"commerce"` (alias `"checkout"`) allows the money on a transactional screen — cart, checkout, order confirmation, billing history. Defaults to the canvas's stored genre (`canvas_set_genre` stamps it durably, no token churn; `apply_preset` never changes it). Replaces only the genre: a material-preset canvas keeps the material relaxation. Pick by what the screen is *for* (read screens with the user's own figures → `data`; a screen you complete a purchase on → `commerce`; editors/admin forms → `material`; a pricing page is marketing and gets none of them), not what it contains — the result's `genre` field audits the choice. |
+| `genre` | string? | Style that relaxes specific `cliche` gates — `"material"` allows purple and white elevated surfaces; `"data"` (alias `"dashboard"`) allows realistic figures on a screen whose numbers are the user's own data (dashboards, activity, finance, fitness, logistics); `"commerce"` (alias `"checkout"`) allows the money on a transactional screen — cart, checkout, order confirmation, billing history. Defaults to the canvas's stored genre (`canvas_set_genre` stamps it durably, no token churn; `apply_preset` never changes it). Replaces only the genre: a material-preset canvas keeps the material relaxation. Pick by what the screen is *for* (read screens with the user's own figures → `data`; a screen you complete a purchase on → `commerce`; the Material style → `material` (an editor or admin console is type `"desktop-app"`, not a genre); a pricing page is marketing and gets none of them), not what it contains — the result's `genre` field audits the choice. |
 
 **Categories and what they check**
 

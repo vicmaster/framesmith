@@ -2056,9 +2056,13 @@ function checkPointerTargets(
   const toBox = (p: { x: number; y: number }, r: LayoutRect) =>
     Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.width)), Math.max(r.y - p.y, 0, p.y - (r.y + r.height)));
 
+  // A primitive with several targets (a tab-bar's tabs) renders them under
+  // ONE node id, so a rect places the whole primitive, not each target:
+  // its undersized sub-targets cannot be placed individually.
+  const shared = new Set(targets.map((t) => t.node.id).filter((id, i, all) => all.indexOf(id) !== i));
   for (const t of small) {
     const size = `${Number.isFinite(t.w) ? Math.round(t.w) : '?'}×${Math.round(t.h)}px`;
-    const rect = rects?.get(t.node.id);
+    const rect = shared.has(t.node.id) ? undefined : rects?.get(t.node.id);
     if (!rects || !rect) {
       score -= 10;
       issues.push({
@@ -2072,6 +2076,7 @@ function checkPointerTargets(
       continue;
     }
     const c = centre(rect);
+    const unplaced = live.find((o) => !nested(o.node, t.node) && !rects.has(o.node.id));
     const blocker = live.find((o) => {
       if (nested(o.node, t.node)) return false;
       const r = rects.get(o.node.id);
@@ -2081,6 +2086,20 @@ function checkPointerTargets(
       if (toBox(c, r) < 12) return true;
       return small.includes(o) && Math.hypot(centre(r).x - c.x, centre(r).y - c.y) < 24;
     });
+    if (!blocker && unplaced) {
+      // A neighbour the layout walker could not place might sit inside the
+      // circle: the exception is unproven, so the target stays blocking.
+      score -= 10;
+      issues.push({
+        category: 'usability',
+        severity: 'warning',
+        nodeId: t.node.id,
+        nodeName: t.node.name,
+        message: `${t.what} has a ${size} hit target, below the 24px floor, and the spacing exception cannot be confirmed: detailed mode could not place ${unplaced.what} "${unplaced.node.name ?? unplaced.node.id}", which may sit inside its 24px circle (WCAG 2.5.8).`,
+        suggestion: 'Grow it to 24px — the exception needs every neighbour placed.',
+      });
+      continue;
+    }
     if (blocker) {
       score -= 25;
       issues.push({
@@ -2212,19 +2231,30 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
 /** Fold ruleset findings into a category result: −10 per warning (errors
  * score themselves inside their check), infos free. */
 /** Phase 31 FR-A7 — fold repeated findings for the serialised result.
- * Warnings and infos that share a severity, a category, a rule or tell, a
- * theme and a message template (quoted text and numbers stripped) fold into
- * ONE entry once three or more share a key: it sits where the first one did,
- * keeps the first one's message and suggestion, and carries nodeIds, count,
- * and `fixes` ({ nodeId, op } for every member that had a fix) so nothing an
- * agent could act on node by node is lost. Errors never fold. canvas_autofix
+ * Warnings and infos that share a severity, a category, a rule or tell and a
+ * theme fold into ONE entry once three or more also share their message:
+ * members that carry a fix match on its shape (quoted text and numbers
+ * stripped, since the fix op holds the specifics); members without one must
+ * read the same apart from quoted node text, suggestion included. The entry
+ * sits where the first one did, keeps the first one's message and
+ * suggestion, and carries nodeIds (distinct), count, and `fixes`
+ * ({ nodeId, op } per member fix) so nothing an agent could act on node by
+ * node is lost. Errors never fold. canvas_autofix
  * and the directive read the unfolded list; only canvas_evaluate's output
  * folds. */
 export function foldIssues(issues: EvaluationIssue[]): EvaluationIssue[] {
+  // A member with a fix carries its node's specifics in its fix op, so it may
+  // fold on the message SHAPE (numbers stripped). A member without one folds
+  // only with members whose message (quoted node text aside) and suggestion
+  // are identical — otherwise the folded entry would show one member's
+  // numbers for all of them (a 1.07 ratio and a 2.67 one, Lc 60 and Lc 37).
   const keyOf = (i: EvaluationIssue): string | null => {
     if (i.severity === 'error') return null;
-    const template = i.message.replace(/"[^"]*"/g, '"…"').replace(/\d+(\.\d+)?/g, 'N');
-    return `${i.severity}|${i.category}|${i.rule ?? i.tell ?? ''}|${i.theme ?? ''}|${template}`;
+    const head = `${i.severity}|${i.category}|${i.rule ?? i.tell ?? ''}|${i.theme ?? ''}`;
+    const unquoted = i.message.replace(/"[^"]*"/g, '"…"');
+    return i.fix
+      ? `fix|${head}|${unquoted.replace(/\d+(\.\d+)?/g, 'N')}`
+      : `same|${head}|${unquoted}|${i.suggestion ?? ''}`;
   };
   const groups = new Map<string, EvaluationIssue[]>();
   for (const i of issues) {
@@ -2241,7 +2271,7 @@ export function foldIssues(issues: EvaluationIssue[]): EvaluationIssue[] {
     emitted.add(k!);
     const { nodeName: _name, fix: _fix, ...first } = group[0];
     const fixes = group.filter((g) => g.fix).map((g) => ({ nodeId: g.nodeId, op: g.fix!.op }));
-    out.push({ ...first, nodeIds: group.map((g) => g.nodeId), count: group.length, ...(fixes.length ? { fixes } : {}) });
+    out.push({ ...first, nodeIds: [...new Set(group.map((g) => g.nodeId))], count: group.length, ...(fixes.length ? { fixes } : {}) });
   }
   return out;
 }

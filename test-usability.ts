@@ -21,8 +21,8 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-async function usability(c: Canvas) {
-  const r = await evaluateCanvas(c, { mode: 'fast', categories: ['usability'] });
+async function usability(c: Canvas, mode: 'fast' | 'detailed' = 'fast') {
+  const r = await evaluateCanvas(c, { mode, categories: ['usability'] });
   return r.issues;
 }
 
@@ -36,7 +36,11 @@ I(row, { type: "text", content: "Enable" })
 I(row, { type: "checkbox", width: 20, height: 20, checked: true })
 `, small);
   const i1 = await usability(small);
-  check('20px checkbox in an unpadded row → one error', i1.length === 1 && i1[0].severity === 'error' && i1[0].message.includes('24px floor'), JSON.stringify(i1.map((x) => x.message)));
+  // Phase 31 FR-A4 — fast mode cannot measure spacing, so it warns and names
+  // detailed mode; detailed mode applies the WCAG 2.5.8 spacing exception.
+  check('20px checkbox in an unpadded row → one fast-mode warning naming detailed mode', i1.length === 1 && i1[0].severity === 'warning' && i1[0].message.includes('24px floor') && /detailed/.test(i1[0].suggestion ?? ''), JSON.stringify(i1.map((x) => x.message)));
+  const i1d = await usability(small, 'detailed');
+  check('…and in detailed mode it passes by the spacing exception when its label is outside its 24px circle', i1d.length === 0 || i1d.every((x) => !x.message.includes('24px floor')), JSON.stringify(i1d.map((x) => x.message)));
 
   const padded = createCanvas('padded');
   parseAndExecute(padded.root, `
@@ -65,7 +69,9 @@ I(row, { type: "checkbox", width: 18, height: 18 })
 I(row, { type: "checkbox", width: 18, height: 18 })
 `, two);
   const i4 = await usability(two);
-  check('two small controls sharing a row → both error', i4.filter((x) => x.severity === 'error').length === 2);
+  check('two small controls sharing a row → both warn in fast mode', i4.filter((x) => x.severity === 'warning' && x.message.includes('24px floor')).length === 2, JSON.stringify(i4.map((x) => `${x.severity}: ${x.message.slice(0, 80)}`)));
+  const i4d = await usability(two, 'detailed');
+  check('…and both error in detailed mode (touching 18px boxes: each circle reaches the other)', i4d.filter((x) => x.severity === 'error' && x.message.includes('24px circle')).length === 2, JSON.stringify(i4d.map((x) => `${x.severity}: ${x.message.slice(0, 80)}`)));
 
   // touch-first advisory on a phone-width artboard
   const phone = createCanvas('phone');

@@ -55,6 +55,24 @@ for (const type of ['web', 'desktop-app'] as const) {
 
   f = await targetFindings(type, [row(40, [btn('a', 20), btn('b', 20)])]);
   check(`${type}: well-spaced small targets pass`, f.length === 0);
+
+  // Boxes 13px apart but centres 23px apart: only the circle-vs-circle test
+  // catches it (each circle reaches 12, the other box is 13 away).
+  f = await targetFindings(type, [row(3, [btn('a', 20), btn('b', 20)])]);
+  check(`${type}: two undersized circles that overlap fail even when neither reaches the other box`, f.length === 2 && f.every((i) => i.severity === 'error'), JSON.stringify(f.map((i) => i.message)));
+
+  // A tab-bar narrower than 24px a tab: every tab shares the bar's node id, so
+  // detailed mode cannot place one tab — the tabs stay blocking warnings.
+  f = await targetFindings(type, [{ id: 'tb', name: 'tb', type: 'tab-bar', width: 60, position: 'relative', items: ['A', 'B', 'C', 'D', 'E'].map((l) => ({ icon: 'home', label: l })) } as SceneNode]);
+  check(`${type}: a too-narrow tab-bar's tabs stay blocking in detailed mode`, f.length === 5 && f.every((i) => i.severity === 'warning' && /could not place/.test(i.message)), JSON.stringify(f.map((i) => [i.severity, i.message.slice(0, 90)])));
+
+  // A neighbour nested past the layout walker's depth cannot be placed, so the
+  // spacing exception is unproven and the small target stays blocking.
+  let deep: SceneNode = btn('deep', 32);
+  for (let d = 0; d < 28; d++) deep = { id: `w${d}`, name: `w${d}`, type: 'frame', children: [deep] };
+  f = await targetFindings(type, [row(0, [btn('a', 20), deep])]);
+  const a = f.find((i) => i.nodeId === 'a');
+  check(`${type}: a neighbour the layout cannot place keeps the small target blocking`, !!a && a.severity === 'warning' && /could not place/.test(a.message), JSON.stringify(f.map((i) => [i.nodeId, i.severity, i.message])));
 }
 
 await shutdown();
