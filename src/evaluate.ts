@@ -3,11 +3,14 @@ import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, resolveInstance } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
-import { checkDesktopArtboard } from './desktop-app-rules.js';
+import {
+  checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkPrimaryCount, checkRowRhythm, checkTruncation,
+  checkTypeLadder, type DesktopContext,
+} from './desktop-app-rules.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
-import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, type SurfaceType } from './surfaces.js';
+import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
 import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
@@ -2344,9 +2347,18 @@ const CATEGORY_WEIGHTS = new Map([
 // a false negative is today's status quo, a false positive is friction.
 
 /** What each kind of data-bearing content demands (spec C4). */
-const COVERAGE_DEMANDS: { kind: string; demands: string[]; detect: (inv: ReturnType<typeof extractInventory>) => boolean; noun: string }[] = [
+/** Text-inputs outside detected tables (a table's cells are its data plane,
+ * as the inventory treats its controls). */
+function countTextInputs(root: SceneNode, tableIds: Set<string>): number {
+  if (tableIds.has(root.id)) return 0;
+  return (root.type === 'text-input' ? 1 : 0) + (root.children ?? []).reduce((a, c) => a + countTextInputs(c, tableIds), 0);
+}
+
+const COVERAGE_DEMANDS: { kind: string; demands: string[]; detect: (inv: ReturnType<typeof extractInventory> & { textInputs?: number }) => boolean; noun: string }[] = [
   { kind: 'table', demands: ['empty', 'loading'], detect: (inv) => inv.tables.length > 0, noun: 'a data table' },
-  { kind: 'form', demands: ['error'], detect: (inv) => inv.counts.controls >= 3, noun: 'a form (3+ input controls)' },
+  // Phase 31 FR-C10 — a text-input is an input control too (outside tables,
+  // as the inventory counts controls); drift's control list stays as is.
+  { kind: 'form', demands: ['error'], detect: (inv) => inv.counts.controls + (inv.textInputs ?? 0) >= 3, noun: 'a form (3+ input controls)' },
 ];
 
 /** Scaffold hint per demanded state — the cheap way to comply (slice B). */
@@ -2409,7 +2421,9 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
     return { result: { score: 100, issues: [] } };
   }
 
-  const inv = extractInventory(expandInstances(canvas.root, canvas));
+  const expanded = expandInstances(canvas.root, canvas);
+  const inv: ReturnType<typeof extractInventory> & { textInputs?: number } = extractInventory(expanded);
+  inv.textInputs = countTextInputs(expanded, new Set(inv.tables.map((t) => t.nodeId)));
   const demanded = new Map<string, string>(); // state → noun that demanded it
   for (const d of COVERAGE_DEMANDS) {
     if (!d.detect(inv)) continue;
@@ -2486,6 +2500,10 @@ export async function evaluateCanvas(
   const { root: mobileRoot, owners } = expandForRules(resolvedRoot, canvas);
   const expandedRaw = expandForRules(canvas.root, canvas).root;
   const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
+  // Phase 31 slice C — the desktop-app rules read the expanded tree too, and
+  // in detailed mode the rects of that tree.
+  const desktopTypeRules = DESKTOP_APP_RULES.some((id) => ruleOn.has(id));
+  const expandedRules = mobileTypeRules || desktopTypeRules;
   const mobile: MobileContext = {
     root: mobileRoot,
     profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
@@ -2545,14 +2563,29 @@ export async function evaluateCanvas(
   // Phase 30 slice C — mobile-safe-area reads rendered rects too, deeper.
   let detailedLayout: LayoutRect[] | undefined;
   const safeAreaDetailed = activeCategories.includes('usability') && ruleOn.has('mobile-safe-area');
-  if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed)) {
+  const desktopDetailed = desktopTypeRules && activeCategories.includes('usability');
+  if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed || desktopDetailed)) {
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
     // On a mobile canvas render the tree the mobile rules read: the same
     // pixels as the canvas render, with every node inside an instance under
     // its own id, so the rects are unambiguous. Web keeps the canvas render.
-    const html = mobileTypeRules ? renderToHtml(mobileRoot, w, h, canvas) : renderToHtml(resolvedRoot, w, h, canvas);
-    detailedLayout = await computeLayout(html, undefined, ruleOn.has('mobile-safe-area') ? 25 : 10, { width: w, height: h });
+    const html = expandedRules ? renderToHtml(mobileRoot, w, h, canvas) : renderToHtml(resolvedRoot, w, h, canvas);
+    detailedLayout = await computeLayout(html, undefined, expandedRules ? 25 : 10, { width: w, height: h });
+  }
+  // Phase 31 slice C — the desktop-app rules' view of the canvas.
+  let desktop: DesktopContext | undefined;
+  let desktopTables = new Set<string>();
+  if (desktopTypeRules) {
+    const rects = new Map<string, LayoutRect>();
+    const index = (r: LayoutRect) => { rects.set(r.nodeId, r); r.children?.forEach(index); };
+    detailedLayout?.forEach(index);
+    desktop = {
+      root: mobileRoot,
+      profile: windowProfile(declared.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW],
+      ...(detailedLayout ? { rects } : {}),
+    };
+    desktopTables = new Set(extractInventory(mobileRoot).tables.map((t) => t.nodeId));
   }
   if (activeCategories.includes('typography')) {
     const typography = checkTypography(entries, mergedTokens, {
@@ -2562,21 +2595,26 @@ export async function evaluateCanvas(
       tables: extractInventory(resolvedRoot).tables,
     });
     const rawById = new Map(buildTreeContext(expandedRaw).map((en) => [en.node.id, en.node]));
-    results.set('typography', withRuleIssues(typography, ruleOn.has('mobile-type-floor') ? reportOnInstances(checkTypeFloor(mobile, rawById), owners) : []));
+    const pinned = new Set(Object.values(mergedTokens.typography ?? {}).map((t) => t.fontSize).filter((v): v is number => typeof v === 'number'));
+    results.set('typography', withRuleIssues(typography, reportOnInstances([
+      ...(ruleOn.has('mobile-type-floor') ? checkTypeFloor(mobile, rawById) : []),
+      ...(desktop && ruleOn.has('desktop-app-type-ladder') ? checkTypeLadder(desktop, rawById, pinned) : []),
+    ], owners)));
   }
   if (activeCategories.includes('structure')) {
     results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), [
       ...(ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []),
       ...(ruleOn.has('desktop-app-artboard') ? reportOnInstances(checkDesktopArtboard(mobileRoot, declared), owners) : []),
+      ...(desktop && ruleOn.has('desktop-app-primary-count') ? reportOnInstances(checkPrimaryCount(desktop), owners) : []),
     ]));
   }
   if (activeCategories.includes('consistency')) {
     const consistencyCtx = { rawEntries, tokens: mergedTokens };
-    if (options.mode === 'detailed' && detailedLayout) {
-      results.set('consistency', checkConsistencyDetailed(entries, detailedLayout, consistencyCtx));
-    } else {
-      results.set('consistency', checkConsistency(entries, consistencyCtx));
-    }
+    const consistency = options.mode === 'detailed' && detailedLayout
+      ? checkConsistencyDetailed(entries, detailedLayout, consistencyCtx)
+      : checkConsistency(entries, consistencyCtx);
+    results.set('consistency', withRuleIssues(consistency,
+      desktop && ruleOn.has('desktop-app-row-rhythm') ? reportOnInstances(checkRowRhythm(desktop, desktopTables), owners) : []));
   }
   if (activeCategories.includes('usability')) {
     const touch = ruleOn.has('mobile-touch-target') ? { floor: mobile.profile.touchTarget } : undefined;
@@ -2601,9 +2639,14 @@ export async function evaluateCanvas(
       }
       const parentOf = new Map(targetEntries.map((en) => [en.node.id, en.parent] as const));
       const pointer = checkPointerTargets(targets, parentOf, mobile.width, rects);
+      // Phase 31 FR-C1 — on desktop-app the floor is the rule
+      // desktop-app-target (the same check; web runs it unnamed).
+      const named = ruleOn.has('desktop-app-target')
+        ? pointer.issues.map((i) => (/24px floor/.test(i.message) ? { ...i, rule: 'desktop-app-target' } : i))
+        : pointer.issues;
       usability = {
         score: Math.max(0, usability.score - (100 - pointer.score)),
-        issues: [...usability.issues, ...reportOnInstances(pointer.issues, owners)],
+        issues: [...usability.issues, ...reportOnInstances(named, owners)],
       };
     }
     const extra = reportOnInstances([
@@ -2611,6 +2654,10 @@ export async function evaluateCanvas(
       ...(ruleOn.has('mobile-safe-area') ? (detailedLayout ? checkSafeAreaDetailed(mobile, detailedLayout) : checkSafeAreaFast(mobile)) : []),
       ...(ruleOn.has('mobile-one-column') ? checkOneColumn(mobile) : []),
       ...(ruleOn.has('mobile-tab-bar') ? checkTabBars(mobile) : []),
+      ...(desktop && ruleOn.has('desktop-app-handbuilt-target') ? checkHandbuiltTargetsApp(desktop) : []),
+      ...(desktop && ruleOn.has('desktop-app-icon-label') ? checkIconLabels(desktop) : []),
+      ...(desktop && ruleOn.has('desktop-app-current') ? checkCurrent(desktop) : []),
+      ...(desktop && ruleOn.has('desktop-app-truncation') ? checkTruncation(desktop, desktopTables) : []),
     ], owners);
     results.set('usability', withRuleIssues(usability, extra));
   }

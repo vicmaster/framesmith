@@ -190,7 +190,16 @@ export const MOBILE_RULES = [
 /** Phase 31: the desktop-app ruleset's rule ids, each registered in the same
  * change as the check that honours it. `desktop-app-artboard` lives in the
  * base row (it must run on every type), so it is not listed here. */
-export const DESKTOP_APP_RULES: readonly string[] = [];
+export const DESKTOP_APP_RULES: readonly string[] = [
+  'desktop-app-target',
+  'desktop-app-handbuilt-target',
+  'desktop-app-icon-label',
+  'desktop-app-current',
+  'desktop-app-type-ladder',
+  'desktop-app-row-rhythm',
+  'desktop-app-truncation',
+  'desktop-app-primary-count',
+];
 
 /** Phase 31: default rules — they run unless an active ruleset disables them.
  * A rule id appears here when some type replaces the check. */
@@ -206,7 +215,7 @@ export const RULESETS: Record<RulesetAxis, Record<string, Ruleset>> = {
   // The mobile disable list stays empty until a web-shaped rule is shown to
   // misfire on a correct mobile idiom (FR-C7).
   // desktop-app replaces the adjacent-ratio check (dense apps step 12/13/14
-  // on purpose); its own type ladder lands with the app rules.
+  // on purpose) with desktop-app-type-ladder.
   type: { web: {}, mobile: { enable: [...MOBILE_RULES] }, 'desktop-app': { enable: [...DESKTOP_APP_RULES], disable: ['type-scale-ratio'] } },
   genre: {
     // Material Design legitimately uses a purple accent AND white elevated

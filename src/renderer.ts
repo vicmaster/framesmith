@@ -5,7 +5,7 @@ import { usableSafeArea } from './surfaces.js';
 import {
   BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
-  LINK_MIN_HEIGHT, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
+  LINK_MIN_HEIGHT, LINK_ICON, LINK_EXTERNAL, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
   tabsItems, textInputHeight, textInputRows,
 } from './primitives.js';
 
@@ -1287,8 +1287,8 @@ function disabledAttrs(node: SceneNode, attrs: string): string {
 function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
   attrs = disabledAttrs(node, attrs);
   const color = node.color ?? FALLBACK.accent;
-  const glyph = iconHtml(node.icon, 14, node.iconColor ?? color);
-  const external = node.external ? iconHtml('external-link', 12, node.iconColor ?? color) : '';
+  const glyph = iconHtml(node.icon, LINK_ICON, node.iconColor ?? color);
+  const external = node.external ? iconHtml('external-link', LINK_EXTERNAL, node.iconColor ?? color) : '';
   const words = text(node.label) ? titledLabel(text(node.label), '') : '';
   const box = css([
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'gap: 4px',

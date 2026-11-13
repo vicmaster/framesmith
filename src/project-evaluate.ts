@@ -13,6 +13,7 @@ import type { Canvas } from './types.js';
 import type { SceneNode } from './types.js';
 import { evaluateCanvas, rgbToHsl, parseColor } from './evaluate.js';
 import { getCanvasTokens } from './workspaces.js';
+import { shapeHash } from './shape-hash.js';
 
 export type ProjectFindingKind = 'radius-drift' | 'accent-drift' | 'token-adoption' | 'copied-chrome' | 'state-coverage';
 
@@ -72,16 +73,6 @@ const hueDistance = (a: number, b: number): number => {
   const d = Math.abs(a - b) % 360;
   return d > 180 ? 360 - d : d;
 };
-
-/** Depth-3 shape hash: type + name + child-count tree. Styles deliberately
- * excluded — a copied shell whose active nav item is restyled per screen
- * still matches; a structurally edited copy doesn't (miss it rather than
- * accuse legitimate variation). */
-function shapeHash(node: SceneNode, depth = 3): string {
-  const part = `${node.type}:${node.name ?? ''}:${node.children?.length ?? 0}`;
-  if (depth <= 1 || !node.children?.length) return part;
-  return `${part}[${node.children.map((c) => shapeHash(c, depth - 1)).join(',')}]`;
-}
 
 function subtreeSize(node: SceneNode): number {
   return 1 + (node.children?.reduce((a, c) => a + subtreeSize(c), 0) ?? 0);

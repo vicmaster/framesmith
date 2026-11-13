@@ -26,6 +26,8 @@ export const TAPPABLE_PRIMITIVES = new Set(['button', 'list-row', 'tab-bar', 'na
 // Phase 31 slice B — the desktop-app vocabulary's geometry, on the 24 / 32 /
 // 40 / 48 density ladder.
 export const LINK_MIN_HEIGHT = 24;
+export const LINK_ICON = 14;
+export const LINK_EXTERNAL = 12;
 export const NAV_ITEM_HEIGHT = 32;
 export const TABS_HEIGHT = { sm: 32, md: 40 } as const;
 export const TREE_ROW_HEIGHT = 32;
@@ -121,6 +123,13 @@ export function textInputHeight(n: SceneNode): number {
   return rows > 1 ? Math.max(base, rows * TEXT_INPUT_LINE + 12) : base;
 }
 
+/** The width an unlabelled link renders at: its 14px icon and 12px
+ * external-link glyph, 4px apart (renderLink). */
+export function linkGlyphWidth(n: SceneNode): number {
+  const glyphs = [n.icon ? LINK_ICON : 0, n.external ? LINK_EXTERNAL : 0].filter((g) => g > 0);
+  return glyphs.reduce((a, g) => a + g, 0) + Math.max(0, glyphs.length - 1) * 4;
+}
+
 /** The pointer targets a desktop-app primitive renders, each by its own box
  * (width undefined when it is not known from the scene). `tabs` has one per
  * item; the rest have one. Not for the phone tappables (see evaluate). */
@@ -132,7 +141,8 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
   const disabled = n.disabled === true;
   switch (n.type) {
     // A link never renders shorter than 24 (min-height), whatever its height.
-    case 'link': return [{ what: 'link', w, h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
+    // Without a label it hugs its glyphs, so its width is known (slice C).
+    case 'link': return [{ what: 'link', w: w ?? (hasText(n.label) ? undefined : linkGlyphWidth(n)), h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
     // A text-input's height comes from its size and rows (the renderer ignores `height`).
     case 'text-input': return [{ what: 'text-input', w, h: textInputHeight(n), disabled }];
     case 'nav-item': return [{ what: 'nav-item', w: n.collapsed ? NAV_ITEM_HEIGHT : w, h: h(NAV_ITEM_HEIGHT), disabled }];
