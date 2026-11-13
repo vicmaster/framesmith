@@ -50,6 +50,15 @@ export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean
   { type: 'nav-bar', path: 'title' },
   { type: 'nav-bar', path: 'leading.label', fixed: true },
   { type: 'nav-bar', path: 'trailing[].label', fixed: true },
+  // Phase 31 slice B — the desktop-app vocabulary.
+  { type: 'link', path: 'label' },
+  { type: 'nav-item', path: 'label' },
+  { type: 'tabs', path: 'items[].label' },
+  { type: 'tree-row', path: 'label' },
+  { type: 'menu-row', path: 'label' },
+  { type: 'menu-row', path: 'shortcut' },
+  { type: 'property-row', path: 'label' },
+  { type: 'text-input', path: 'value' },
 ];
 
 /** One perturbable string: a text node's content or a primitive's prop. */

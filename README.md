@@ -310,7 +310,7 @@ R("nodeId", { type: "text", content: "Replaced" })
 
 **Returns** `{ ok, nodeIds, results }`. `nodeIds` maps each bound variable to the node ID it created — e.g. `{ "header": "n_a1b2" }` — so you can target those nodes in later calls (bindings only live within a single call). `results` lists each op's outcome in order; an op that succeeded but will not fully take effect carries a `warning` (a `shadow` beside an active `shadows`, a chart `highlight` entry outside the series data). If the call wrote a `fontFamily` nothing can serve yet (not cached, registered, or system/generic), a `Font warnings` content item names it — a cache-only check with no network call, so it's a heads-up, not exhaustive.
 
-**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out), and the mobile primitives `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row`, `sheet` (see [Mobile primitives](#mobile-primitives))
+**Node types:** `frame`, `text`, `rectangle`, `ellipse`, `image`, `icon`, `path`, `component`, `instance`, `toggle`, `checkbox`, `radio`, `select`, `chart`, `skeleton` (loading-placeholder block — token-derived neutral fill; pulses subtly in the live viewer, always static in screenshots/exports so diffs stay deterministic; `pulse: false` opts a block out), the mobile primitives `status-bar`, `home-indicator`, `nav-bar`, `tab-bar`, `button`, `list-row`, `sheet` (see [Mobile primitives](#mobile-primitives)), and the desktop-app primitives `link`, `text-input`, `nav-item`, `tabs`, `tree-row`, `menu-row`, `property-row`, `divider` (see [Desktop-app primitives](#desktop-app-primitives))
 
 **Properties:** `fill`, `gradient`, `stroke`, `strokeWidth`, `strokeStyle`, `borderTop`, `borderRight`, `borderBottom`, `borderLeft`, `cornerRadius`, `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `layout` (`"horizontal"` | `"vertical"` | `"grid"`), `gap`, `rowGap`, `gridColumns`, `gridColumn`, `gridRow`, `padding`, `alignItems`, `justifyContent`, `fontSize`, `fontFamily`, `fontWeight`, `color`, `content`, `textAlign`, `lineHeight`, `letterSpacing` (px), `textDecoration`, `textTransform`, `textOverflow` (`"ellipsis"` — designed single-line truncation; `canvas_stress` reports clips behind it as info), `tabularNums`, `fontVariationSettings`, `src`, `objectFit`, `opacity`, `shadow` (CSS string, or `"$elevation.<name>"` referencing an elevation token), `shadows`, `blur`, `backdropBlur`, `backdropFilter`, `overflow`, `wrap`, `position` (`"absolute"` | `"relative"` | `"fixed"` | `"sticky"`), `x`, `y`, `bottom`, `right`, `icon`, `iconSize`, `iconColor`, `iconStyle`, `checked`, `disabled`, `value`, `d`, `viewBox`, `strokeLinecap`, `strokeLinejoin`, `strokeDasharray`, `animation`, `transition` (object, or `"$motion.<name>"` referencing a motion token), `kind`, `series`, `segments`, `innerRatio`, `centerValue`, `centerLabel`, `sparkKind`, `xDomain`, `yDomain`, `curve`, `gridlines`, `xLabels`, `yLabels`, `componentId`, `overrides`, `safeArea` (`{ top, bottom }`, document root only — insets the renderer adds to the root's top and bottom padding; `canvas_create` with `type: "mobile"` writes the device's), `name` (a readable label — `find_nodes` and component overrides match on it), `pulse` (skeleton only), `responsive` (`"stack"` | `"wrap"`)
 
@@ -360,7 +360,7 @@ Phone screens are built from seven primitives that carry their own sizes, 44px h
 | `home-indicator` | `appearance` | The home pill pinned to the bottom, as tall as `safeArea.bottom` (34) |
 | `nav-bar` | `title`, `leading`, `trailing` (≤2), `largeTitle` | 44 tall (96 large), in flow; every action a 44×44 target |
 | `tab-bar` | `items: [{ icon, label, active?, badge? }]`, `variant` (`standard` / `floating` / `fab`), `fab` | Pinned to the bottom, 49 + the inset; 2–5 labeled tabs; `fab` adds a raised 56px centre action |
-| `button` | `label`, `icon`, `iconPosition`, `variant`, `size` (`sm` 32 / `md` 44 / `lg` 52), `disabled` | `md` meets the phone floor; `sm` is a mobile error by design |
+| `button` | `label`, `icon`, `iconPosition`, `variant`, `size` (`xs` 24 / `sm` 32 / `md` 44 / `lg` 52), `ariaLabel`, `disabled` | `md` meets the phone floor; `sm` and `xs` are mobile errors by design. An icon-only button takes `ariaLabel` as its accessible name (`aria-label` and `title`, never drawn) |
 | `list-row` | `title`, `subtitle`, `leading`, `trailing` (`text` / `chevron` / `toggle` / `badge`), `divider` | 44 tall (56 with a subtitle); repeated rows count as reuse |
 | `sheet` | `detent`, `grabber`, children | A bottom sheet over a scrim, padded past the home indicator |
 
@@ -379,6 +379,23 @@ I("document", { type: "home-indicator" })
 ```
 
 The mobile ruleset judges them (see [`canvas_evaluate`](#canvas_evaluate)); [GUIDELINES](docs/GUIDELINES.md#mobile-vocabulary-primitives-and-pinning) has the pinned-CTA-bar idiom.
+
+#### Desktop-app primitives
+
+Application screens (`type: "desktop-app"`) are built from eight primitives on the 24 / 32 / 40 / 48 density ladder, coloured from `$accent`, `$accent-tint`, `$border`, `$border-strong`, `$text-primary`, `$text-secondary` and `$danger` (neutral fallbacks unthemed). Labels truncate to one line with an ellipsis and keep their full text as a `title`. On web and desktop-app canvases each one except `property-row` and `divider` is a pointer target held to the 24px floor; a hand-built frame is not.
+
+| Type | Key props | What it is |
+|---|---|---|
+| `link` | `label`, `icon`, `iconPosition`, `external` | A standalone text action, at least 24 tall. A `text` node can hold inline links instead: `links: [{ start, end }]` character ranges of its content, drawn underlined and exempt from the 24px floor |
+| `text-input` | `value`, `placeholder`, `icon`, `size` (`sm` 32 / `md` 40), `rows`, `error`, `disabled` | A field whose border (`$border-strong` when the design system has it) is its only boundary; `error` draws an icon and the message below and turns the border `$danger` |
+| `nav-item` | `label`, `icon`, `count`, `dotColor`, `active`, `depth` (0 / 1), `collapsed` | A 32px sidebar row. `active` draws an `$accent-tint` fill, a 2px `$accent` bar and a heavier label; `collapsed` is the 32×32 rail form, with the label as its accessible name; `dotColor` is an identity dot, never counted as an accent |
+| `tabs` | `items: [{ label, count?, active?, disabled? }]`, `variant` (`line` / `contained`), `size` (`sm` 32 / `md` 40) | One tablist; each tab is its own target. The active tab gets an indicator (`line`) or an `$accent-tint` fill (`contained`) |
+| `tree-row` | `label`, `depth`, `expanded` (absent for a leaf), `icon`, `active` | A 32px row indented 16px per level, with a chevron when `expanded` is set |
+| `menu-row` | `label`, `icon`, `shortcut`, `checked`, `destructive`, `disabled`, `submenu` | A 32px menu item; the shortcut right-aligns in a muted `kbd` style, `destructive` uses `$danger` |
+| `property-row` | `label`, `labelWidth` (96), one child | An inspector row: a muted label column, then its value (a control, a `text-input`, a `button`, a text). A sole control inside it is measured by the row's box |
+| `divider` | `orientation` (`horizontal` / `vertical`), `inset` | A 1px `$border` hairline; vertical dividers separate panes |
+
+`fill`, `stroke`, `color`, `iconColor` and `secondaryColor` override the token defaults (`tabs.fill` is the contained variant's active background). A canvas that holds a `nav-item`, `tabs`, `tree-row`, `menu-row` or `property-row` must declare its type (`desktop-app-artboard`).
 
 ### `find_nodes`
 

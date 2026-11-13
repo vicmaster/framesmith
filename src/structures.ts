@@ -1414,11 +1414,11 @@ const segmentedControl: Structure = {
 const breadcrumb: Structure = {
   name: 'breadcrumb',
   kind: 'component',
-  description: 'A two-level breadcrumb: muted parent, chevron, bold current page. Extend by copying the parent+chevron pair via batch_design.',
+  description: 'A two-level breadcrumb: a muted parent link, chevron, bold current page (plain text — it is where you are). The parent is a `link` primitive, so it is a measured 24px target. Extend by copying the link+chevron pair via batch_design.',
   nodes: [{
     id: 'crumb', type: 'frame', name: 'Breadcrumb', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs2,
     children: [
-      { id: 'crumb-parent', type: 'text', content: 'Parent', fontSize: TYPE.textSm, color: COLOR.textSecondary, textOverflow: 'ellipsis' },
+      { id: 'crumb-parent', type: 'link', label: 'Parent', fontSize: TYPE.textSm, fontWeight: 400, color: COLOR.textSecondary },
       { id: 'crumb-sep', type: 'icon', icon: 'chevron-right', iconSize: 14, iconColor: COLOR.textSecondary },
       { id: 'crumb-current', type: 'text', content: 'Current page', fontSize: TYPE.textSm, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis' },
     ],
@@ -1921,6 +1921,8 @@ const DEFAULT_SCAFFOLD_COLORS: Record<string, string> = {
   'warning-tint': '#33260A',
   'danger-tint': '#3A1715',
   'neutral-tint': '#25282D',
+  // Phase 31 — a control's only boundary: 3:1 against every dark surface above.
+  'border-strong': '#666666',
 };
 
 /** Phase 27 slice B — default values for the non-color token namespaces the
@@ -1971,13 +1973,22 @@ const COLOR_FIELDS = ['fill', 'color', 'stroke', 'iconColor'] as const;
  * though no prop names them, so they seed like any other reference — without
  * this, an unthemed settings-mobile drew near-black row titles on the dark
  * default background. */
-const PRIMITIVE_TYPES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
+const PRIMITIVE_TYPES = new Set([
+  'status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet',
+  // Phase 31 slice B — the desktop-app vocabulary.
+  'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider',
+]);
 const PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = {
   'text-primary': [], 'text-secondary': [], border: [],
   // The token, then the names applyControlDefaults falls back to: a canvas
   // that resolves the fallback keeps it rather than getting a seeded default.
   accent: ['primary'], 'bg-surface': ['surface'], danger: ['error'],
 };
+/** Phase 31 — the extra tokens the desktop-app vocabulary reads: the active
+ * fill of nav-item / tree-row / contained tabs, and a text-input's boundary
+ * (which falls back to `border`). Mobile stamps never seed them. */
+const DESKTOP_PRIMITIVE_TYPES = new Set(['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider']);
+const DESKTOP_PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = { 'accent-tint': [], 'border-strong': ['border'] };
 
 /** A primitive's copy fields as [path, text]: what an agent replaces. */
 function primitiveCopy(n: SceneNode): [string, string][] {
@@ -1986,12 +1997,17 @@ function primitiveCopy(n: SceneNode): [string, string][] {
   add('title', n.title);
   add('subtitle', n.subtitle);
   add('label', n.label);
+  // Phase 31 — the desktop-app vocabulary's copy.
+  add('placeholder', n.placeholder);
+  add('value', n.value);
+  add('shortcut', n.shortcut);
+  add('error', n.error);
   const leading = n.leading as Record<string, unknown> | undefined;
   add('leading.initials', leading?.initials);
   add('leading.label', leading?.label);
   if (Array.isArray(n.trailing)) n.trailing.forEach((a, i) => add(`trailing[${i}].label`, (a as Record<string, unknown> | null)?.label));
   else add('trailing.text', (n.trailing as Record<string, unknown> | undefined)?.text);
-  (n.items ?? []).forEach((item, i) => add(`items[${i}].label`, item?.label));
+  (Array.isArray(n.items) ? n.items as Array<{ label?: unknown } | null> : []).forEach((item, i) => add(`items[${i}].label`, item?.label));
   return out;
 }
 
@@ -2143,7 +2159,8 @@ export function applyStructure(
   for (const root of inserted) {
     walkNodes(root, (n) => {
       if (PRIMITIVE_TYPES.has(n.type)) {
-        for (const [token, fallbacks] of Object.entries(PRIMITIVE_COLOR_TOKENS)) {
+        const tokens = { ...PRIMITIVE_COLOR_TOKENS, ...(DESKTOP_PRIMITIVE_TYPES.has(n.type) ? DESKTOP_PRIMITIVE_COLOR_TOKENS : {}) };
+        for (const [token, fallbacks] of Object.entries(tokens)) {
           if (!fallbacks.some((f) => opts.existingColors?.has(f))) referenced.add(token);
         }
       }

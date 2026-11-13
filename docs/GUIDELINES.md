@@ -75,21 +75,39 @@ None of these rules has a mechanical fix, so `canvas_autofix` never proposes one
 
 ## The desktop-app ruleset
 
-A `desktop-app` canvas is judged as an application, not a page. Today its ruleset does two things; the app rules, the app vocabulary, overlays and element states come in later slices of Phase 31.
+A `desktop-app` canvas is judged as an application, not a page. Today its ruleset does two things, and its vocabulary is in [Desktop-app vocabulary](#desktop-app-vocabulary); the app rules, layouts, overlays and element states come in later slices of Phase 31.
 
 - **`type-scale-ratio` is off.** On web and mobile, adjacent font sizes must step by a ratio between 1.1 and 2.0, and a pair outside that warns with `rule: "type-scale-ratio"`. Dense apps step 12 / 13 / 14 on purpose, so the desktop-app ruleset turns that rule off; it is listed in the `surface` report's `rulesOff`. Pinned typography tokens still skip the check on every type.
-- **`desktop-app-artboard`** (structure, warning; a base rule, so it runs on every type). A desktop-app canvas narrower than 1024px, the narrowest window the desktop-app layouts are built for. Resize the root to the window (`U("document", { width: 1440, height: 900 })`), or declare the type the canvas really is.
+- **`desktop-app-artboard`** (structure; a base rule, so it runs on every type).
+  - A desktop-app canvas narrower than 1024px, the narrowest window the desktop-app layouts are built for, **warns**. Resize the root to the window (`U("document", { width: 1440, height: 900 })`), or declare the type the canvas really is.
+  - A canvas that holds a desktop-app primitive (`nav-item`, `tabs`, `tree-row`, `menu-row`, `property-row`) must say what it is: never declared **warns** until `canvas_set_type` declares it either way; declared `mobile` **warns** (those primitives are built for a pointer and a dense window, not a phone); declared `web` gets an **info**. Primitives inside a component instance count, and the finding names the first one found.
 
 There are no desktop-app realisations yet: `apply_structure` on a desktop-app canvas refuses every page anatomy and names the types it is realised on — `realisation: "web"`, plus `"mobile"` for the six mobile anatomies — so `realisation: "web"` stamps the web `split-workbench`, `dashboard` or `settings` onto it. Component scaffolds that stamp on every type stamp as usual.
 
 ### The 24px floor (web and desktop-app)
 
-On web and desktop-app canvases every pointer target is measured against WCAG 2.5.8's 24px floor: the four controls (toggle, checkbox, radio, select) and the clickable primitives (`button`, `list-row`, each `tab-bar` tab and the FAB, each `nav-bar` action). A lone control first grows to its padded row, two levels up, as before; a disabled target is neither measured nor in anyone's way; nodes inside a component instance are judged as rendered and reported on the instance. What is still below 24px passes only by WCAG's **spacing exception**: a 24px circle centred on it must reach no other target's box and no other undersized target's circle (circles that only touch pass; a target nested inside another is not its neighbour). Spacing needs rendered positions, so:
+On web and desktop-app canvases every pointer target is measured against WCAG 2.5.8's 24px floor: the four controls (toggle, checkbox, radio, select) and the clickable primitives (`button`, `list-row`, each `tab-bar` tab and the FAB, each `nav-bar` action, and the [desktop-app vocabulary](#desktop-app-vocabulary): `link`, `text-input`, `nav-item`, each tab of a `tabs` node, `tree-row`, `menu-row`). Inline text links and `divider`s are not targets. A lone control first grows to its padded row, two levels up, as before, and a control that is the only one inside a `property-row`, `nav-item`, `menu-row` or `list-row` is measured by that row's box; a disabled target is neither measured nor in anyone's way; nodes inside a component instance are judged as rendered and reported on the instance. What is still below 24px passes only by WCAG's **spacing exception**: a 24px circle centred on it must reach no other target's box and no other undersized target's circle (circles that only touch pass; a target nested inside another is not its neighbour). Spacing needs rendered positions, so:
 
 - **Detailed mode** (`canvas_evaluate({ canvasId, mode: "detailed" })`) runs the circle test and is the authority: a failure is an **error** that names the neighbour it reaches.
 - **Fast mode** cannot see spacing, so a target below 24px is a **warning** that names the exception and detailed mode. It blocks presenting until you grow the target or a detailed run clears it.
 
 Mobile keeps its own 44px rule (`mobile-touch-target`), which has no spacing exception.
+
+### Desktop-app vocabulary
+
+Build application screens from these primitives, never from hand-built frames: a frame is not a measured target, and none of the app rules can see it. They sit on the 24 / 32 / 40 / 48 density ladder and take their colours from `$accent`, `$accent-tint`, `$border`, `$border-strong`, `$text-primary`, `$text-secondary` and `$danger` (neutral fallbacks unthemed; `fill`, `stroke`, `color`, `iconColor`, `secondaryColor` override). Labels truncate to one line with an ellipsis and keep their full text as a `title`, so `canvas_stress` reports a designed truncation, not a clip.
+
+- **`button` at `size: "xs"`** is the 24px icon button of a dense toolbar. An icon-only button (no `label`) takes `ariaLabel` as its accessible name: it renders `aria-label` and `title` and is never drawn. `xs`, like `sm`, is an error on a phone.
+- **`link`** `{ label, icon?, iconPosition?, external? }` is a standalone text action, at least 24 tall, and a measured target. For a link inside a sentence, keep it in the `text` node: `links: [{ start, end }]` marks character ranges of its `content`, drawn underlined. Inline links are exempt from the 24px floor, as WCAG exempts them. A `text` node also takes `title`, rendered as a tooltip.
+- **`text-input`** `{ value?, placeholder?, icon?, size?: "sm" | "md", rows?, error?, disabled? }` is a field (32 or 40 tall; `rows` makes it multi-line). Its border is its only boundary, so it uses `$border-strong` when the design system has one. `error` turns the border `$danger` and draws an icon and the message below the field, so the error is never colour alone.
+- **`nav-item`** `{ label, icon?, count?, dotColor?, active?, depth?: 0 | 1, collapsed? }` is a 32px sidebar row that spans its sidebar. `active` draws three cues: an `$accent-tint` fill, a 2px `$accent` bar, and a heavier label (and `aria-current`). `collapsed` is the 32×32 rail form, with its label as the accessible name. `dotColor` is an identity dot for a project or label: it is never counted as a competing accent, though the same colour used anywhere else still is.
+- **`tabs`** `{ items: [{ label, count?, active?, disabled? }], variant?: "line" | "contained", size?: "sm" | "md" }` is one tablist (32 or 40 tall). Each tab is its own target. The active tab gets an underline indicator (`line`) or an `$accent-tint` fill (`contained`, from the node's `fill`) and a heavier label.
+- **`tree-row`** `{ label, depth, expanded?, icon?, active? }` is a 32px row indented 16px per level. `expanded: true` / `false` draws an open / closed chevron; a leaf leaves it out and keeps the slot, so labels align.
+- **`menu-row`** `{ label, icon?, shortcut?, checked?, destructive?, disabled?, submenu? }` is a 32px menu item. The shortcut right-aligns in a muted `kbd` style, `destructive` uses `$danger`, `submenu` adds a chevron, and `checked` reserves a check slot.
+- **`property-row`** `{ label, labelWidth? }` with one child is an inspector row: a muted label column (96px by default) and the value (a control, a `text-input`, a `button`, a text). Every row's value starts at the same edge. A control alone inside it is measured by the row's 32px box.
+- **`divider`** `{ orientation?: "horizontal" | "vertical", inset? }` is a 1px `$border` hairline; vertical dividers separate panes. Not a target.
+
+Repeated desktop-app primitives count as component reuse. On an unthemed canvas, stamping a structure that holds them seeds `$accent-tint` and `$border-strong` along with the usual neutrals.
 
 ### Lists that lead with a mark are not tables (every type)
 

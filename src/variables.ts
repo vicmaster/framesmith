@@ -118,24 +118,28 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
     if (node.fill === undefined) node.fill = v.colors?.skeleton ?? v.colors?.border ?? 'rgba(127, 127, 127, 0.22)';
     return;
   }
-  if (MOBILE_PRIMITIVES.has(t)) { applyPrimitiveDefaults(node, v); return; }
+  if (PRIMITIVES.has(t)) { applyPrimitiveDefaults(node, v); return; }
   if (t !== 'toggle' && t !== 'checkbox' && t !== 'radio' && t !== 'select') return;
 
   const accent = v.colors?.accent ?? v.colors?.primary ?? CONTROL_FALLBACK.accent;
   const border = v.colors?.border ?? CONTROL_FALLBACK.border;
+  // Phase 31 FR-B8 — an unchecked box, ring or track is the control's only
+  // boundary: it takes $border-strong (3:1) when the design system has it.
+  // Without the token the render is unchanged.
+  const boundary = v.colors?.['border-strong'] ?? border;
 
   if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
 
   if (t === 'toggle') {
     // fill = track color; the knob is always white.
-    if (node.fill === undefined) node.fill = node.checked ? accent : border;
+    if (node.fill === undefined) node.fill = node.checked ? accent : boundary;
   } else if (t === 'checkbox') {
     // fill = box background (transparent when unchecked so dark surfaces work).
     if (node.fill === undefined) node.fill = node.checked ? accent : 'transparent';
-    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : boundary;
   } else if (t === 'radio') {
     // stroke = ring, fill = dot (drawn only when checked).
-    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : boundary;
     if (node.fill === undefined) node.fill = accent;
   } else {
     // select
@@ -147,7 +151,11 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
 
 // Phase 30 slice D — the mobile primitives default the same way: tokens when
 // the canvas has them, neutral fallbacks when it doesn't, explicit props win.
-const MOBILE_PRIMITIVES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
+// Phase 31 slice B — the desktop-app vocabulary joins them.
+const PRIMITIVES = new Set([
+  'status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet',
+  'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider',
+]);
 
 function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const c = v.colors ?? {};
@@ -157,10 +165,49 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const text = c['text-primary'] ?? CONTROL_FALLBACK.text;
   const secondary = c['text-secondary'] ?? '#6B7280';
   const danger = c.danger ?? c.error ?? '#DC2626';
+  const tint = c['accent-tint'] ?? '#EFF4FF';
   const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
   if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
 
   switch (node.type) {
+    // Phase 31 slice B — the desktop-app vocabulary.
+    case 'link':
+      set('color', accent);
+      break;
+    case 'text-input':
+      set('fill', surface);
+      // An error colours the boundary and the message below it.
+      set('stroke', text_(node.error) ? danger : c['border-strong'] ?? border);
+      set('color', text);
+      set('secondaryColor', secondary);
+      break;
+    case 'nav-item':
+    case 'tree-row':
+      set('color', text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      if (node.active) set('fill', tint);
+      break;
+    case 'tabs':
+      set('color', text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      set('stroke', border);
+      // The contained variant's active tab sits on the tint.
+      set('fill', tint);
+      break;
+    case 'menu-row':
+      set('color', node.destructive ? danger : text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      break;
+    case 'property-row':
+      set('color', text);
+      set('secondaryColor', secondary);
+      break;
+    case 'divider':
+      set('stroke', border);
+      break;
     case 'status-bar':
     case 'home-indicator':
       set('color', text);
@@ -204,6 +251,11 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
       break;
     }
   }
+}
+
+/** A prop as text, for "is it set?" checks. */
+function text_(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /** White or near-black (#111827), whichever contrasts more with a hex fill. */

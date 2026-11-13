@@ -5,6 +5,8 @@ import { usableSafeArea } from './surfaces.js';
 import {
   BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
+  LINK_MIN_HEIGHT, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
+  tabsItems, textInputHeight,
 } from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
@@ -603,7 +605,8 @@ function renderNode(node: SceneNode, rc: RenderCtx): string {
   const dataAttr = ` data-node-id="${node.id}"`;
 
   if (node.type === 'text') {
-    return `<p${dataAttr}${styleAttr}>${escapeHtml(node.content ?? '')}</p>`;
+    const title = typeof node.title === 'string' && node.title.trim() ? ` title="${escapeAttr(node.title.trim())}"` : '';
+    return `<p${dataAttr}${title}${styleAttr}>${textWithLinks(node)}</p>`;
   }
 
   if (node.type === 'image') {
@@ -1000,6 +1003,15 @@ function renderPrimitive(node: SceneNode, rc: RenderCtx): string | undefined {
     case 'button': return renderButton(node, rc, `${dataAttr} tabindex="0" data-focusable`);
     case 'list-row': return renderListRow(node, rc, dataAttr);
     case 'sheet': return renderSheet(node, rc, dataAttr);
+    // Phase 31 slice B — desktop-app vocabulary.
+    case 'link': return renderLink(node, rc, `${dataAttr} tabindex="0" data-focusable role="link"`);
+    case 'text-input': return renderTextInput(node, rc, dataAttr);
+    case 'nav-item': return renderNavItem(node, rc, `${dataAttr} tabindex="0" data-focusable`);
+    case 'tabs': return renderTabs(node, rc, dataAttr);
+    case 'tree-row': return renderTreeRow(node, rc, `${dataAttr} tabindex="0" data-focusable role="treeitem"`);
+    case 'menu-row': return renderMenuRow(node, rc, `${dataAttr} tabindex="0" data-focusable role="menuitem"`);
+    case 'property-row': return renderPropertyRow(node, rc, dataAttr);
+    case 'divider': return renderDivider(node, rc, `${dataAttr} role="separator"`);
     default: return undefined;
   }
 }
@@ -1145,15 +1157,18 @@ function renderTabBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string 
 }
 
 function renderButton(node: SceneNode, rc: RenderCtx, attrs: string): string {
-  const size = node.size === 'sm' || node.size === 'lg' ? node.size : 'md';
+  const size = node.size === 'xs' || node.size === 'sm' || node.size === 'lg' ? node.size : 'md';
+  // Phase 31 FR-B1 — an accessible name (never rendered as text).
+  const name = text(node.ariaLabel);
+  if (name) attrs += ` aria-label="${escapeAttr(name)}" title="${escapeAttr(name)}"`;
   const h = buttonHeight(node);
   const words = text(node.label) ? labelHtml(text(node.label), '') : '';
   // Unthemed (a button inside a component skips resolveVariables): the
   // primary look, so it is never an invisible white-on-transparent label.
   const fill = node.fill ?? (node.variant === 'secondary' || node.variant === 'ghost' ? 'transparent' : node.variant === 'destructive' ? FALLBACK.danger : FALLBACK.accent);
   const color = node.color ?? (fill === 'transparent' ? FALLBACK.accent : '#FFFFFF');
-  const glyph = iconHtml(node.icon, size === 'sm' ? 16 : 20, color);
-  const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 8;
+  const glyph = iconHtml(node.icon, size === 'xs' ? 14 : size === 'sm' ? 16 : 20, color);
+  const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : size === 'xs' ? 6 : 8;
   const box = css([
     `--fs-ring: ${fill !== 'transparent' ? fill : color}`,
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'justify-content: center', 'gap: 8px',
@@ -1223,6 +1238,218 @@ function renderListRow(node: SceneNode, rc: RenderCtx, dataAttr: string): string
     ? `<div style="${css(['position: absolute', 'left: 16px', 'right: 0', 'bottom: 0', 'height: 1px', `background-color: ${node.stroke ?? FALLBACK.border}`])}"></div>`
     : '';
   return `<div${dataAttr} style="${box}">${listRowLeading(node)}${words}${listRowTrailing(node)}${divider}</div>`;
+}
+
+// ── Phase 31 slice B — the desktop-app vocabulary ────────────────────────
+// Same contract as the mobile primitives: fixed anatomy on the 24/32/40/48
+// ladder, colours from applyControlDefaults (FALLBACK only when a primitive
+// skipped it), labels in `data-fs-label` so they truncate with a title.
+
+/** A label that can truncate, carrying its full text as a title. */
+function titledLabel(value: string, style: string): string {
+  return `<span data-fs-label title="${escapeAttr(value)}" style="${escapeStyleValue(`${LABEL_CSS}; ${style}`)}">${escapeHtml(value)}</span>`;
+}
+
+/** Width of a row primitive: an authored width, else its container's. */
+function rowWidth(node: SceneNode): string {
+  return node.width !== undefined ? `width: ${cssLength(node.width)}` : 'align-self: stretch';
+}
+
+/** A text node's content with its inline links (FR-B2) underlined in place.
+ * Ranges are character offsets [start, end); bad or overlapping ones are
+ * skipped, so content always renders whole. */
+function textWithLinks(node: SceneNode): string {
+  const content = node.content ?? '';
+  const ranges = entries<{ start?: unknown; end?: unknown }>(node.links)
+    .map((r) => ({ start: Number(r.start), end: Number(r.end) }))
+    .filter((r) => Number.isInteger(r.start) && Number.isInteger(r.end) && r.start >= 0 && r.end > r.start && r.end <= content.length)
+    .sort((a, b) => a.start - b.start);
+  let out = '';
+  let at = 0;
+  for (const r of ranges) {
+    if (r.start < at) continue;
+    out += escapeHtml(content.slice(at, r.start));
+    out += `<span data-fs-inline-link style="text-decoration: underline; text-underline-offset: 2px; cursor: pointer">${escapeHtml(content.slice(r.start, r.end))}</span>`;
+    at = r.end;
+  }
+  return out + escapeHtml(content.slice(at));
+}
+
+function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const color = node.color ?? FALLBACK.accent;
+  const glyph = iconHtml(node.icon, 14, node.iconColor ?? color);
+  const external = node.external ? iconHtml('external-link', 12, node.iconColor ?? color) : '';
+  const words = text(node.label) ? titledLabel(text(node.label), '') : '';
+  const box = css([
+    ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'gap: 4px',
+    `min-height: ${LINK_MIN_HEIGHT}px`, typeof node.height === 'number' ? `height: ${node.height}px` : undefined,
+    node.width !== undefined ? `width: ${cssLength(node.width)}` : 'max-width: 100%',
+    `color: ${color}`, `font-size: ${typeof node.fontSize === 'number' ? node.fontSize : 14}px`,
+    `font-weight: ${node.fontWeight ?? 500}`, 'cursor: pointer',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const body = node.iconPosition === 'trailing' ? `${words}${glyph}` : `${glyph}${words}`;
+  return `<div${attrs} style="${box}">${body}${external}</div>`;
+}
+
+function renderTextInput(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const h = textInputHeight(node);
+  const multi = typeof node.rows === 'number' && node.rows > 1;
+  const border = node.stroke ?? FALLBACK.border;
+  const secondary = node.secondaryColor ?? FALLBACK.secondary;
+  const value = text(node.value);
+  const shown = value || text(node.placeholder);
+  const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 6;
+  const field = css([
+    'display: flex', multi ? 'align-items: flex-start' : 'align-items: center', 'gap: 8px', 'box-sizing: border-box',
+    `height: ${h}px`, `min-height: ${h}px`, multi ? 'padding: 6px 10px' : 'padding: 0 10px', 'width: 100%',
+    `border: 1px solid ${border}`, `border-radius: ${radius}px`, `background-color: ${node.fill ?? FALLBACK.surface}`,
+    `font-size: ${node.size === 'sm' ? 13 : 14}px`, 'line-height: 20px',
+  ]);
+  const glyph = iconHtml(node.icon, 16, secondary);
+  const words = shown
+    ? (multi
+      ? `<span data-fs-label style="${escapeStyleValue(`flex: 1 1 0; min-width: 0; overflow: hidden; white-space: pre-wrap; color: ${value ? node.color ?? FALLBACK.text : secondary}`)}">${escapeHtml(shown)}</span>`
+      : `<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(shown, `color: ${value ? node.color ?? FALLBACK.text : secondary}`)}</span>`)
+    : '<span style="flex: 1 1 0"></span>';
+  const error = text(node.error);
+  const message = error
+    ? `<div style="${css(['display: flex', 'align-items: center', 'gap: 4px', 'font-size: 12px', 'line-height: 16px', `color: ${border}`])}">${iconHtml('circle-alert', 14, border)}${titledLabel(error, '')}</div>`
+    : '';
+  const outer = css([
+    ...positionStyles(node, rc), 'display: flex', 'flex-direction: column', 'gap: 4px', 'flex-shrink: 0', rowWidth(node),
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const ariaInvalid = error ? ' aria-invalid="true"' : '';
+  return `<div${dataAttr} style="${outer}"><div tabindex="0" data-focusable role="textbox"${ariaInvalid}${multi ? ' aria-multiline="true"' : ''} style="${field}">${glyph}${words}</div>${message}</div>`;
+}
+
+function renderNavItem(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const color = node.color ?? FALLBACK.text;
+  const accent = node.iconColor ?? FALLBACK.accent;
+  const label = text(node.label);
+  if (node.active) attrs += ' aria-current="page"';
+  if (node.collapsed && label) attrs += ` aria-label="${escapeAttr(label)}" title="${escapeAttr(label)}"`;
+  const depth = node.depth === 1 ? 1 : 0;
+  const bar = node.active
+    ? `<div style="${css(['position: absolute', 'left: 0', 'top: 6px', 'bottom: 6px', 'width: 2px', 'border-radius: 1px', `background-color: ${accent}`])}"></div>`
+    : '';
+  const dot = node.dotColor ? `<span style="${css(['flex-shrink: 0', 'width: 8px', 'height: 8px', 'border-radius: 50%', `background-color: ${node.dotColor}`])}"></span>` : '';
+  const glyph = iconHtml(node.icon, 16, node.active ? accent : node.secondaryColor ?? FALLBACK.secondary);
+  const count = text(node.count);
+  const box = css([
+    ...positionStyles(node, rc), node.position ? undefined : 'position: relative',
+    'display: flex', 'align-items: center', 'gap: 8px', 'flex-shrink: 0', 'box-sizing: border-box',
+    `height: ${typeof node.height === 'number' ? node.height : NAV_ITEM_HEIGHT}px`,
+    node.collapsed ? `width: ${NAV_ITEM_HEIGHT}px` : rowWidth(node),
+    node.collapsed ? 'justify-content: center; padding: 0' : `padding: 0 8px 0 ${8 + depth * TREE_INDENT}px`,
+    `border-radius: ${typeof node.cornerRadius === 'number' ? node.cornerRadius : 6}px`,
+    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${color}`,
+    'font-size: 13px', `font-weight: ${node.active ? 600 : 500}`, 'cursor: pointer',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  if (node.collapsed) return `<div${attrs} style="${box}">${bar}${glyph || dot}</div>`;
+  const tail = count ? `<span style="${css(['flex-shrink: 0', 'margin-left: auto', 'font-size: 12px', 'font-variant-numeric: tabular-nums', `color: ${node.secondaryColor ?? FALLBACK.secondary}`])}">${escapeHtml(count)}</span>` : '';
+  return `<div${attrs} style="${box}">${bar}${dot}${glyph}${label ? `<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(label, '')}</span>` : ''}${tail}</div>`;
+}
+
+function renderTabs(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const h = TABS_HEIGHT[node.size === 'sm' ? 'sm' : 'md'];
+  const accent = node.iconColor ?? FALLBACK.accent;
+  const line = node.variant !== 'contained';
+  const tabs = tabsItems(node).map((it) => {
+    const label = text(it.label);
+    const count = text(it.count);
+    const active = it.active === true;
+    const tab = css([
+      'position: relative', 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'height: 100%',
+      line ? 'padding: 0 12px' : 'padding: 0 10px', !line ? `margin: 4px 0; height: ${h - 8}px; border-radius: 6px` : undefined,
+      !line && active ? `background-color: ${node.fill ?? '#EFF4FF'}` : undefined,
+      `color: ${active ? node.color ?? FALLBACK.text : node.secondaryColor ?? FALLBACK.secondary}`,
+      `font-weight: ${active ? 600 : 500}`, 'cursor: pointer', it.disabled ? 'opacity: 0.5' : undefined,
+    ]);
+    const indicator = line && active
+      ? `<div style="${css(['position: absolute', 'left: 8px', 'right: 8px', 'bottom: 0', 'height: 2px', 'border-radius: 1px', `background-color: ${accent}`])}"></div>`
+      : '';
+    const badge = count ? `<span style="${css(['font-size: 11px', 'font-variant-numeric: tabular-nums', 'padding: 0 6px', 'border-radius: 8px', `background-color: ${node.stroke ?? FALLBACK.border}`])}">${escapeHtml(count)}</span>` : '';
+    return `<div role="tab" tabindex="0" data-focusable aria-selected="${active}"${it.disabled ? ' aria-disabled="true"' : ''} style="${tab}">${titledLabel(label, '')}${badge}${indicator}</div>`;
+  }).join('');
+  const box = css([
+    ...positionStyles(node, rc), 'display: flex', 'align-items: stretch', 'gap: 2px', 'flex-shrink: 0', 'box-sizing: border-box',
+    `height: ${h}px`, rowWidth(node), 'overflow: hidden', 'font-size: 13px',
+    line ? `border-bottom: 1px solid ${node.stroke ?? FALLBACK.border}` : undefined,
+  ]);
+  return `<div${dataAttr} role="tablist" style="${box}">${tabs}</div>`;
+}
+
+function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const depth = typeof node.depth === 'number' && node.depth > 0 ? Math.floor(node.depth) : 0;
+  const secondary = node.secondaryColor ?? FALLBACK.secondary;
+  if (typeof node.expanded === 'boolean') attrs += ` aria-expanded="${node.expanded}"`;
+  if (node.active) attrs += ' aria-selected="true"';
+  const chevron = typeof node.expanded === 'boolean' ? iconHtml(node.expanded ? 'chevron-down' : 'chevron-right', 14, secondary) : '';
+  const box = css([
+    ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
+    `height: ${typeof node.height === 'number' ? node.height : TREE_ROW_HEIGHT}px`, rowWidth(node),
+    `padding: 0 8px 0 ${8 + depth * TREE_INDENT}px`, 'border-radius: 6px',
+    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? FALLBACK.text}`,
+    'font-size: 13px', `font-weight: ${node.active ? 600 : 400}`, 'cursor: pointer',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const slot = `<span style="flex-shrink: 0; width: 14px; display: flex">${chevron}</span>`;
+  const glyph = iconHtml(node.icon, 16, node.active ? node.iconColor ?? FALLBACK.accent : secondary);
+  return `<div${attrs} style="${box}">${slot}${glyph}<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(text(node.label), '')}</span></div>`;
+}
+
+function renderMenuRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const secondary = node.secondaryColor ?? FALLBACK.secondary;
+  const color = node.color ?? (node.destructive ? FALLBACK.danger : FALLBACK.text);
+  if (node.disabled) attrs += ' aria-disabled="true"';
+  if (typeof node.checked === 'boolean') attrs += ` aria-checked="${node.checked}"`;
+  const check = node.checked ? iconHtml('check', 14, node.iconColor ?? FALLBACK.accent) : '';
+  const glyph = iconHtml(node.icon, 16, node.destructive ? color : secondary);
+  // The shortcut keeps its width unless it is long, then truncates (at most
+  // half the row) like the label, so a long shortcut never pushes the row
+  // past its menu.
+  const shortcut = text(node.shortcut)
+    ? `<kbd style="${css(['flex: 0 1 auto', 'min-width: 0', 'max-width: 50%', 'display: flex', 'margin-left: auto', 'padding-left: 16px', 'font-family: inherit', 'font-size: 12px', `color: ${secondary}`])}">${titledLabel(text(node.shortcut), '')}</kbd>`
+    : '';
+  const chevron = node.submenu ? `<span style="flex-shrink: 0; margin-left: ${shortcut ? '8px' : 'auto'}; display: flex">${iconHtml('chevron-right', 14, secondary)}</span>` : '';
+  const box = css([
+    ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 8px', 'flex-shrink: 0', 'box-sizing: border-box',
+    `height: ${typeof node.height === 'number' ? node.height : MENU_ROW_HEIGHT}px`, rowWidth(node), 'padding: 0 8px', 'border-radius: 6px',
+    node.fill ? `background-color: ${node.fill}` : undefined, `color: ${color}`, 'font-size: 13px', 'cursor: pointer',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const checkSlot = typeof node.checked === 'boolean' ? `<span style="flex-shrink: 0; width: 14px; display: flex">${check}</span>` : '';
+  return `<div${attrs} style="${box}">${checkSlot}${glyph}<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(text(node.label), '')}</span>${shortcut}${chevron}</div>`;
+}
+
+function renderPropertyRow(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
+  const width = typeof node.labelWidth === 'number' && node.labelWidth > 0 ? node.labelWidth : PROPERTY_LABEL_WIDTH;
+  const box = css([
+    ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 8px', 'flex-shrink: 0', 'box-sizing: border-box',
+    `min-height: ${PROPERTY_ROW_HEIGHT}px`, typeof node.height === 'number' ? `height: ${node.height}px` : undefined, rowWidth(node),
+    `color: ${node.color ?? FALLBACK.text}`, 'font-size: 13px',
+  ]);
+  const label = `<div style="${css(['flex-shrink: 0', `width: ${width}px`, 'min-width: 0', 'display: flex'])}">${titledLabel(text(node.label), `color: ${node.secondaryColor ?? FALLBACK.secondary}; font-size: 12px`)}</div>`;
+  const value = `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'align-items: center'])}">${renderChildren(node, rc)}</div>`;
+  return `<div${dataAttr} style="${box}">${label}${value}</div>`;
+}
+
+function renderDivider(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const vertical = node.orientation === 'vertical';
+  const inset = typeof node.inset === 'number' && node.inset > 0 ? node.inset : 0;
+  if (vertical) attrs += ' aria-orientation="vertical"';
+  const box = css([
+    ...positionStyles(node, rc), 'flex-shrink: 0', `background-color: ${node.stroke ?? FALLBACK.border}`,
+    vertical ? 'width: 1px' : 'height: 1px',
+    vertical ? 'align-self: stretch' : 'align-self: stretch',
+    vertical ? (inset ? `margin: ${inset}px 0` : undefined) : (inset ? `margin: 0 ${inset}px` : undefined),
+    vertical && typeof node.height === 'number' ? `height: ${node.height}px` : undefined,
+    !vertical && node.width !== undefined ? `width: ${cssLength(node.width)}` : undefined,
+  ]);
+  return `<div${attrs} style="${box}"></div>`;
 }
 
 /** The four authored padding sides as CSS (fluid like every padding). */

@@ -207,6 +207,19 @@ One profile ships, keyed by id so a second size is one table row later. Values i
 - `src/stress.ts:44`: the new entries in `PRIMITIVE_TEXT_PROPS`.
 - The `breadcrumb` component rebuilt from `link`.
 
+**Slice B — as built (recorded 2026-11-13; read this before slice C).** No spec change. Slice B shipped FR-B1 to FR-B10 plus the three items slice A deferred: FR-A6, the new primitives in the 24px census (D3), and the desktop-app-primitive clauses of FR-C9 (D2). Decisions the spec did not settle:
+- **E1: FR-A6 needed no census code.** The accent census reads `fill`, `color`, `stroke` and `iconColor`; `dotColor` is a new prop it never reads, so identity dots are excluded by construction, a dot colour used as a literal elsewhere still counts, and hand-built dots still count. A comment in `tellAccentConsistency` says so; the tests pin all three.
+- **E2: the census.** `CLICKABLE_PRIMITIVES` (`src/primitives.ts`) adds `link`, `text-input`, `nav-item`, `tabs` (one target per item, sharing the node id, so an undersized tab stays a detailed-mode warning, slice A D12), `tree-row` and `menu-row` to the phone tappables; `desktopTargets` gives each its own box. `property-row` and `divider` are not targets; inline text links are exempt. A control that is the only one inside a `property-row`, `nav-item`, `menu-row` or `list-row` (`CONTROL_OWNERS`) is measured by the row's box; only `property-row` renders children, so in practice that is an inspector value. Disabled tabs (`items[].disabled`) and disabled rows are not measured.
+- **E3: the new primitives are not phone tappables.** The mobile touch census is unchanged; FR-C9's mobile clause warns instead.
+- **E4: FR-C9's primitive clauses live in `checkDesktopArtboard`** (`src/desktop-app-rules.ts`), on the instance-expanded tree, reported on the instance. The finding names the first desktop-app primitive found. The overlay clause waits for slice E.
+- **E5: colours without new props.** `tabs.fill` is the contained variant's active background (default `$accent-tint`). A `text-input`'s `error` colours its border and message through `stroke` (default `$danger` with an error, else `$border-strong`, else `$border`). Active `nav-item` / `tree-row` default `fill` to `$accent-tint`. Unthemed fallback tint `#EFF4FF`.
+- **E6: seeding.** Stamping a structure that holds a desktop-app primitive on an unthemed canvas seeds `accent-tint` and `border-strong` (dark scaffold default `#666666`, at least 3:1 on the three dark surfaces); mobile stamps never seed them. The primitives' copy (`label`, `placeholder`, `value`, `shortcut`, `error`, `items[].label`) is a placeholder.
+- **E7: a tree-row leaf keeps the chevron's 14px slot**, so labels align across leaves and branches.
+- **E8: a long menu-row shortcut truncates** (at most half the row) like the label; found by the long-text render test.
+- **E9: `link.external`** (named in FR-B2, missing from the Plan's prop list) draws a trailing external-link glyph. The hover underline waits for element states (FR-G1).
+- **E10: the breadcrumb's parent is a `link`; the current page stays text.** The component keeps its web-only surface (slice D decides what stamps on desktop-app).
+- **Open for slice C/D: form coverage ignores `text-input`.** The drift inventory's control list (toggle, checkbox, radio, select) is unchanged, so "3+ input controls demand an error state" does not count text-inputs. The spec is silent; decide with the form rules.
+
 **Slice C: the app rules (FR-C1 to FR-C9)**
 - `src/evaluate.ts`: one check per rule id, wired in the rule-dispatch block (`:2355-2388`, where the typography, structure and usability checks pick up their type rules) the way the mobile checks are.
 - Row rhythm and truncation reuse the inventory's table detection; column alignment and the 4-character floor use detailed-mode layout (`computeLayout`, as `mobile-safe-area` does at `:2353`).

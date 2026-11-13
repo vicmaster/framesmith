@@ -66,6 +66,15 @@ for (const type of ['web', 'desktop-app'] as const) {
   f = await targetFindings(type, [{ id: 'tb', name: 'tb', type: 'tab-bar', width: 60, position: 'relative', items: ['A', 'B', 'C', 'D', 'E'].map((l) => ({ icon: 'home', label: l })) } as SceneNode]);
   check(`${type}: a too-narrow tab-bar's tabs stay blocking in detailed mode`, f.length === 5 && f.every((i) => i.severity === 'warning' && /could not place/.test(i.message)), JSON.stringify(f.map((i) => [i.severity, i.message.slice(0, 90)])));
 
+  // Phase 31 slice B — the desktop-app vocabulary in the census. Two 16px
+  // links touching fail as errors; a tabs node's tabs share its id, so an
+  // undersized tab stays a blocking warning in detailed mode.
+  const lnk = (id: string): SceneNode => ({ id, name: id, type: 'link', label: id, height: 16 });
+  f = await targetFindings(type, [row(0, [lnk('l1'), lnk('l2')])]);
+  check(`${type}: two touching 16px links fail in detailed mode`, f.length === 2 && f.every((i) => i.severity === 'error'), JSON.stringify(f.map((i) => [i.severity, i.message.slice(0, 80)])));
+  f = await targetFindings(type, [{ id: 'tabs', name: 'tabs', type: 'tabs', height: 18, items: [{ label: 'A' }, { label: 'B' }] } as SceneNode]);
+  check(`${type}: undersized tabs stay blocking warnings`, f.length === 2 && f.every((i) => i.severity === 'warning' && /could not place/.test(i.message)), JSON.stringify(f.map((i) => [i.severity, i.message.slice(0, 80)])));
+
   // A neighbour nested past the layout walker's depth cannot be placed, so the
   // spacing exception is unproven and the small target stays blocking.
   let deep: SceneNode = btn('deep', 32);
