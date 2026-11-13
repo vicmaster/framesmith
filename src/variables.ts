@@ -255,13 +255,42 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   }
 }
 
-/** `top` laid over `base` at `alpha`, as #RRGGBB; undefined unless both are #RRGGBB. */
+/**
+ * An opaque colour as [r, g, b]: #RGB, #RRGGBB(AA), rgb()/rgba() and hsl()/hsla(),
+ * alpha ignored. Named colours return undefined. (evaluate.ts has its own
+ * parseColor; it imports this module, so this one can't import it.)
+ */
+function rgbOf(color: string): [number, number, number] | undefined {
+  const c = color.trim();
+  let m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((d) => parseInt(d + d, 16)) as [number, number, number];
+  m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(?:[0-9a-f]{2})?$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((d) => parseInt(d, 16)) as [number, number, number];
+  m = /^rgba?\(\s*(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)\s*(?:[,/][^)]*)?\)$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((v) => Math.min(255, Math.round(+v))) as [number, number, number];
+  m = /^hsla?\(\s*(-?\d+(?:\.\d+)?)(?:deg)?[\s,]+(\d+(?:\.\d+)?)%[\s,]+(\d+(?:\.\d+)?)%\s*(?:[,/][^)]*)?\)$/i.exec(c);
+  if (!m) return undefined;
+  const h = (((+m[1] % 360) + 360) % 360) / 360;
+  const sat = Math.min(1, +m[2] / 100);
+  const l = Math.min(1, +m[3] / 100);
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
+  const p = 2 * l - q;
+  const hue = (t: number) => {
+    const x = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (x < 1 / 6) return p + (q - p) * 6 * x;
+    if (x < 1 / 2) return q;
+    if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6;
+    return p;
+  };
+  return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((v) => Math.round(v * 255)) as [number, number, number];
+}
+
+/** `top` laid over `base` at `alpha`, as #RRGGBB; undefined unless both parse (see `rgbOf`). */
 function mixHex(top: string, base: string, alpha: number): string | undefined {
-  const t = /^#([0-9a-f]{6})$/i.exec(top);
-  const b = /^#([0-9a-f]{6})$/i.exec(base);
+  const t = rgbOf(top);
+  const b = rgbOf(base);
   if (!t || !b) return undefined;
-  const ch = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
-  return '#' + [0, 2, 4].map((i) => Math.round(alpha * ch(t[1], i) + (1 - alpha) * ch(b[1], i)).toString(16).padStart(2, '0')).join('').toUpperCase();
+  return '#' + [0, 1, 2].map((i) => Math.round(alpha * t[i] + (1 - alpha) * b[i]).toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 /** A prop as text, for "is it set?" checks. */

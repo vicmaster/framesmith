@@ -64,6 +64,15 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('an active nav-item draws fill, bar and weight, with aria-current', /aria-current="page"/.test(nav) && /width: 2px/.test(nav) && /font-weight: 600/.test(nav) && /background-color: #E5ECFD/.test(nav), (nav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
   const darkNav = html({ id: 'nd', name: 'nd', type: 'nav-item', label: 'A', active: true }, { accent: '#60A5FA', 'bg-surface': '#111827' });
   check('without an accent-tint token the active fill is the accent washed into the surface (dark stays dark)', /background-color: #1A2940/.test(darkNav), (darkNav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
+  const fills = (h: string) => (h.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' ');
+  const rgbNav = html({ id: 'nr', name: 'nr', type: 'nav-item', label: 'A', active: true }, { accent: 'rgb(96, 165, 250)', 'bg-surface': '#111827' });
+  check('an rgb() accent washes into the surface like its hex twin', /background-color: #1A2940/.test(rgbNav), fills(rgbNav));
+  const hslNav = html({ id: 'nh', name: 'nh', type: 'nav-item', label: 'A', active: true }, { accent: 'hsl(213 94% 68%)', 'bg-surface': 'rgb(17 24 39)' });
+  check('an hsl() accent on an rgb() surface washes in too (dark stays dark)', /background-color: #1B2940/.test(hslNav), fills(hslNav));
+  const shortNav = html({ id: 'ns', name: 'ns', type: 'nav-item', label: 'A', active: true }, { accent: '#06F', 'bg-surface': '#FFF' });
+  check('a #RGB accent and surface mix', /background-color: #E0EDFF/.test(shortNav), fills(shortNav));
+  const namedNav = html({ id: 'nn', name: 'nn', type: 'nav-item', label: 'A', active: true }, { accent: 'royalblue', 'bg-surface': '#111827' });
+  check('a named accent still falls back to the light tint', /background-color: #EFF4FF/.test(namedNav), fills(namedNav));
   const rail = html({ id: 'n2', name: 'n2', type: 'nav-item', label: 'Projects', icon: 'folder', collapsed: true });
   check('a collapsed nav-item is 32×32 with its label as the accessible name', /width: 32px/.test(rail) && /aria-label="Projects"/.test(rail) && !/>Projects</.test(rail));
   const themedNav = html({ id: 'n3', name: 'n3', type: 'nav-item', label: 'A', active: true }, { 'accent-tint': '#123456', accent: '#0E7490' });
