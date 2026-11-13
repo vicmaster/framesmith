@@ -42,7 +42,8 @@ export const TEXT_INPUT_LINE = 20;
  * `divider` are not targets (a property-row's value is). */
 export const CLICKABLE_PRIMITIVES = new Set([...TAPPABLE_PRIMITIVES, 'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row']);
 
-/** Rows that own a sole control inside them: the control's target is the row. */
+/** Rows whose only target, a control directly inside them, is measured by
+ * the row's box (no link, input or button beside it). */
 export const CONTROL_OWNERS = new Set(['property-row', 'nav-item', 'menu-row', 'list-row']);
 
 /** The desktop-app primitives — on a canvas that never declared desktop-app,
@@ -138,10 +139,10 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
     case 'tree-row': return [{ what: 'tree-row', w, h: h(TREE_ROW_HEIGHT), disabled }];
     case 'menu-row': return [{ what: 'menu-row', w, h: h(MENU_ROW_HEIGHT), disabled }];
     case 'tabs': {
-      // The tablist's height comes from its size alone (the renderer ignores `height`).
+      // The tablist's height comes from its size alone (the renderer ignores
+      // `height`); a disabled tabs node disables every tab.
       const th = TABS_HEIGHT[n.size === 'sm' ? 'sm' : 'md'];
       return tabsItems(n).map((it, i) => ({ what: `tab "${typeof it.label === 'string' ? it.label : i + 1}"`, h: th, disabled: disabled || it.disabled === true }));
-      // (A disabled tabs node disables every tab.)
     }
     default: return [];
   }

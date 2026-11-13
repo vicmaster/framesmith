@@ -2030,14 +2030,15 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       const def = CONTROL_DEFAULT_SIZE[node.type];
       let w = typeof node.width === 'number' ? node.width : def.w;
       let h = typeof node.height === 'number' ? node.height : def.h;
-      // Phase 31 FR-A4 — a control that is the only one inside a row
-      // primitive (property-row, nav-item, menu-row, list-row) owns that row's
-      // box: the row is the target. Its height is the row's; its width the
-      // row's when known, else the row spans its container.
-      // Ownership needs the control to be the row's ONLY target: a link,
-      // text-input or button beside it shares the row (countTargets).
+      // Phase 31 FR-A4 — a control that is the only target directly inside a
+      // row primitive (property-row, nav-item, menu-row, list-row) owns that
+      // row's box: the row is the target. Its height is the row's; its width
+      // the row's when known, else the row spans its container. A link,
+      // text-input or button beside it shares the row; the row itself never
+      // counts (a nav-item is clickable, but it is the owner, not a sibling).
       const owner = parentOf.get(node.id) ?? null;
-      if (owner && CONTROL_OWNERS.has(owner.type) && countTargets(owner) === 1 && Math.min(w, h) < 24) {
+      const siblingsAndSelf = owner ? (owner.children ?? []).reduce((c, ch) => c + countTargets(ch), 0) : 0;
+      if (owner && CONTROL_OWNERS.has(owner.type) && siblingsAndSelf === 1 && Math.min(w, h) < 24) {
         const rowH = Math.max(typeof owner.height === 'number' ? owner.height : 0, OWNER_HEIGHT[owner.type] ?? 0);
         w = typeof owner.width === 'number' ? owner.width : Infinity;
         h = Math.max(h, rowH);
