@@ -168,12 +168,18 @@ export function checkHandbuiltTargetsApp(ctx: DesktopContext): EvaluationIssue[]
     const rect = ctx.rects?.get(n.id);
     if (rect) return axis === 'width' ? rect.width : rect.height;
     const v = n[axis];
-    if (isNum(v)) return v;
+    const min = axis === 'width' ? n.minWidth : n.minHeight;
+    const floor = isNum(min) ? min : 0;
+    if (isNum(v)) return Math.max(v, floor);
     if (v !== undefined || (axis === 'width' && s.label)) return undefined;
     const pad = paddingSides(n, ctx.profile.width);
     const icon = s.icon ? (isNum(s.icon.iconSize) ? s.icon.iconSize : 24) : 0;
-    const content = Math.max(icon, s.label ? lineBox(s.label) : 0);
-    return Math.round(content + (axis === 'width' ? pad.left + pad.right : pad.top + pad.bottom));
+    const label = s.label ? lineBox(s.label) : 0;
+    // A frame stacks its children vertically unless it is horizontal, so a
+    // stacked icon and caption add up (with the gap between them).
+    const stacked = axis === 'height' && n.layout !== 'horizontal' && icon > 0 && label > 0;
+    const content = stacked ? icon + label + (isNum(n.gap) ? n.gap : 0) : Math.max(icon, label);
+    return Math.max(floor, Math.round(content + (axis === 'width' ? pad.left + pad.right : pad.top + pad.bottom)));
   };
   (function walk(n: SceneNode) {
     if (CLICKABLE_PRIMITIVES.has(n.type) || n.type === 'property-row') return;
@@ -203,20 +209,21 @@ export function checkHandbuiltTargetsApp(ctx: DesktopContext): EvaluationIssue[]
 
 // ── desktop-app-icon-label (FR-C3) ─────────────────────────────────────────
 
-/** An icon-only button (blank label, an icon) with no ariaLabel, or a
- * collapsed nav-item with a blank label: an action with no name. */
+/** An icon-only button or link (blank label, an icon) with no ariaLabel
+ * (spec change S3 added the link), or a collapsed nav-item with a blank
+ * label: an action with no name. */
 export function checkIconLabels(ctx: DesktopContext): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   (function walk(n: SceneNode) {
-    if (n.type === 'button' && !hasText(n.label) && hasText(n.icon) && !hasText(n.ariaLabel)) {
+    if ((n.type === 'button' || n.type === 'link') && !hasText(n.label) && hasText(n.icon) && !hasText(n.ariaLabel)) {
       issues.push(issue('usability', 'desktop-app-icon-label', 'warning', n,
-        `Icon-only button "${nameOf(n)}" (icon "${n.icon}") has no name — a screen reader announces nothing, and a hover shows no tooltip.`,
-        `Give it an ariaLabel naming the action: U("${n.id}", { ariaLabel: "…" }). It renders as aria-label and title, never as visible text.`));
+        `Icon-only ${n.type} "${nameOf(n)}" (icon "${n.icon}") has no name — a screen reader announces nothing, and a hover shows no tooltip.`,
+        'Give it an ariaLabel naming the action (U(id, { ariaLabel: "…" })). It renders as aria-label and title, never as visible text.'));
     }
     if (n.type === 'nav-item' && n.collapsed === true && !hasText(n.label)) {
       issues.push(issue('usability', 'desktop-app-icon-label', 'warning', n,
         `Collapsed nav-item "${nameOf(n)}" has no label — in the rail form the label is its only name (aria-label and title).`,
-        `Give it the destination's name: U("${n.id}", { label: "…" }). The rail hides it visually.`));
+        'Give it the destination\'s name (U(id, { label: "…" })). The rail hides it visually.'));
     }
     n.children?.forEach(walk);
   })(ctx.root);
@@ -307,14 +314,16 @@ export function checkTypeLadder(ctx: DesktopContext, rawById: Map<string, SceneN
   const { smallestText, proseFloor, bodyDense } = ctx.profile;
   const texts: SceneNode[] = [];
   (function walk(n: SceneNode) { if (textOf(n) !== undefined) texts.push(n); n.children?.forEach(walk); })(ctx.root);
-  const sizes = [...new Set(texts.map((n) => n.fontSize).filter(isNum))].sort((a, b) => a - b);
+  // A size the renderer can read (a number, "14px", a clamp()'s minimum).
+  const px = (n: SceneNode) => fontPx(n.fontSize);
+  const sizes = [...new Set(texts.map(px).filter(isNum))].sort((a, b) => a - b);
   for (let i = 0; i < sizes.length - 1; i++) {
     const [a, b] = [sizes[i], sizes[i + 1]];
     if (pinned.has(a) && pinned.has(b)) continue;
     if (a <= LADDER_SMALL && b - a <= LADDER_STEP) continue;
     const ratio = b / a;
     if (ratio >= LADDER_RATIO.min && ratio <= LADDER_RATIO.max) continue;
-    const at = texts.find((n) => n.fontSize === b)!;
+    const at = texts.find((n) => px(n) === b)!;
     issues.push(issue('typography', rule, 'warning', at,
       `Font sizes ${a}px → ${b}px step by ${ratio.toFixed(2)} — a dense app ladder steps by at most ${LADDER_STEP}px up to ${LADDER_SMALL}px, else by ${LADDER_RATIO.min}–${LADDER_RATIO.max}.`,
       ratio > LADDER_RATIO.max
@@ -350,8 +359,11 @@ function rowsOf(table: SceneNode): SceneNode[] {
     && (table.name === 'Table' || c.layout === 'horizontal'));
 }
 
-/** A header row: its content is text (icons allowed, such as a sort glyph),
- * at least two texts. */
+/** Header cells may hold a sort glyph or a select-all control beside text. */
+const HEADER_EXTRAS = new Set(['icon', 'checkbox', 'toggle', 'radio', 'select']);
+
+/** A header row: its content is text, plus icons and controls (a sort glyph,
+ * a select-all checkbox), at least two texts. */
 function isHeaderRow(row: SceneNode): boolean {
   let texts = 0;
   let other = false;
@@ -359,7 +371,7 @@ function isHeaderRow(row: SceneNode): boolean {
     for (const c of n.children ?? []) {
       if (textOf(c) !== undefined) texts++;
       else if (c.type === 'frame') walk(c);
-      else if (c.type !== 'icon' && c.type !== 'text') other = true;
+      else if (!HEADER_EXTRAS.has(c.type) && c.type !== 'text') other = true;
     }
   })(row);
   return !other && texts >= 2;
@@ -488,7 +500,7 @@ export function checkTruncation(ctx: DesktopContext, tableIds: Set<string>): Eva
       } else if (!hasText(n.title)) {
         issues.push(issue('usability', rule, 'info', n,
           `${quote(content)} truncates with an ellipsis but has no title — the full text cannot be read anywhere.`,
-          `Give it the full text as a title: U("${n.id}", { title: ${JSON.stringify(content.trim())} }).`));
+          'Give it its full text as a title (U(id, { title: "…" })); a title renders as a tooltip.'));
       }
     }
     const rect = ctx.rects?.get(n.id);
@@ -522,8 +534,10 @@ export function checkTruncation(ctx: DesktopContext, tableIds: Set<string>): Eva
 
 // ── desktop-app-primary-count (FR-C8) ──────────────────────────────────────
 
-/** A button renders as primary with variant "primary" or no variant. */
-const isPrimary = (n: SceneNode) => n.type === 'button' && (n.variant === undefined || n.variant === 'primary');
+/** A button renders filled with the accent (primary) unless its variant is
+ * secondary, ghost or destructive (renderButton). */
+const NOT_PRIMARY = new Set(['secondary', 'ghost', 'destructive']);
+const isPrimary = (n: SceneNode) => n.type === 'button' && !(typeof n.variant === 'string' && NOT_PRIMARY.has(n.variant));
 /** Repeated siblings of one shape (a grid of cards) hold their own primaries. */
 const REPEAT_MIN = 3;
 

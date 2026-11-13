@@ -94,6 +94,16 @@ const frame = (id: string, children: SceneNode[], extra: Partial<SceneNode> = {}
   check('FR-C7: three tabs that fit are silent', f.length === 0, show(f));
 }
 
+// ── F8: detailed mode renders the instance-expanded tree ───────────────────
+{
+  const c = canvasOf([{ id: 'inst', name: 'Sidebar', type: 'instance', componentId: 'side' } as SceneNode]);
+  c.components = { side: { id: 'side', name: 'Side', type: 'component', layout: 'vertical', children: [
+    { id: 'side-nav', name: 'nav', type: 'nav-item', label: 'Quarterly planning', icon: 'folder', active: true, width: 60 },
+  ] } } as Canvas['components'];
+  const f = (await evaluateCanvas(c, { mode: 'detailed' })).issues.filter((i) => i.rule === 'desktop-app-truncation');
+  check('F8: a short truncation inside an instance is measured and reported on the instance', f.length === 1 && f[0].nodeId === 'inst' && /inside instance/.test(f[0].message), show(f));
+}
+
 await shutdown();
 console.log(allPass ? '\nALL PASS' : '\nSOME FAILED');
 process.exit(allPass ? 0 : 1);

@@ -8,7 +8,10 @@
 
 import './test-env.js';
 import { readFileSync } from 'node:fs';
-import { evaluateCanvas, type EvaluationIssue } from './src/evaluate.js';
+import { evaluateCanvas, foldIssues, type EvaluationIssue } from './src/evaluate.js';
+import { linkGlyphWidth } from './src/primitives.js';
+import { renderToHtml } from './src/renderer.js';
+import { DESKTOP_APP_RULES } from './src/surfaces.js';
 import { extractInventory } from './src/drift.js';
 import type { Canvas, SceneNode } from './src/types.js';
 
@@ -18,12 +21,12 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-type Kind = 'web' | 'desktop-app';
+type Kind = 'web' | 'mobile' | 'desktop-app';
 function canvasOf(children: SceneNode[], type: Kind = 'desktop-app', variables: Canvas['variables'] = {}): Canvas {
   return {
     id: 'c', name: 'c', projectId: 'p', components: {}, variables, createdAt: '', lastModified: '',
     root: { id: 'document', type: 'document', name: 'Document', width: 1440, height: 900, fill: '#FFFFFF', layout: 'vertical', padding: 24, children },
-    metadata: { surface: type === 'web' ? { type } : { type, device: 'window-1440' } },
+    metadata: { surface: type === 'desktop-app' ? { type, device: 'window-1440' } : { type } },
   } as Canvas;
 }
 async function findings(rule: string, children: SceneNode[], type: Kind = 'desktop-app', variables: Canvas['variables'] = {}): Promise<EvaluationIssue[]> {
@@ -273,6 +276,137 @@ const nav = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   const web = (await evaluateCanvas(canvasOf([input('a'), input('b'), input('c')], 'web'), { mode: 'fast', categories: ['coverage'] })).issues;
   check('FR-C10: counts on every type (web too)', web.length === 1, show(web));
   check('FR-C10: drift\'s inventory still counts no text-input as a control', extractInventory(canvasOf([input('a'), input('b'), input('c')]).root).counts.controls === 0);
+}
+
+// ── Round-1 fixes and the gaps the mutation pass found ─────────────────────
+{
+  // One tree that trips every desktop-app rule in fast mode, judged on each
+  // type: every rule fires on desktop-app, in its category; none but the
+  // artboard rule fires on web or mobile.
+  const cells = (id: string, extra: Partial<SceneNode> = {}) => [text(`${id}a`, 'Name', 13, extra), text(`${id}b`, 'Role', 13), text(`${id}c`, 'Status', 13)];
+  const everything: SceneNode[] = [
+    { id: 'x', name: 'x', type: 'button', icon: 'x', size: 'sm', width: 20, height: 20 } as SceneNode,
+    frame('gear', [{ id: 'gi', name: 'gi', type: 'icon', icon: 'settings', iconSize: 16 }], { width: 24, height: 24 }),
+    frame('side', [nav('a', { active: true }), nav('b', { active: true })], { overflow: 'auto' }),
+    text('big', 'Title', 36), text('small', 'Label', 13),
+    frame('users', [frame('head', cells('h', { textOverflow: 'ellipsis' }), { layout: 'horizontal', height: 40 }), ...[0, 1, 2].map((i) => frame(`r${i}`, cells(`r${i}`), { layout: 'horizontal', height: 32 }))]),
+    frame('bar', [{ id: 'p1', name: 'p1', type: 'button', label: 'Save', variant: 'primary' }, { id: 'p2', name: 'p2', type: 'button', label: 'Publish', variant: 'primary' }], { layout: 'horizontal' }),
+  ];
+  const expected: Record<string, string> = {
+    'desktop-app-target': 'usability', 'desktop-app-handbuilt-target': 'usability', 'desktop-app-icon-label': 'usability',
+    'desktop-app-current': 'usability', 'desktop-app-type-ladder': 'typography', 'desktop-app-row-rhythm': 'consistency',
+    'desktop-app-truncation': 'usability', 'desktop-app-primary-count': 'structure',
+  };
+  check('the combined tree covers every registered desktop-app rule', JSON.stringify(Object.keys(expected).sort()) === JSON.stringify([...DESKTOP_APP_RULES].sort()));
+  const app = (await evaluateCanvas(canvasOf(everything), { mode: 'fast' })).issues;
+  for (const [rule, category] of Object.entries(expected)) {
+    const f = app.filter((i) => i.rule === rule);
+    check(`F9: ${rule} fires on desktop-app, under ${category}`, f.length > 0 && f.every((i) => i.category === category), show(f));
+  }
+  for (const type of ['web', 'mobile'] as const) {
+    const r = (await evaluateCanvas(canvasOf(everything, type), { mode: 'fast' })).issues;
+    const leaked = r.filter((i) => i.rule?.startsWith('desktop-app-') && i.rule !== 'desktop-app-artboard');
+    check(`${type} runs none of the desktop-app rules but the artboard`, leaked.length === 0, show(leaked));
+  }
+}
+{
+  // Severities the first round left unasserted.
+  const sev = async (rule: string, children: SceneNode[]) => (await findings(rule, children)).map((i) => i.severity);
+  check('FR-C5: a ladder pair is a warning', JSON.stringify(await sev('desktop-app-type-ladder', [text('a', 'A', 13), text('b', 'B', 36)])) === '["warning"]');
+  check('FR-C5: the 11px floor is a warning', JSON.stringify(await sev('desktop-app-type-ladder', [text('a', 'Tag', 10), text('b', 'Body', 12)])) === '["warning"]');
+  check('FR-C4: none active is a warning', JSON.stringify(await sev('desktop-app-current', [frame('s', [nav('a'), nav('b')], { overflow: 'auto' })])) === '["warning"]');
+  check('FR-C4: tabs with none active is a warning', JSON.stringify(await sev('desktop-app-current', [{ id: 't', name: 't', type: 'tabs', items: [{ label: 'A' }, { label: 'B' }] } as SceneNode])) === '["warning"]');
+  check('FR-C3: a nameless collapsed nav-item is a warning', JSON.stringify(await sev('desktop-app-icon-label', [nav('n', { collapsed: true, label: '', icon: 'home', active: true })])) === '["warning"]');
+}
+{
+  // FR-C2 boundaries, and the fast-mode estimate fixes (round 1).
+  const iconFrame = (size: number, extra: Partial<SceneNode> = {}) => frame('f', [{ id: 'fi', name: 'fi', type: 'icon', icon: 'settings', iconSize: 16 }], { width: size, height: size, ...extra });
+  const hb = (children: SceneNode[]) => findings('desktop-app-handbuilt-target', children);
+  check('FR-C2: a 31px icon frame is named', (await hb([iconFrame(31)])).length === 1);
+  const labelled = (words: string) => frame('f', [{ id: 'fi', name: 'fi', type: 'icon', icon: 'x', iconSize: 14 }, text('ft', words, 13)], { layout: 'horizontal', height: 24 });
+  check('FR-C2: an icon with a three-word label is named', (await hb([labelled('Open the file')])).length === 1);
+  check('FR-C2: an icon with a four-word label is not', (await hb([labelled('Open the file now')])).length === 0);
+  const bordered = (extra: Partial<SceneNode>) => frame('f', [text('ft', 'Archive', 13)], { padding: [6, 14], stroke: '#D1D5DB', ...extra });
+  check('S2: strokeWidth 0 is no border', (await hb([bordered({ strokeWidth: 0 })])).length === 0);
+  check('S2: stroke "none" is no border', (await hb([bordered({ stroke: 'none' })])).length === 0);
+  check('FR-C2: minWidth/minHeight 32 lift an unsized icon frame out of range', (await hb([frame('f', [{ id: 'fi', name: 'fi', type: 'icon', icon: 'x', iconSize: 16 }], { minWidth: 32, minHeight: 32 })])).length === 0);
+  check('FR-C2: minHeight alone leaves a 16px-wide icon frame named', (await hb([frame('f', [{ id: 'fi', name: 'fi', type: 'icon', icon: 'x', iconSize: 16 }], { minHeight: 32 })])).length === 1);
+  const stacked = (iconSize: number, font: number, padding: number) => frame('f', [{ id: 'fi', name: 'fi', type: 'icon', icon: 'house', iconSize }, text('ft', 'Home', font)], { layout: 'vertical', padding });
+  check('FR-C2: a stacked icon and caption add up (20 + 13 + 8 = 41px, silent)', (await hb([stacked(20, 11, 4)])).length === 0);
+  check('FR-C2: a small stacked icon and caption still count (12 + 12 + 4 = 28px, named)', (await hb([stacked(12, 10, 2)])).length === 1);
+}
+{
+  // FR-C3 and S3: an icon-only link needs a name too.
+  const link = (extra: Partial<SceneNode>): SceneNode => ({ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', ...extra });
+  let f = await findings('desktop-app-icon-label', [link({})]);
+  check('S3: an icon-only link without ariaLabel warns', f.length === 1 && f[0].severity === 'warning' && /Icon-only link/.test(f[0].message), show(f));
+  f = await findings('desktop-app-icon-label', [link({ ariaLabel: 'Back' })]);
+  check('S3: an ariaLabel clears it', f.length === 0, show(f));
+  f = await findings('desktop-app-icon-label', [link({ label: 'Back' })]);
+  check('S3: a labelled link is not icon-only', f.length === 0, show(f));
+  const c = canvasOf([link({ ariaLabel: 'Back' })]);
+  const html = renderToHtml(c.root, 1440, 900, c);
+  check('S3: a link renders its ariaLabel as aria-label and title, never as text', /aria-label="Back" title="Back"/.test(html) && !/>Back</.test(html));
+  f = await findings('desktop-app-icon-label', [{ id: 'b', name: 'b', type: 'button', size: 'xs' } as SceneNode]);
+  check('FR-C3: a button with neither label nor icon is not icon-only', f.length === 0, show(f));
+  const ten = (await evaluateCanvas(canvasOf(Array.from({ length: 10 }, (_, i) => ({ id: `b${i}`, name: `b${i}`, type: 'button', icon: 'trash-2', size: 'sm', variant: 'ghost' } as SceneNode))), { mode: 'fast', categories: ['usability'] })).issues;
+  const folded = foldIssues(ten).filter((i) => i.rule === 'desktop-app-icon-label');
+  check('round 1: ten nameless icon buttons fold into one entry', folded.length === 1 && folded[0].count === 10, show(folded));
+}
+{
+  // F1: the glyph width, and a non-numeric width staying unknown (round 1).
+  check('F1: linkGlyphWidth is 14 / 12 / 30 / 0', [linkGlyphWidth({ id: 'a', type: 'link', icon: 'x' }), linkGlyphWidth({ id: 'b', type: 'link', external: true }), linkGlyphWidth({ id: 'c', type: 'link', icon: 'x', external: true }), linkGlyphWidth({ id: 'd', type: 'link' })].join() === '14,12,30,0');
+  let f = await findings('desktop-app-target', [frame('w', [{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', width: 'fill_container' } as SceneNode], { width: 300 })]);
+  check('F1: an icon-only link with a fluid width is not measured at its glyph', f.length === 0, show(f));
+  f = await findings('desktop-app-target', [{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', width: 20 } as SceneNode]);
+  check('F1: a numeric 20px width still is', f.length === 1, show(f));
+  f = await findings('desktop-app-target', [{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left' } as SceneNode], 'web');
+  check('F1: on web an icon-only link is measured too (unnamed)', (await evaluateCanvas(canvasOf([{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left' } as SceneNode], 'web'), { mode: 'fast', categories: ['usability'] })).issues.some((i) => /14×24px/.test(i.message) && i.rule === undefined));
+}
+{
+  // FR-C5 boundaries.
+  const ladder = (...sizes: Array<number | string>) => findings('desktop-app-type-ladder', sizes.map((s, i) => text(`t${i}`, 'Label', s as number)));
+  check('FR-C5: 16→17 passes (a 1px step from 16)', (await ladder(16, 17)).length === 0);
+  check('FR-C5: 17→18 warns (above 16 a step needs 1.1)', (await ladder(17, 18)).length === 1);
+  check('FR-C5: 20→22 passes (1.1)', (await ladder(20, 22)).length === 0);
+  check('FR-C5: "14px" and 40 are read as sizes (2.86 warns)', (await ladder('14px', 40)).length === 1);
+  const four = await findings('desktop-app-type-ladder', [text('t', 'Hint sets four words', 11), text('u', 'Body', 13)]);
+  check('FR-C5: four words at 11px pass the prose floor', four.length === 0, show(four));
+  const one = await findings('desktop-app-type-ladder', [text('t', 'This hint sets five words', 10), text('u', 'Body', 13)]);
+  check('F3: a text tripping two floors gets one finding (the first)', one.length === 1 && /below the 11px/.test(one[0].message), show(one));
+  const half = await findings('desktop-app-type-ladder', [text('a', 'A', 13), text('b', 'B', 36)], 'desktop-app', { typography: { a: { fontSize: 13 } } } as Canvas['variables']);
+  check('FR-C5: pinning one size of a pair does not skip it', half.length === 1, show(half));
+}
+{
+  // FR-C6 / FR-C7 with a select-all header (round 1), and the tolerance edge.
+  const row = (id: string, h: number, cells: SceneNode[]) => frame(id, cells, { layout: 'horizontal', height: h });
+  const table = (headerH: number, headerExtra: Partial<SceneNode> = {}) => frame('users', [
+    row('head', headerH, [{ id: 'hc', name: 'hc', type: 'checkbox' }, text('h1', 'Name', 13, headerExtra), text('h2', 'Role', 13)]),
+    ...[0, 1, 2].map((i) => row(`r${i}`, 32, [{ id: `c${i}`, name: `c${i}`, type: 'checkbox' }, text(`r${i}a`, `Ada ${i}`, 13), text(`r${i}b`, 'Admin', 13)])),
+  ]);
+  let f = await findings('desktop-app-row-rhythm', [table(40)]);
+  check('round 1: a header with a select-all checkbox is still a header (40 over 32 warns)', f.length === 1 && f[0].severity === 'warning' && f[0].nodeId === 'head', show(f));
+  f = await findings('desktop-app-row-rhythm', [table(34)]);
+  check('FR-C6: 2px off warns', f.length === 1, show(f));
+  f = await findings('desktop-app-truncation', [table(32, { textOverflow: 'ellipsis' })]);
+  check('round 1: a truncating header beside a select-all checkbox warns', f.length === 1 && f[0].severity === 'warning', show(f));
+}
+{
+  // FR-C8 edges (round 1: a primary is whatever renders filled).
+  const btn = (id: string, variant?: unknown): SceneNode => ({ id, name: id, type: 'button', label: id, size: 'sm', ...(variant === undefined ? {} : { variant: variant as SceneNode['variant'] }) });
+  let f = await findings('desktop-app-primary-count', [frame('bar', [btn('A', 'outline'), btn('B', 'primary')], { layout: 'horizontal' })]);
+  check('round 1: an unknown variant renders filled and counts', f.length === 1, show(f));
+  f = await findings('desktop-app-primary-count', [frame('bar', [btn('A', 'destructive'), btn('B', 'primary')], { layout: 'horizontal' })]);
+  check('FR-C8: a destructive button is not a primary', f.length === 0, show(f));
+  const card = (i: number) => frame('Card', [text(`ct${i}`, `Plan ${i}`), btn(`Choose ${i}`, 'primary')], { width: 200 });
+  f = await findings('desktop-app-primary-count', [frame('grid', [1, 2, 3].map(card), { layout: 'horizontal' })]);
+  check('FR-C8: exactly three same-shaped cards are a repeat', f.length === 0, show(f));
+}
+{
+  // FR-C10: text-inputs inside a table are its data plane.
+  const row = (id: string) => frame(id, [text(`${id}t`, `Item ${id}`, 13), { id: `${id}i`, name: `${id}i`, type: 'text-input', value: 'x' } as SceneNode, text(`${id}s`, 'Open', 13)], { layout: 'horizontal' });
+  const tableOnly = (await evaluateCanvas(canvasOf([frame('t', [frame('head', [text('h1', 'Item', 13), text('h2', 'Qty', 13), text('h3', 'State', 13)], { layout: 'horizontal' }), row('a'), row('b'), row('c')])]), { mode: 'fast', categories: ['coverage'] })).issues;
+  check('FR-C10: text-inputs inside a table do not make a form', !tableOnly.some((i) => /"error"/.test(i.message)) && tableOnly.some((i) => /"empty"/.test(i.message)), show(tableOnly));
 }
 
 console.log(allPass ? '\nALL PASS' : '\nSOME FAILED');

@@ -1286,6 +1286,9 @@ function disabledAttrs(node: SceneNode, attrs: string): string {
 
 function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
   attrs = disabledAttrs(node, attrs);
+  // Phase 31 S3 — an icon-only link's accessible name (never rendered as text).
+  const name = text(node.ariaLabel);
+  if (name) attrs += ` aria-label="${escapeAttr(name)}" title="${escapeAttr(name)}"`;
   const color = node.color ?? FALLBACK.accent;
   const glyph = iconHtml(node.icon, LINK_ICON, node.iconColor ?? color);
   const external = node.external ? iconHtml('external-link', LINK_EXTERNAL, node.iconColor ?? color) : '';
