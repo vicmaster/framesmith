@@ -555,6 +555,8 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 
 All seven slices are merged and the acceptance re-run passed. The phase is closed.
 
+- [ ] Follow-up — `link` and `text-input` join the mobile 44px touch census. Phase 31 slice B added both primitives for app screens; on a phone canvas they are not measured today, so a 32px text-input passes silently.
+
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 
 ### Phase 31 — The desktop-app surface (v2.5)
@@ -562,8 +564,8 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-
 Run on its own viewer (2026-11-08), framesmith scored every page's usability 100 with zero findings: the viewer has a 17px Back link and 21 click targets that are plain spans, but the web hit-target rule only measures form controls. Meanwhile page rules misfired on the app: the sidebar project list read as a data table, the dense 13/14px type steps failed the scale ratio, and the projects' identity dots counted as competing accents. framesmith judges an application as if it were a marketing page, and has no words for what makes it an application. This phase adds a third type, `desktop-app` (a tool you work in, in a browser or a native window), with the vocabulary, rules, layouts, overlays and element states an app needs. Acceptance is literal: the viewer itself rebuilt as canvases, CLEAN, with every click target a primitive.
 
 - [x] Slice A — the type: `desktop-app` with a 1440×900 window profile, a ruleset that switches off the type-scale ratio, the WCAG 2.5.8 spacing exception on the 24px floor (web and desktop-app; mobile keeps its 44px rule) and navigation lists that never read as tables (every type), evaluate and import results an agent can read (repeated findings fold, keeping every fix), type-aware generation with state and control-color tokens, and the baseline canvases committed as fixtures
-- [ ] Slice B — vocabulary: a 24px `button` with an accessible name, `link`, `text-input`, `nav-item`, `tabs`, `tree-row`, `menu-row`, `property-row` and `divider`, plus identity dots that never count as accents (moved here from slice A: it keys on `nav-item`)
-- [ ] Slice C — app rules: every click target measured, hand-built targets named, icon-only actions named, one current item per navigation group, a dense type ladder, row rhythm, honest truncation, one primary per region, and the declaration matching the window
+- [x] Slice B — vocabulary: a 24px `button` with an accessible name, `link`, `text-input`, `nav-item`, `tabs`, `tree-row`, `menu-row`, `property-row` and `divider`, plus identity dots that never count as accents (moved here from slice A: it keys on `nav-item`)
+- [ ] Slice C — app rules: every click target measured, hand-built targets named, icon-only actions named, one current item per navigation group, a dense type ladder, row rhythm, honest truncation (a tablist whose every label is truncated included), one primary per region, the declaration matching the window, and form coverage counting text-inputs
 - [ ] Slice D — panes: resolution for any number of types and six desktop-app realisations (workbench, list-detail, editor-inspector, browser, dashboard, settings) under the pattern gate
 - [ ] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
 - [ ] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, and advisories on stacked toasts and error toasts

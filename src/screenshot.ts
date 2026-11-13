@@ -204,13 +204,20 @@ const LAYOUT_WALKER_SOURCE = `(function (rootId, depth) {
     if (el.hasAttribute('data-fs-scroll')) result.scrolls = true;
     if (currentDepth < depth) {
       var childRects = [];
-      for (var i = 0; i < el.children.length; i++) {
-        var childRect = getRect(el.children[i], currentDepth + 1);
-        if (childRect) childRects.push(childRect);
-      }
+      collect(el, currentDepth + 1, childRects);
       if (childRects.length > 0) result.children = childRects;
     }
     return result;
+  }
+  // A primitive's child slot (data-fs-slot, e.g. a property-row's value) has
+  // no node id of its own: walk through it so the nodes inside are placed.
+  function collect(el, childDepth, out) {
+    for (var i = 0; i < el.children.length; i++) {
+      var child = el.children[i];
+      if (!child.hasAttribute('data-node-id') && child.hasAttribute('data-fs-slot')) { collect(child, childDepth, out); continue; }
+      var childRect = getRect(child, childDepth);
+      if (childRect) out.push(childRect);
+    }
   }
   var rootSelector = rootId ? '[data-node-id="' + rootId + '"]' : '[data-node-id]';
   var root = document.querySelector(rootSelector);

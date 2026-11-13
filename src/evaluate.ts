@@ -1,4 +1,4 @@
-import type { Canvas, SceneNode, DesignVariables } from './types.js';
+import type { Canvas, SceneNode, DesignVariables, TabItem } from './types.js';
 import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, resolveInstance } from './renderer.js';
@@ -9,7 +9,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, buttonBox, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
+import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -803,10 +803,11 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
   issues.push(...iconFindings);
 
   // Component reuse. Phase 30 slice D — a repeated primitive (list rows,
-  // buttons, tab bars) is reuse too: the primitive is the component.
+  // buttons, tab bars) is reuse too: the primitive is the component. Phase 31
+  // slice B adds the desktop-app vocabulary.
   const primitiveCounts = new Map<string, number>();
   for (const e of entries) {
-    if (e.node.type === 'button' || e.node.type === 'list-row' || e.node.type === 'tab-bar') {
+    if (REUSE_PRIMITIVES.has(e.node.type)) {
       primitiveCounts.set(e.node.type, (primitiveCounts.get(e.node.type) ?? 0) + 1);
     }
   }
@@ -834,11 +835,13 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
   (function walk(n: SceneNode) {
     if (n.type === 'icon') add(n, 'icon', n.icon, true, true);
     else if (n.type === 'button') add(n, 'icon', n.icon, true, false);
+    // Phase 31 slice B — the desktop-app primitives draw their `icon` too.
+    else if (n.type === 'link' || n.type === 'nav-item' || n.type === 'tree-row' || n.type === 'menu-row' || n.type === 'text-input') add(n, 'icon', n.icon, true, false);
     else if (n.type === 'list-row' || n.type === 'nav-bar') {
       add(n, 'leading.icon', n.leading?.icon, false, false);
       if (n.type === 'nav-bar' && Array.isArray(n.trailing)) n.trailing.slice(0, 2).forEach((a, i) => add(n, `trailing[${i}].icon`, a?.icon, false, false));
     } else if (n.type === 'tab-bar') {
-      (Array.isArray(n.items) ? n.items : []).forEach((it, i) => add(n, `items[${i}].icon`, it?.icon, false, true));
+      (Array.isArray(n.items) ? n.items as Array<TabItem | null> : []).forEach((it, i) => add(n, `items[${i}].icon`, it?.icon, false, true));
       if (n.variant === 'fab') add(n, 'fab.icon', n.fab?.icon, false, false);
     }
     n.children?.forEach(walk);
@@ -848,7 +851,11 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
 
 /** Phase 30 slice D — the mobile primitives' copy and enum props: words and
  * variant names, never style values, so the token census skips them. */
-const PRIMITIVE_COPY_PROPS = new Set(['title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition']);
+const PRIMITIVE_COPY_PROPS = new Set([
+  'title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition',
+  // Phase 31 slice B — the desktop-app primitives' copy and enums.
+  'placeholder', 'value', 'shortcut', 'error', 'ariaLabel', 'count', 'orientation',
+]);
 
 /** Spellings worth trying for an icon name that didn't resolve: Material
  * Symbols names multi-word icons with `_` (chevron_right), Lucide with `-`
@@ -1798,6 +1805,9 @@ function tellAccentConsistency(ctx: ClicheCtx): EvaluationIssue[] {
     n.type === 'ellipse' || n.type === 'rectangle' || !!n.icon ||
     (typeof n.width === 'number' && n.width < 600);
 
+  // Phase 31 FR-A6 — a nav-item's `dotColor` is an identity dot (a project,
+  // a label), never an accent: it is deliberately not one of the props read
+  // below. The same value used as a fill or colour elsewhere still counts.
   for (const { node } of ctx.entries) {
     if (node.id === rootId) continue;                    // page background isn't an accent
     const raw = ctx.rawById.get(node.id);
@@ -1897,6 +1907,8 @@ function generateSummary(overall: number, categories: CategoryScore[], issues: E
 // tree so padding/dimensions are numbers.
 
 const CONTROL_TYPES = new Set(['toggle', 'checkbox', 'radio', 'select']);
+/** Primitives whose repetition counts as component reuse (structure advisory). */
+const REUSE_PRIMITIVES = new Set(['button', 'list-row', 'tab-bar', 'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row']);
 /** Renderer defaults (controlSize + select's padding-derived height). */
 const CONTROL_DEFAULT_SIZE: Record<string, { w: number; h: number }> = {
   toggle: { w: 44, h: 24 },
@@ -2006,6 +2018,11 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
     for (const ch of n.children ?? []) c += countControls(ch);
     return c;
   };
+  const countTargets = (n: SceneNode): number => {
+    let c = CONTROL_TYPES.has(n.type) || CLICKABLE_PRIMITIVES.has(n.type) ? 1 : 0;
+    for (const ch of n.children ?? []) c += countTargets(ch);
+    return c;
+  };
   const targets: PointerTarget[] = [];
   for (const { node } of entries) {
     const disabled = node.disabled === true;
@@ -2013,6 +2030,19 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       const def = CONTROL_DEFAULT_SIZE[node.type];
       let w = typeof node.width === 'number' ? node.width : def.w;
       let h = typeof node.height === 'number' ? node.height : def.h;
+      // Phase 31 FR-A4 — a control that is the only target directly inside a
+      // row primitive (property-row, nav-item, menu-row, list-row) owns that
+      // row's box: the row is the target. Its height is the row's; its width
+      // the row's when known, else the row spans its container. A link,
+      // text-input or button beside it shares the row; the row itself never
+      // counts (a nav-item is clickable, but it is the owner, not a sibling).
+      const owner = parentOf.get(node.id) ?? null;
+      const siblingsAndSelf = owner ? (owner.children ?? []).reduce((c, ch) => c + countTargets(ch), 0) : 0;
+      if (owner && CONTROL_OWNERS.has(owner.type) && siblingsAndSelf === 1 && Math.min(w, h) < 24) {
+        const rowH = Math.max(typeof owner.height === 'number' ? owner.height : 0, OWNER_HEIGHT[owner.type] ?? 0);
+        w = typeof owner.width === 'number' ? owner.width : Infinity;
+        h = Math.max(h, rowH);
+      }
       let cur = parentOf.get(node.id) ?? null;
       for (let hop = 0; hop < 2 && cur && Math.min(w, h) < 24; hop++) {
         if (countControls(cur) === 1) {
@@ -2027,10 +2057,19 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       for (const t of primitiveTargets(node, parentOf, rootWidth)) {
         targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled });
       }
+    } else if (CLICKABLE_PRIMITIVES.has(node.type)) {
+      // Phase 31 slice B — the desktop-app vocabulary, each by its own box
+      // (a tabs node has one target per item, sharing the node's id).
+      for (const t of desktopTargets(node)) {
+        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: t.disabled });
+      }
     }
   }
   return targets;
 }
+
+/** The heights the row primitives that own a sole control render at. */
+const OWNER_HEIGHT: Record<string, number> = { 'property-row': PROPERTY_ROW_HEIGHT, 'nav-item': NAV_ITEM_HEIGHT, 'menu-row': MENU_ROW_HEIGHT, 'list-row': LIST_ROW_HEIGHT };
 
 /** The live targets still below 24px after the padded-row step — the ones
  * the circle test must place; [] means no detailed render is needed. */
@@ -2528,7 +2567,7 @@ export async function evaluateCanvas(
   if (activeCategories.includes('structure')) {
     results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), [
       ...(ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []),
-      ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(resolvedRoot, declared) : []),
+      ...(ruleOn.has('desktop-app-artboard') ? reportOnInstances(checkDesktopArtboard(mobileRoot, declared), owners) : []),
     ]));
   }
   if (activeCategories.includes('consistency')) {

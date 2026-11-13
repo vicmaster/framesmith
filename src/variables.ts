@@ -118,24 +118,28 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
     if (node.fill === undefined) node.fill = v.colors?.skeleton ?? v.colors?.border ?? 'rgba(127, 127, 127, 0.22)';
     return;
   }
-  if (MOBILE_PRIMITIVES.has(t)) { applyPrimitiveDefaults(node, v); return; }
+  if (PRIMITIVES.has(t)) { applyPrimitiveDefaults(node, v); return; }
   if (t !== 'toggle' && t !== 'checkbox' && t !== 'radio' && t !== 'select') return;
 
   const accent = v.colors?.accent ?? v.colors?.primary ?? CONTROL_FALLBACK.accent;
   const border = v.colors?.border ?? CONTROL_FALLBACK.border;
+  // Phase 31 FR-B8 — an unchecked box, ring or track is the control's only
+  // boundary: it takes $border-strong (3:1) when the design system has it.
+  // Without the token the render is unchanged.
+  const boundary = v.colors?.['border-strong'] ?? border;
 
   if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
 
   if (t === 'toggle') {
     // fill = track color; the knob is always white.
-    if (node.fill === undefined) node.fill = node.checked ? accent : border;
+    if (node.fill === undefined) node.fill = node.checked ? accent : boundary;
   } else if (t === 'checkbox') {
     // fill = box background (transparent when unchecked so dark surfaces work).
     if (node.fill === undefined) node.fill = node.checked ? accent : 'transparent';
-    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : boundary;
   } else if (t === 'radio') {
     // stroke = ring, fill = dot (drawn only when checked).
-    if (node.stroke === undefined) node.stroke = node.checked ? accent : border;
+    if (node.stroke === undefined) node.stroke = node.checked ? accent : boundary;
     if (node.fill === undefined) node.fill = accent;
   } else {
     // select
@@ -147,7 +151,11 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
 
 // Phase 30 slice D — the mobile primitives default the same way: tokens when
 // the canvas has them, neutral fallbacks when it doesn't, explicit props win.
-const MOBILE_PRIMITIVES = new Set(['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet']);
+// Phase 31 slice B — the desktop-app vocabulary joins them.
+const PRIMITIVES = new Set([
+  'status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet',
+  'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider',
+]);
 
 function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const c = v.colors ?? {};
@@ -157,10 +165,51 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const text = c['text-primary'] ?? CONTROL_FALLBACK.text;
   const secondary = c['text-secondary'] ?? '#6B7280';
   const danger = c.danger ?? c.error ?? '#DC2626';
+  // Without an accent-tint token the active fill is the accent washed into the
+  // surface (12%), so it reads on a dark palette as well as a light one.
+  const tint = c['accent-tint'] ?? mixHex(accent, surface, 0.12) ?? '#EFF4FF';
   const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
   if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
 
   switch (node.type) {
+    // Phase 31 slice B — the desktop-app vocabulary.
+    case 'link':
+      set('color', accent);
+      break;
+    case 'text-input':
+      set('fill', surface);
+      // An error colours the boundary and the message below it.
+      set('stroke', text_(node.error) ? danger : c['border-strong'] ?? border);
+      set('color', text);
+      set('secondaryColor', secondary);
+      break;
+    case 'nav-item':
+    case 'tree-row':
+      set('color', text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      if (node.active) set('fill', tint);
+      break;
+    case 'tabs':
+      set('color', text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      set('stroke', border);
+      // The contained variant's active tab sits on the tint.
+      set('fill', tint);
+      break;
+    case 'menu-row':
+      set('color', node.destructive ? danger : text);
+      set('secondaryColor', secondary);
+      set('iconColor', accent);
+      break;
+    case 'property-row':
+      set('color', text);
+      set('secondaryColor', secondary);
+      break;
+    case 'divider':
+      set('stroke', border);
+      break;
     case 'status-bar':
     case 'home-indicator':
       set('color', text);
@@ -204,6 +253,49 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
       break;
     }
   }
+}
+
+/**
+ * An opaque colour as [r, g, b]: #RGB, #RRGGBB(AA), rgb()/rgba() and hsl()/hsla(),
+ * alpha ignored. Named colours return undefined. (evaluate.ts has its own
+ * parseColor; it imports this module, so this one can't import it.)
+ */
+function rgbOf(color: string): [number, number, number] | undefined {
+  const c = color.trim();
+  let m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((d) => parseInt(d + d, 16)) as [number, number, number];
+  m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})(?:[0-9a-f]{2})?$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((d) => parseInt(d, 16)) as [number, number, number];
+  m = /^rgba?\(\s*(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)[\s,]+(\d+(?:\.\d+)?)\s*(?:[,/][^)]*)?\)$/i.exec(c);
+  if (m) return [m[1], m[2], m[3]].map((v) => Math.min(255, Math.round(+v))) as [number, number, number];
+  m = /^hsla?\(\s*(-?\d+(?:\.\d+)?)(?:deg)?[\s,]+(\d+(?:\.\d+)?)%[\s,]+(\d+(?:\.\d+)?)%\s*(?:[,/][^)]*)?\)$/i.exec(c);
+  if (!m) return undefined;
+  const h = (((+m[1] % 360) + 360) % 360) / 360;
+  const sat = Math.min(1, +m[2] / 100);
+  const l = Math.min(1, +m[3] / 100);
+  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
+  const p = 2 * l - q;
+  const hue = (t: number) => {
+    const x = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (x < 1 / 6) return p + (q - p) * 6 * x;
+    if (x < 1 / 2) return q;
+    if (x < 2 / 3) return p + (q - p) * (2 / 3 - x) * 6;
+    return p;
+  };
+  return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((v) => Math.round(v * 255)) as [number, number, number];
+}
+
+/** `top` laid over `base` at `alpha`, as #RRGGBB; undefined unless both parse (see `rgbOf`). */
+function mixHex(top: string, base: string, alpha: number): string | undefined {
+  const t = rgbOf(top);
+  const b = rgbOf(base);
+  if (!t || !b) return undefined;
+  return '#' + [0, 1, 2].map((i) => Math.round(alpha * t[i] + (1 - alpha) * b[i]).toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+/** A prop as text, for "is it set?" checks. */
+function text_(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 /** White or near-black (#111827), whichever contrasts more with a hex fill. */

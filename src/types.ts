@@ -9,13 +9,24 @@ export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'i
   | 'chart'
   // Phase 30 slice D — mobile vocabulary: device chrome, navigation, and the
   // tappable content primitives (each carries its own hit area).
-  | 'status-bar' | 'home-indicator' | 'nav-bar' | 'tab-bar' | 'button' | 'list-row' | 'sheet';
+  | 'status-bar' | 'home-indicator' | 'nav-bar' | 'tab-bar' | 'button' | 'list-row' | 'sheet'
+  // Phase 31 slice B — desktop-app vocabulary: links, inputs, navigation,
+  // menus and inspector rows (each carries its own hit area), and a hairline.
+  | 'link' | 'text-input' | 'nav-item' | 'tabs' | 'tree-row' | 'menu-row' | 'property-row' | 'divider';
 
 /** Phase 30 slice D — one `nav-bar` action: an icon or a text label. */
 export interface NavAction { icon?: string; label?: string }
 
 /** Phase 30 slice D — one `tab-bar` item. */
 export interface TabItem { icon: string; label: string; active?: boolean; badge?: string | number }
+
+/** Phase 31 slice B — one `tabs` item (its own type: unlike a tab-bar item
+ * it has no icon). */
+export interface TabsItem { label: string; count?: string | number; active?: boolean; disabled?: boolean }
+
+/** Phase 31 slice B — an inline link inside a `text` node's content:
+ * character offsets [start, end). */
+export interface TextLink { start: number; end: number }
 
 /** Phase 30 slice D — a `list-row`'s trailing accessory (one of). */
 export interface ListRowTrailing { text?: string; chevron?: boolean; toggle?: boolean; badge?: string | number }
@@ -279,7 +290,7 @@ export interface SceneNode {
   /** status-bar / home-indicator: "dark" glyphs for a light screen, "light"
    * for a dark one; absent follows `color` ($text-primary). */
   appearance?: 'dark' | 'light';
-  /** nav-bar / list-row title. */
+  /** nav-bar / list-row title; on a `text` node (Phase 31) the tooltip, rendered as the title attribute. */
   title?: string;
   /** list-row secondary line. */
   subtitle?: string;
@@ -290,17 +301,17 @@ export interface SceneNode {
   trailing?: NavAction[] | ListRowTrailing;
   /** nav-bar: the 96px large-title form. */
   largeTitle?: boolean;
-  /** tab-bar items (2–5 on a phone). */
-  items?: TabItem[];
-  /** tab-bar: standard | floating | fab; button: primary | secondary | ghost | destructive. */
-  variant?: 'standard' | 'floating' | 'fab' | 'primary' | 'secondary' | 'ghost' | 'destructive';
+  /** tab-bar items (2–5 on a phone); tabs items (Phase 31). */
+  items?: TabItem[] | TabsItem[];
+  /** tab-bar: standard | floating | fab; button: primary | secondary | ghost | destructive; tabs: line | contained. */
+  variant?: 'standard' | 'floating' | 'fab' | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'line' | 'contained';
   /** tab-bar (variant "fab"): the raised centre action. */
   fab?: { icon?: string };
   /** button label. */
   label?: string;
   iconPosition?: 'leading' | 'trailing';
-  /** button: sm 32 / md 44 / lg 52. */
-  size?: 'sm' | 'md' | 'lg';
+  /** button: xs 24 / sm 32 / md 44 / lg 52; tabs and text-input: sm 32 / md 40. */
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   /** list-row: a hairline under the row from the 16px inset. */
   divider?: boolean;
   /** sheet: medium (half the screen) | large | auto (its content). */
@@ -311,6 +322,45 @@ export interface SceneNode {
   secondaryColor?: string;
   /** tab-bar item badge / list-row badge colour (tab-bar default $danger). */
   badgeColor?: string;
+
+  // Phase 31 slice B — desktop-app primitives.
+  /** button (icon-only) / nav-item (collapsed): the accessible name, rendered
+   * as aria-label and title; never rendered as text. */
+  ariaLabel?: string;
+  /** link: it leaves the app (a trailing external-link glyph). */
+  external?: boolean;
+  /** text: inline links inside `content`, as character ranges. */
+  links?: TextLink[];
+  /** nav-item: a trailing count. */
+  count?: string | number;
+  /** nav-item: an identity dot's colour (a project, a label). Not an accent. */
+  dotColor?: string;
+  /** nav-item / tree-row: the current location. */
+  active?: boolean;
+  /** nav-item 0 | 1; tree-row 0, 1, 2, … — indents 16px per level. */
+  depth?: number;
+  /** nav-item: the rail form — icon only, 32×32, label as the name. */
+  collapsed?: boolean;
+  /** tree-row: true open, false closed, absent for a leaf. */
+  expanded?: boolean;
+  /** menu-row: a keyboard shortcut, right-aligned. */
+  shortcut?: string;
+  /** menu-row: a destructive action ($danger). */
+  destructive?: boolean;
+  /** menu-row: opens a submenu (trailing chevron). */
+  submenu?: boolean;
+  /** property-row: the label column's width (default 96). */
+  labelWidth?: number;
+  /** text-input: the hint shown when empty. */
+  placeholder?: string;
+  /** text-input: a multi-line field of this many lines. */
+  rows?: number;
+  /** text-input: an error message, shown below the field with an icon. */
+  error?: string;
+  /** divider: horizontal (default) or vertical. */
+  orientation?: 'horizontal' | 'vertical';
+  /** divider: inset from both ends (px). */
+  inset?: number;
 
   // Component / Instance
   componentId?: string;
