@@ -324,7 +324,7 @@ export interface SceneNode {
   badgeColor?: string;
 
   // Phase 31 slice B — desktop-app primitives.
-  /** button (icon-only) / nav-item (collapsed): the accessible name, rendered
+  /** button / link (icon-only) / nav-item (collapsed): the accessible name, rendered
    * as aria-label and title; never rendered as text. */
   ariaLabel?: string;
   /** link: it leaves the app (a trailing external-link glyph). */

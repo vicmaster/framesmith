@@ -11,7 +11,7 @@ import './test-env.js';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createCanvas } from './src/scene-graph.js';
-import { surfaceFor, resolveSurface, RULESETS } from './src/surfaces.js';
+import { surfaceFor, resolveSurface, RULESETS, DESKTOP_APP_RULES } from './src/surfaces.js';
 import { evaluateCanvas, foldIssues, contrastRatio, parseColor, type EvaluationIssue } from './src/evaluate.js';
 import { extractInventory } from './src/drift.js';
 import { summarizeImportReport, type ImportReport } from './src/import.js';
@@ -61,8 +61,12 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
   const ratio = (r: typeof web) => r.issues.filter((i) => i.rule === 'type-scale-ratio');
   check('web keeps the ratio check, tagged type-scale-ratio', ratio(web).length >= 1, JSON.stringify(ratio(web).map((i) => i.message)));
   check('desktop-app turns type-scale-ratio off', ratio(app).length === 0 && app.surface.rulesOff.includes('type-scale-ratio'), JSON.stringify(app.surface));
-  check('desktop-app rulesOn carries the base artboard rules', JSON.stringify(app.surface.rulesOn) === JSON.stringify(['desktop-app-artboard', 'mobile-artboard']), JSON.stringify(app.surface.rulesOn));
-  check('the desktop-app row registers only what has a check today', JSON.stringify(RULESETS.type['desktop-app']) === JSON.stringify({ enable: [], disable: ['type-scale-ratio'] }));
+  // FR-A3 — rulesOn lists every desktop-app-* id registered so far (slice C
+  // registered the app rules), plus the base artboard rules.
+  const appIds = [...DESKTOP_APP_RULES];
+  check('desktop-app rulesOn carries every desktop-app rule and the base artboard rules', JSON.stringify(app.surface.rulesOn) === JSON.stringify([...appIds, 'desktop-app-artboard', 'mobile-artboard'].sort()), JSON.stringify(app.surface.rulesOn));
+  check('the desktop-app row enables the app rules and replaces type-scale-ratio', JSON.stringify(RULESETS.type['desktop-app']) === JSON.stringify({ enable: appIds, disable: ['type-scale-ratio'] }));
+  check('web and mobile run no desktop-app rule but the artboard', [web.surface.rulesOn].every((on) => on.every((id) => !id.startsWith('desktop-app-') || id === 'desktop-app-artboard')), JSON.stringify(web.surface.rulesOn));
 }
 
 // ── desktop-app-artboard ────────────────────────────────────────────────────

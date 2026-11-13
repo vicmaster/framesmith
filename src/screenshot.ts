@@ -166,6 +166,11 @@ export interface LayoutRect {
   /** Phase 30 slice D — a primitive whose label (a `data-fs-label` element)
    * is cut off by its designed one-line ellipsis. */
   truncated?: boolean;
+  /** Phase 31 slice C — a primitive's own labels, in order: each label's
+   * character count and its scroll/client widths. Recorded on every tablist
+   * (so a crowded tablist is judged per tab) and on any other primitive with
+   * a truncated label (so a short truncation can be measured). */
+  labels?: Array<{ chars: number; scrollWidth: number; clientWidth: number }>;
   /** Phase 30 slice D — a `data-fs-scroll` element (a sheet panel): its
    * vertical overflow scrolls, it is not a clip. */
   scrolls?: boolean;
@@ -196,10 +201,13 @@ const LAYOUT_WALKER_SOURCE = `(function (rootId, depth) {
     }
     if (el.hasAttribute('data-fs-primitive')) {
       var labels = el.querySelectorAll('[data-fs-label]');
+      var own = [];
       for (var j = 0; j < labels.length; j++) {
         if (labels[j].closest('[data-node-id]') !== el) continue;
-        if (labels[j].scrollWidth > labels[j].clientWidth + 1) { result.truncated = true; break; }
+        own.push({ chars: (labels[j].textContent || '').length, scrollWidth: labels[j].scrollWidth, clientWidth: labels[j].clientWidth });
+        if (labels[j].scrollWidth > labels[j].clientWidth + 1) result.truncated = true;
       }
+      if (own.length > 0 && (result.truncated || el.getAttribute('role') === 'tablist')) result.labels = own;
     }
     if (el.hasAttribute('data-fs-scroll')) result.scrolls = true;
     if (currentDepth < depth) {
