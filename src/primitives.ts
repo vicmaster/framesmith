@@ -123,6 +123,15 @@ export function textInputHeight(n: SceneNode): number {
   return rows > 1 ? Math.max(base, rows * TEXT_INPUT_LINE + 12) : base;
 }
 
+/** A width written as a px string ("10px"). */
+function pxWidth(v: unknown): number | undefined {
+  const m = typeof v === 'string' ? /^\s*(\d+(?:\.\d+)?)px\s*$/.exec(v) : null;
+  return m ? Number(m[1]) : undefined;
+}
+
+/** No width, or one that sizes to content. */
+const hugsWidth = (v: unknown): boolean => v === undefined || v === null || v === '' || v === 'auto';
+
 /** The width an unlabelled link renders at: its 14px icon and 12px
  * external-link glyph, 4px apart (renderLink). */
 export function linkGlyphWidth(n: SceneNode): number {
@@ -141,9 +150,10 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
   const disabled = n.disabled === true;
   switch (n.type) {
     // A link never renders shorter than 24 (min-height), whatever its height.
-    // Without a label and without an authored width it hugs its glyphs, so
-    // its width is known (slice C); a non-numeric width stays unknown.
-    case 'link': return [{ what: 'link', w: w ?? (n.width === undefined && !hasText(n.label) ? linkGlyphWidth(n) : undefined), h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
+    // A px width is its width; without a label and with no width (or "auto")
+    // it hugs its glyphs, so its width is known (slice C); a fluid or token
+    // width stays unknown.
+    case 'link': return [{ what: 'link', w: w ?? pxWidth(n.width) ?? (hugsWidth(n.width) && !hasText(n.label) ? linkGlyphWidth(n) : undefined), h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
     // A text-input's height comes from its size and rows (the renderer ignores `height`).
     case 'text-input': return [{ what: 'text-input', w, h: textInputHeight(n), disabled }];
     case 'nav-item': return [{ what: 'nav-item', w: n.collapsed ? NAV_ITEM_HEIGHT : w, h: h(NAV_ITEM_HEIGHT), disabled }];

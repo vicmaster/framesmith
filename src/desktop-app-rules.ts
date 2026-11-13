@@ -175,9 +175,11 @@ export function checkHandbuiltTargetsApp(ctx: DesktopContext): EvaluationIssue[]
     const pad = paddingSides(n, ctx.profile.width);
     const icon = s.icon ? (isNum(s.icon.iconSize) ? s.icon.iconSize : 24) : 0;
     const label = s.label ? lineBox(s.label) : 0;
-    // A frame stacks its children vertically unless it is horizontal, so a
-    // stacked icon and caption add up (with the gap between them).
-    const stacked = axis === 'height' && n.layout !== 'horizontal' && icon > 0 && label > 0;
+    // A frame stacks its children vertically unless it is horizontal, so an
+    // icon and caption that are both its in-flow children add up (with the
+    // gap between them); nested or positioned, the larger one stands in.
+    const direct = (c?: SceneNode) => !!c && (n.children ?? []).includes(c) && c.position !== 'absolute' && c.position !== 'fixed';
+    const stacked = axis === 'height' && n.layout !== 'horizontal' && icon > 0 && label > 0 && direct(s.icon) && direct(s.label);
     const content = stacked ? icon + label + (isNum(n.gap) ? n.gap : 0) : Math.max(icon, label);
     return Math.max(floor, Math.round(content + (axis === 'width' ? pad.left + pad.right : pad.top + pad.bottom)));
   };
@@ -360,21 +362,40 @@ function rowsOf(table: SceneNode): SceneNode[] {
 }
 
 /** Header cells may hold a sort glyph or a select-all control beside text. */
-const HEADER_EXTRAS = new Set(['icon', 'checkbox', 'toggle', 'radio', 'select']);
+const CONTROLS = new Set(['checkbox', 'toggle', 'radio', 'select']);
+
+/** The first text in a row, depth first. */
+function firstTextIn(row: SceneNode): SceneNode | undefined {
+  for (const c of row.children ?? []) {
+    if (textOf(c) !== undefined) return c;
+    const t = c.type === 'frame' ? firstTextIn(c) : undefined;
+    if (t) return t;
+  }
+  return undefined;
+}
 
 /** A header row: its content is text, plus icons and controls (a sort glyph,
- * a select-all checkbox), at least two texts. */
-function isHeaderRow(row: SceneNode): boolean {
+ * a select-all checkbox), at least two texts. A first row holding a control
+ * reads the same as a row-select data row, so it is a header only when its
+ * text is styled apart from the next row's (weight, size, colour, case or
+ * tracking). */
+function isHeaderRow(row: SceneNode, next?: SceneNode): boolean {
   let texts = 0;
+  let controls = 0;
   let other = false;
   (function walk(n: SceneNode) {
     for (const c of n.children ?? []) {
       if (textOf(c) !== undefined) texts++;
       else if (c.type === 'frame') walk(c);
-      else if (!HEADER_EXTRAS.has(c.type) && c.type !== 'text') other = true;
+      else if (CONTROLS.has(c.type)) controls++;
+      else if (c.type !== 'icon' && c.type !== 'text') other = true;
     }
   })(row);
-  return !other && texts >= 2;
+  if (other || texts < 2) return false;
+  if (controls === 0) return true;
+  const [a, b] = [firstTextIn(row), next ? firstTextIn(next) : undefined];
+  if (!a || !b) return false;
+  return (['fontWeight', 'fontSize', 'color', 'textTransform', 'letterSpacing'] as const).some((k) => a[k] !== b[k]);
 }
 
 /** A row holding a title over a subtitle: some non-horizontal frame in it
@@ -420,7 +441,7 @@ export function checkRowRhythm(ctx: DesktopContext, tableIds: Set<string>): Eval
   (function walk(n: SceneNode) {
     if (!tableIds.has(n.id)) { n.children?.forEach(walk); return; }
     const rows = rowsOf(n);
-    const header = rows.length > 0 && isHeaderRow(rows[0]) ? rows[0] : undefined;
+    const header = rows.length > 0 && isHeaderRow(rows[0], rows[1]) ? rows[0] : undefined;
     const body = header ? rows.slice(1) : rows;
     const classes = [body.filter((r) => !isTwoLine(r)), body.filter(isTwoLine)];
     const oneLine = classes[0].map(heightOf).filter(isNum);
@@ -484,8 +505,8 @@ export function checkTruncation(ctx: DesktopContext, tableIds: Set<string>): Eva
   const headerTexts = new Set<SceneNode>();
   (function findHeaders(n: SceneNode) {
     if (tableIds.has(n.id)) {
-      const first = rowsOf(n)[0];
-      if (first && isHeaderRow(first)) (function walk(x: SceneNode) { if (x.type === 'text') headerTexts.add(x); x.children?.forEach(walk); })(first);
+      const [first, second] = rowsOf(n);
+      if (first && isHeaderRow(first, second)) (function walk(x: SceneNode) { if (x.type === 'text') headerTexts.add(x); x.children?.forEach(walk); })(first);
       return;
     }
     n.children?.forEach(findHeaders);

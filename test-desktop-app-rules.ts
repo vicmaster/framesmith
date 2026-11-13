@@ -381,7 +381,7 @@ const nav = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   // FR-C6 / FR-C7 with a select-all header (round 1), and the tolerance edge.
   const row = (id: string, h: number, cells: SceneNode[]) => frame(id, cells, { layout: 'horizontal', height: h });
   const table = (headerH: number, headerExtra: Partial<SceneNode> = {}) => frame('users', [
-    row('head', headerH, [{ id: 'hc', name: 'hc', type: 'checkbox' }, text('h1', 'Name', 13, headerExtra), text('h2', 'Role', 13)]),
+    row('head', headerH, [{ id: 'hc', name: 'hc', type: 'checkbox' }, text('h1', 'Name', 13, { fontWeight: 600, ...headerExtra }), text('h2', 'Role', 13, { fontWeight: 600 })]),
     ...[0, 1, 2].map((i) => row(`r${i}`, 32, [{ id: `c${i}`, name: `c${i}`, type: 'checkbox' }, text(`r${i}a`, `Ada ${i}`, 13), text(`r${i}b`, 'Admin', 13)])),
   ]);
   let f = await findings('desktop-app-row-rhythm', [table(40)]);
@@ -390,6 +390,43 @@ const nav = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   check('FR-C6: 2px off warns', f.length === 1, show(f));
   f = await findings('desktop-app-truncation', [table(32, { textOverflow: 'ellipsis' })]);
   check('round 1: a truncating header beside a select-all checkbox warns', f.length === 1 && f[0].severity === 'warning', show(f));
+  // Round 2: a table with NO header whose rows each lead with a row-select
+  // checkbox — the first data row is styled like the rest, so it is data.
+  const headerless = (firstH: number, firstExtra: Partial<SceneNode> = {}) => frame('users', [0, 1, 2].map((i) =>
+    row(`r${i}`, i === 0 ? firstH : 32, [{ id: `c${i}`, name: `c${i}`, type: 'checkbox' }, text(`r${i}a`, `Ada ${i}`, 13, i === 0 ? firstExtra : {}), text(`r${i}b`, 'Admin', 13)])));
+  f = await findings('desktop-app-row-rhythm', [headerless(40)]);
+  check('round 2: a headerless row-select table compares its first row as a body row (info, not a header warning)', f.length === 1 && f[0].severity === 'info', show(f));
+  f = await findings('desktop-app-truncation', [headerless(32, { textOverflow: 'ellipsis' })]);
+  check('round 2: a truncating first data cell is no column header (info, not a warning)', f.length === 1 && f[0].severity === 'info', show(f));
+}
+{
+  // Round 2: the stacked estimate sums only an icon and caption that are both
+  // in-flow children of the frame.
+  const icon20 = (): SceneNode => ({ id: 'si', name: 'si', type: 'icon', icon: 'house', iconSize: 20 });
+  let f = await findings('desktop-app-handbuilt-target', [frame('f', [frame('w', [icon20(), text('st', 'Home', 11)], { layout: 'horizontal' })], { layout: 'vertical', padding: 4 })]);
+  check('round 2: an icon and caption side by side in a nested row are not stacked (28px, named)', f.length === 1, show(f));
+  f = await findings('desktop-app-handbuilt-target', [frame('f', [icon20(), text('st', 'Home', 11, { position: 'absolute' })], { layout: 'vertical', padding: 4 })]);
+  check('round 2: an absolutely positioned caption is not stacked (28px, named)', f.length === 1, show(f));
+}
+{
+  // Round 2: link widths that size to content, or are written in px, are known.
+  const link = (width: unknown): SceneNode => ({ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', width } as unknown as SceneNode);
+  for (const [width, expect] of [['auto', /14×24px/], [null, /14×24px/], ['', /14×24px/], ['10px', /10×24px/]] as const) {
+    const f = await findings('desktop-app-target', [link(width)]);
+    check(`round 2: an icon-only link with width ${JSON.stringify(width)} is measured`, f.length === 1 && expect.test(f[0].message), show(f));
+  }
+  const f = await findings('desktop-app-target', [link('$link-width')]);
+  check('round 2: a token width stays unknown (not measured at the glyph)', f.length === 0, show(f));
+}
+{
+  // Round 2: S3 edges.
+  const c = canvasOf([{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', ariaLabel: 'a"b<c>&d', disabled: true } as SceneNode]);
+  const html = renderToHtml(c.root, 1440, 900, c);
+  check('round 2: a disabled link keeps its escaped name', /aria-disabled="true"/.test(html) && html.includes('aria-label="a&quot;b&lt;c&gt;&amp;d"'), html.match(/aria-label="[^"]*"/)?.[0]);
+  const f = await findings('desktop-app-icon-label', [{ id: 'l', name: 'l', type: 'link', icon: 'arrow-left', ariaLabel: '   ' } as SceneNode]);
+  check('round 2: a blank ariaLabel is no name', f.length === 1, show(f));
+  const tok = await findings('desktop-app-type-ladder', [text('a', 'A', '$missing' as unknown as number), text('b', 'B', 36)]);
+  check('round 2: an unresolved size reads as the 14px fallback (14 → 36 warns, no crash)', tok.length === 1 && /14px → 36px/.test(tok[0].message), show(tok));
 }
 {
   // FR-C8 edges (round 1: a primary is whatever renders filled).
