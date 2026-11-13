@@ -134,8 +134,8 @@ function lineBox(t: SceneNode): number {
  * icon, one icon plus a label of three words or fewer, or (spec change S2) a
  * bordered, padded frame holding one such label and nothing else, the shape
  * an imported text button takes. Info only, as on mobile: a frame cannot say
- * it is decorative. A frame inside a clickable primitive (a property-row's
- * value) is never hand-built. Detailed mode measures the rendered box; fast
+ * it is decorative. A frame inside a clickable primitive or a property-row
+ * (its value slot) is never hand-built. Detailed mode measures the rendered box; fast
  * mode reads an authored size, else estimates the height from the icon or
  * the label's line box plus vertical padding (an icon-only frame's width the
  * same way; a labelled frame's width is unknown). */
@@ -361,7 +361,7 @@ function rowsOf(table: SceneNode): SceneNode[] {
     && (table.name === 'Table' || c.layout === 'horizontal'));
 }
 
-/** Header cells may hold a sort glyph or a select-all control beside text. */
+/** The controls a header cell may hold beside its text (a select-all box). */
 const CONTROLS = new Set(['checkbox', 'toggle', 'radio', 'select']);
 
 /** The first text in a row, depth first. */
@@ -564,7 +564,8 @@ const REPEAT_MIN = 3;
 
 /** More than one primary button in one region (the nearest pane) is an info.
  * A primary inside one of three or more same-shaped sibling frames (shape
- * hash without names) is not counted. (A modal's primary action joins with the overlays, slice E.) */
+ * hash without names) is not counted. A modal's primary action joins with the
+ * overlays (slice E). */
 export function checkPrimaryCount(ctx: DesktopContext): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   const parentOf = parents(ctx.root);
