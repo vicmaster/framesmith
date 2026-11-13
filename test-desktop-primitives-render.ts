@@ -26,6 +26,7 @@ const inspector: SceneNode[] = [
   { id: 'rail', name: 'rail', type: 'nav-item', label: 'Projects', icon: 'folder', collapsed: true },
   { id: 'tsm', name: 'tsm', type: 'tabs', size: 'sm', items: [{ label: 'Quality', active: true }, { label: 'Design system' }] },
   { id: 'tmd', name: 'tmd', type: 'tabs', items: [{ label: 'All', active: true }, { label: 'Archived', count: 3 }], variant: 'contained' },
+  { id: 'tnarrow', name: 'tnarrow', type: 'tabs', size: 'sm', width: 220, items: [{ label: 'Quality', active: true }, { label: 'Design system' }, { label: 'Feedback', disabled: true }] },
   { id: 'tr0', name: 'tr0', type: 'tree-row', label: 'src', depth: 0, expanded: true, width: 300 },
   { id: 'tr1', name: 'tr1', type: 'tree-row', label: 'components', depth: 1, expanded: false, width: 300 },
   { id: 'tr2', name: 'tr2', type: 'tree-row', label: 'button.ts', depth: 2, width: 300 },
@@ -85,7 +86,8 @@ for (const [label, vars] of themes) {
   check(`${label}: tree-rows 32 tall`, ['tr0', 'tr1', 'tr2'].every((id) => h(id) === 32));
   check(`${label}: menu-rows 32 tall`, ['m1', 'm2', 'm3'].every((id) => h(id) === 32));
   check(`${label}: property-rows at least 32 tall`, ['p1', 'p2', 'p3'].every((id) => (h(id) ?? 0) >= 32));
-  check(`${label}: every property value starts at one left edge`, new Set(['v1', 'v2', 'v3'].map((id) => r.get(id)?.x)).size === 1, ['v1', 'v2', 'v3'].map((id) => r.get(id)?.x).join(' '));
+  const xs = ['v1', 'v2', 'v3'].map((id) => r.get(id)?.x);
+  check(`${label}: every property value is placed and starts at one left edge`, xs.every((x) => typeof x === 'number') && new Set(xs).size === 1, xs.join(' '));
   check(`${label}: text-input 32 at sm, 40 at md, 72 at three rows`, h('in-sm') === 32 && h('in-md') === 40 && h('in-3') === 72, `${h('in-sm')} ${h('in-md')} ${h('in-3')}`);
   check(`${label}: an error adds its message below the field`, (h('in-err') ?? 0) > 40, String(h('in-err')));
   check(`${label}: the vertical divider is 1px wide and as tall as its panes`, w('dv') === 1 && h('dv') === 120, `${w('dv')}×${h('dv')}`);
@@ -102,6 +104,13 @@ for (const [label, vars] of themes) {
     return page.$$eval('[data-node-id^="m"] kbd', (els) => els.map((e) => Math.round(e.getBoundingClientRect().right)));
   });
   check('every menu shortcut right-aligns to one column', rights.length === 3 && new Set(rights).size === 1, rights.join(' '));
+}
+
+// A disabled tab leaves the tab order.
+{
+  const c = canvasOf(inspector, system);
+  const html = renderToHtml(resolveVariables(structuredClone(c.root), system), 1440, 900, c);
+  check('a disabled tab is not focusable', /role="tab" tabindex="-1" aria-disabled="true"/.test(html) && (html.match(/role="tab" tabindex="0"/g) ?? []).length >= 2);
 }
 
 // Long text and i18n: designed truncation only, never a clip or an overflow.

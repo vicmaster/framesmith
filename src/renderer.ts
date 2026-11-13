@@ -6,7 +6,7 @@ import {
   BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
   LINK_MIN_HEIGHT, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
-  tabsItems, textInputHeight,
+  tabsItems, textInputHeight, textInputRows,
 } from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
@@ -1260,9 +1260,13 @@ function rowWidth(node: SceneNode): string {
  * skipped, so content always renders whole. */
 function textWithLinks(node: SceneNode): string {
   const content = node.content ?? '';
+  // A range edge inside a surrogate pair (an emoji) moves outward so the pair
+  // is never split; only integer offsets count (no coercion of null / "").
+  const low = (i: number) => i > 0 && i < content.length && /[\uDC00-\uDFFF]/.test(content[i]) && /[\uD800-\uDBFF]/.test(content[i - 1]);
   const ranges = entries<{ start?: unknown; end?: unknown }>(node.links)
-    .map((r) => ({ start: Number(r.start), end: Number(r.end) }))
-    .filter((r) => Number.isInteger(r.start) && Number.isInteger(r.end) && r.start >= 0 && r.end > r.start && r.end <= content.length)
+    .filter((r): r is { start: number; end: number } => Number.isInteger(r.start) && Number.isInteger(r.end))
+    .map((r) => ({ start: low(r.start) ? r.start - 1 : r.start, end: low(r.end) ? r.end + 1 : r.end }))
+    .filter((r) => r.start >= 0 && r.end > r.start && r.end <= content.length)
     .sort((a, b) => a.start - b.start);
   let out = '';
   let at = 0;
@@ -1275,7 +1279,13 @@ function textWithLinks(node: SceneNode): string {
   return out + escapeHtml(content.slice(at));
 }
 
+/** A disabled primitive leaves the tab order and says so. */
+function disabledAttrs(node: SceneNode, attrs: string): string {
+  return node.disabled ? `${attrs.replace(' tabindex="0" data-focusable', ' tabindex="-1"')} aria-disabled="true"` : attrs;
+}
+
 function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  attrs = disabledAttrs(node, attrs);
   const color = node.color ?? FALLBACK.accent;
   const glyph = iconHtml(node.icon, 14, node.iconColor ?? color);
   const external = node.external ? iconHtml('external-link', 12, node.iconColor ?? color) : '';
@@ -1294,8 +1304,10 @@ function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
 
 function renderTextInput(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
   const h = textInputHeight(node);
-  const multi = typeof node.rows === 'number' && node.rows > 1;
-  const border = node.stroke ?? FALLBACK.border;
+  const multi = textInputRows(node) > 1;
+  // An error colours the boundary and its message: $danger by default
+  // (unthemed too); an explicit stroke wins.
+  const border = node.stroke ?? (text(node.error) ? FALLBACK.danger : FALLBACK.border);
   const secondary = node.secondaryColor ?? FALLBACK.secondary;
   const value = text(node.value);
   const shown = value || text(node.placeholder);
@@ -1321,10 +1333,12 @@ function renderTextInput(node: SceneNode, rc: RenderCtx, dataAttr: string): stri
     node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
   ]);
   const ariaInvalid = error ? ' aria-invalid="true"' : '';
-  return `<div${dataAttr} style="${outer}"><div tabindex="0" data-focusable role="textbox"${ariaInvalid}${multi ? ' aria-multiline="true"' : ''} style="${field}">${glyph}${words}</div>${message}</div>`;
+  const focus = node.disabled ? ' tabindex="-1" aria-disabled="true"' : ' tabindex="0" data-focusable';
+  return `<div${dataAttr} style="${outer}"><div${focus} role="textbox"${ariaInvalid}${multi ? ' aria-multiline="true"' : ''} style="${field}">${glyph}${words}</div>${message}</div>`;
 }
 
 function renderNavItem(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  attrs = disabledAttrs(node, attrs);
   const color = node.color ?? FALLBACK.text;
   const accent = node.iconColor ?? FALLBACK.accent;
   const label = text(node.label);
@@ -1361,8 +1375,10 @@ function renderTabs(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
     const label = text(it.label);
     const count = text(it.count);
     const active = it.active === true;
+    // A tab keeps its width until the tablist runs out, then shrinks so its
+    // label truncates (never past its padding).
     const tab = css([
-      'position: relative', 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'height: 100%',
+      'position: relative', 'display: flex', 'align-items: center', 'gap: 6px', 'flex: 0 1 auto', 'min-width: 0', 'height: 100%',
       line ? 'padding: 0 12px' : 'padding: 0 10px', !line ? `margin: 4px 0; height: ${h - 8}px; border-radius: 6px` : undefined,
       !line && active ? `background-color: ${node.fill ?? '#EFF4FF'}` : undefined,
       `color: ${active ? node.color ?? FALLBACK.text : node.secondaryColor ?? FALLBACK.secondary}`,
@@ -1372,7 +1388,8 @@ function renderTabs(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
       ? `<div style="${css(['position: absolute', 'left: 8px', 'right: 8px', 'bottom: 0', 'height: 2px', 'border-radius: 1px', `background-color: ${accent}`])}"></div>`
       : '';
     const badge = count ? `<span style="${css(['font-size: 11px', 'font-variant-numeric: tabular-nums', 'padding: 0 6px', 'border-radius: 8px', `background-color: ${node.stroke ?? FALLBACK.border}`])}">${escapeHtml(count)}</span>` : '';
-    return `<div role="tab" tabindex="0" data-focusable aria-selected="${active}"${it.disabled ? ' aria-disabled="true"' : ''} style="${tab}">${titledLabel(label, '')}${badge}${indicator}</div>`;
+    const focus = it.disabled ? ' tabindex="-1" aria-disabled="true"' : ' tabindex="0" data-focusable';
+    return `<div role="tab"${focus} aria-selected="${active}" style="${tab}">${titledLabel(label, '')}${badge}${indicator}</div>`;
   }).join('');
   const box = css([
     ...positionStyles(node, rc), 'display: flex', 'align-items: stretch', 'gap: 2px', 'flex-shrink: 0', 'box-sizing: border-box',
@@ -1383,6 +1400,7 @@ function renderTabs(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
 }
 
 function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  attrs = disabledAttrs(node, attrs);
   const depth = typeof node.depth === 'number' && node.depth > 0 ? Math.floor(node.depth) : 0;
   const secondary = node.secondaryColor ?? FALLBACK.secondary;
   if (typeof node.expanded === 'boolean') attrs += ` aria-expanded="${node.expanded}"`;
@@ -1404,7 +1422,7 @@ function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
 function renderMenuRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const secondary = node.secondaryColor ?? FALLBACK.secondary;
   const color = node.color ?? (node.destructive ? FALLBACK.danger : FALLBACK.text);
-  if (node.disabled) attrs += ' aria-disabled="true"';
+  attrs = disabledAttrs(node, attrs);
   if (typeof node.checked === 'boolean') attrs += ` aria-checked="${node.checked}"`;
   const check = node.checked ? iconHtml('check', 14, node.iconColor ?? FALLBACK.accent) : '';
   const glyph = iconHtml(node.icon, 16, node.destructive ? color : secondary);
@@ -1433,7 +1451,9 @@ function renderPropertyRow(node: SceneNode, rc: RenderCtx, dataAttr: string): st
     `color: ${node.color ?? FALLBACK.text}`, 'font-size: 13px',
   ]);
   const label = `<div style="${css(['flex-shrink: 0', `width: ${width}px`, 'min-width: 0', 'display: flex'])}">${titledLabel(text(node.label), `color: ${node.secondaryColor ?? FALLBACK.secondary}; font-size: 12px`)}</div>`;
-  const value = `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'align-items: center'])}">${renderChildren(node, rc)}</div>`;
+  // data-fs-slot: the layout walker steps through this wrapper, so the value
+  // node is placed (snapshot_layout, the 24px circle test, stress).
+  const value = `<div data-fs-slot style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'align-items: center'])}">${renderChildren(node, rc)}</div>`;
   return `<div${dataAttr} style="${box}">${label}${value}</div>`;
 }
 

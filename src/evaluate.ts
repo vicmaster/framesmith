@@ -835,6 +835,8 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
   (function walk(n: SceneNode) {
     if (n.type === 'icon') add(n, 'icon', n.icon, true, true);
     else if (n.type === 'button') add(n, 'icon', n.icon, true, false);
+    // Phase 31 slice B — the desktop-app primitives draw their `icon` too.
+    else if (n.type === 'link' || n.type === 'nav-item' || n.type === 'tree-row' || n.type === 'menu-row' || n.type === 'text-input') add(n, 'icon', n.icon, true, false);
     else if (n.type === 'list-row' || n.type === 'nav-bar') {
       add(n, 'leading.icon', n.leading?.icon, false, false);
       if (n.type === 'nav-bar' && Array.isArray(n.trailing)) n.trailing.slice(0, 2).forEach((a, i) => add(n, `trailing[${i}].icon`, a?.icon, false, false));
@@ -849,7 +851,11 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
 
 /** Phase 30 slice D — the mobile primitives' copy and enum props: words and
  * variant names, never style values, so the token census skips them. */
-const PRIMITIVE_COPY_PROPS = new Set(['title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition']);
+const PRIMITIVE_COPY_PROPS = new Set([
+  'title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition',
+  // Phase 31 slice B — the desktop-app primitives' copy and enums.
+  'placeholder', 'value', 'shortcut', 'error', 'ariaLabel', 'count', 'orientation',
+]);
 
 /** Spellings worth trying for an icon name that didn't resolve: Material
  * Symbols names multi-word icons with `_` (chevron_right), Lucide with `-`
@@ -2012,6 +2018,11 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
     for (const ch of n.children ?? []) c += countControls(ch);
     return c;
   };
+  const countTargets = (n: SceneNode): number => {
+    let c = CONTROL_TYPES.has(n.type) || CLICKABLE_PRIMITIVES.has(n.type) ? 1 : 0;
+    for (const ch of n.children ?? []) c += countTargets(ch);
+    return c;
+  };
   const targets: PointerTarget[] = [];
   for (const { node } of entries) {
     const disabled = node.disabled === true;
@@ -2023,8 +2034,10 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       // primitive (property-row, nav-item, menu-row, list-row) owns that row's
       // box: the row is the target. Its height is the row's; its width the
       // row's when known, else the row spans its container.
+      // Ownership needs the control to be the row's ONLY target: a link,
+      // text-input or button beside it shares the row (countTargets).
       const owner = parentOf.get(node.id) ?? null;
-      if (owner && CONTROL_OWNERS.has(owner.type) && countControls(owner) === 1 && Math.min(w, h) < 24) {
+      if (owner && CONTROL_OWNERS.has(owner.type) && countTargets(owner) === 1 && Math.min(w, h) < 24) {
         const rowH = Math.max(typeof owner.height === 'number' ? owner.height : 0, OWNER_HEIGHT[owner.type] ?? 0);
         w = typeof owner.width === 'number' ? owner.width : Infinity;
         h = Math.max(h, rowH);

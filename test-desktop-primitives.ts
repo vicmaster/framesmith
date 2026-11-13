@@ -61,7 +61,9 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
 // ── FR-B3..B9: markup and defaults ─────────────────────────────────────────
 {
   const nav = html({ id: 'n', name: 'n', type: 'nav-item', label: 'Projects', icon: 'folder', active: true, count: 12 });
-  check('an active nav-item draws fill, bar and weight, with aria-current', /aria-current="page"/.test(nav) && /width: 2px/.test(nav) && /font-weight: 600/.test(nav) && /background-color: #EFF4FF/.test(nav));
+  check('an active nav-item draws fill, bar and weight, with aria-current', /aria-current="page"/.test(nav) && /width: 2px/.test(nav) && /font-weight: 600/.test(nav) && /background-color: #E5ECFD/.test(nav), (nav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
+  const darkNav = html({ id: 'nd', name: 'nd', type: 'nav-item', label: 'A', active: true }, { accent: '#60A5FA', 'bg-surface': '#111827' });
+  check('without an accent-tint token the active fill is the accent washed into the surface (dark stays dark)', /background-color: #1A2940/.test(darkNav), (darkNav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
   const rail = html({ id: 'n2', name: 'n2', type: 'nav-item', label: 'Projects', icon: 'folder', collapsed: true });
   check('a collapsed nav-item is 32×32 with its label as the accessible name', /width: 32px/.test(rail) && /aria-label="Projects"/.test(rail) && !/>Projects</.test(rail));
   const themedNav = html({ id: 'n3', name: 'n3', type: 'nav-item', label: 'A', active: true }, { 'accent-tint': '#123456', accent: '#0E7490' });
@@ -112,11 +114,13 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
     { id: 'f', name: 'f', type: 'menu-row', label: 'M' }, { id: 'g', name: 'g', type: 'button', icon: 'x', size: 'xs', ariaLabel: 'X' },
   ] })).length === 0);
   for (const type of ['web', 'desktop-app'] as const) {
-    const small = await usab({ id: 'l', name: 'l', type: 'link', label: 'Go', height: 16 }, type === 'web' ? { type } : app);
-    check(`${type}: a link forced to 16px is measured (fast-mode warning)`, small.length === 1 && small[0].severity === 'warning');
+    const small = await usab({ id: 'l', name: 'l', type: 'link', label: 'Go', width: 16 }, type === 'web' ? { type } : app);
+    check(`${type}: a link narrowed to 16px is measured (fast-mode warning)`, small.length === 1 && small[0].severity === 'warning');
+    const short = await usab({ id: 'l2', name: 'l2', type: 'link', label: 'Go', height: 10 }, type === 'web' ? { type } : app);
+    check(`${type}: a link given height 10 still renders 24 tall, so it is not flagged`, short.length === 0);
   }
-  const tabs = await usab({ id: 't', name: 't', type: 'tabs', height: 20, items: [{ label: 'A' }, { label: 'B', disabled: true }, { label: 'C' }] });
-  check('each enabled tab is its own target; a disabled tab is not measured', tabs.length === 2, JSON.stringify(tabs.map((i) => i.message)));
+  const tabsTargets = desktopTargets({ id: 't', name: 't', type: 'tabs', height: 20, items: [{ label: 'A' }, { label: 'B', disabled: true }, { label: 'C' }] } as SceneNode);
+  check('each tab is its own target, disabled ones marked; height comes from size, not height', tabsTargets.length === 3 && tabsTargets.filter((t) => t.disabled).length === 1 && tabsTargets.every((t) => t.h === 40));
   const menuOff = await usab({ id: 'm', name: 'm', type: 'menu-row', label: 'M', height: 16, disabled: true });
   check('a disabled menu-row is not measured', menuOff.length === 0);
   const inline = await usab({ id: 'tx', name: 'tx', type: 'text', content: 'See the docs', links: [{ start: 8, end: 12 }], fontSize: 12 });
@@ -127,6 +131,76 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('two checkboxes in one property-row are measured bare (fast warnings)', two.length === 2);
   const phone = (await evaluateCanvas(canvasWith([{ id: 'l', name: 'l', type: 'link', label: 'Go' }], { type: 'mobile', device: 'iphone-390' }), { mode: 'fast', categories: ['usability'] })).issues;
   check('mobile: desktop primitives are not phone tappables (no touch-target finding)', !phone.some((i) => i.rule === 'mobile-touch-target'));
+}
+
+// ── Verify round 1 fixes ───────────────────────────────────────────────────
+{
+  for (const t of ['link', 'nav-item', 'tree-row', 'menu-row', 'text-input']) {
+    const r = await evaluateCanvas(canvasWith([{ id: 'x', name: 'x', type: t as SceneNode['type'], label: 'L', icon: 'no-such-icon-zzz' } as SceneNode], app), { mode: 'fast', categories: ['structure'] });
+    check(`an unknown icon on a ${t} warns`, r.issues.some((i) => /no-such-icon-zzz/.test(i.message) && i.severity === 'warning'));
+  }
+  const menus = (shortcut: boolean) => canvasWith([
+    { id: 't1', name: 't1', type: 'text', content: 'A', color: '$text-primary' }, { id: 't2', name: 't2', type: 'text', content: 'B', color: '$text-primary' },
+    ...Array.from({ length: 6 }, (_, i) => ({ id: `m${i}`, name: `m${i}`, type: 'menu-row', label: `Item ${i}`, ...(shortcut ? { shortcut: '⌘I', placeholder: 'p' } : {}) } as SceneNode)),
+  ], app, { 'text-primary': '#111111' });
+  const tok = async (c: Canvas) => (await evaluateCanvas(c, { mode: 'fast', categories: ['structure'] })).issues.filter((i) => /use design tokens/.test(i.message));
+  check('menu-row shortcuts are copy, not un-tokened values', (await tok(menus(true))).length === (await tok(menus(false))).length);
+  const unthemedErr = (() => { const c = canvasWith([{ id: 'e', name: 'e', type: 'text-input', value: 'x', error: 'bad' }], app); return renderToHtml(c.root, 1440, 900, c); })();
+  check('an unthemed text-input error is $danger-coloured', /border: 1px solid #DC2626/.test(unthemedErr) && /color: #DC2626/.test(unthemedErr));
+  const emoji = html({ id: 'em', name: 'em', type: 'text', content: 'a😀b', links: [{ start: 2, end: 3 }, { start: null as unknown as number, end: 1 }] });
+  check('an inline link edge inside an emoji moves outward; a null offset is dropped', /<span data-fs-inline-link[^>]*>😀<\/span>b/.test(emoji) && (emoji.match(/data-fs-inline-link/g) ?? []).length === 1, emoji.slice(emoji.indexOf('<p'), emoji.indexOf('</p>') + 4));
+  const half = html({ id: 'h', name: 'h', type: 'text-input', rows: 1.5 });
+  check('rows 1.5 is a single-line field', !/aria-multiline/.test(half) && /height: 40px/.test(half));
+  for (const t of ['link', 'nav-item', 'tree-row', 'menu-row', 'text-input']) {
+    const d = html({ id: 'dz', name: 'dz', type: t as SceneNode['type'], label: 'L', disabled: true } as SceneNode);
+    check(`a disabled ${t} leaves the tab order`, /tabindex="-1"/.test(d) && /aria-disabled="true"/.test(d) && !/tabindex="0"/.test(d));
+  }
+}
+
+// ── Verify round 1 (test adequacy): pin the paths mutations survived ──────
+{
+  const usab = async (n: SceneNode) => (await evaluateCanvas(canvasWith([n], app), { mode: 'fast', categories: ['usability'] })).issues.filter((i) => /24px floor/.test(i.message));
+  const pr = (children: SceneNode[]): SceneNode => ({ id: 'pr', name: 'pr', type: 'property-row', label: 'Row', children });
+  check('owner rule: a checkbox directly in a property-row passes (the row is the target)', (await usab(pr([{ id: 'c', name: 'c', type: 'checkbox' }]))).length === 0);
+  check('owner rule: a radio beside a link in a property-row is measured bare', (await usab(pr([{ id: 'w', name: 'w', type: 'frame', layout: 'horizontal', children: [{ id: 'r', name: 'r', type: 'radio' }, { id: 'l', name: 'l', type: 'link', label: 'Edit' }] }]))).some((i) => i.nodeId === 'r'));
+  check('owner rule: a checkbox beside a text-input is measured bare', (await usab(pr([{ id: 'w', name: 'w', type: 'frame', layout: 'horizontal', children: [{ id: 'c', name: 'c', type: 'checkbox' }, { id: 'i', name: 'i', type: 'text-input' }] }]))).some((i) => i.nodeId === 'c'));
+  check('owner rule: only a direct child owns the row (wrapped in a frame it is measured)', (await usab(pr([{ id: 'w', name: 'w', type: 'frame', children: [{ id: 'c', name: 'c', type: 'checkbox' }] }]))).some((i) => i.nodeId === 'c'));
+  check('owner rule: a control directly in a nav-item / menu-row / list-row owns that row too', (await usab({ id: 'ni', name: 'ni', type: 'nav-item', label: 'N', children: [{ id: 'c1', name: 'c1', type: 'checkbox' }] })).length === 0 && (await usab({ id: 'mi', name: 'mi', type: 'menu-row', label: 'M', children: [{ id: 'c2', name: 'c2', type: 'checkbox' }] })).length === 0 && (await usab({ id: 'li', name: 'li', type: 'list-row', title: 'L', children: [{ id: 'c3', name: 'c3', type: 'checkbox' }] })).length === 0);
+  check('census judges the rendered height: a nav-item at height 16 with minHeight 40 is flagged', (await usab({ id: 'n', name: 'n', type: 'nav-item', label: 'N', height: 16, minHeight: 40 })).length === 1);
+  check('census judges the rendered height: a text-input ignores height', desktopTargets({ id: 'i', name: 'i', type: 'text-input', height: 10 } as SceneNode)[0].h === 40);
+  check('a disabled tabs node disables every tab', desktopTargets({ id: 't', name: 't', type: 'tabs', disabled: true, items: [{ label: 'A' }, { label: 'B' }] } as SceneNode).every((t) => t.disabled));
+  check('the desktop-app primitive set is exactly the five', JSON.stringify([...DESKTOP_APP_PRIMITIVES].sort()) === JSON.stringify(['menu-row', 'nav-item', 'property-row', 'tabs', 'tree-row']));
+  check('the clickable set is exactly the phone tappables plus six', JSON.stringify([...CLICKABLE_PRIMITIVES].sort()) === JSON.stringify(['button', 'link', 'list-row', 'menu-row', 'nav-bar', 'nav-item', 'tab-bar', 'tabs', 'text-input', 'tree-row']));
+  for (const t of ['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row']) {
+    const c = canvasWith(Array.from({ length: 12 }, (_, i) => ({ id: `${t}${i}`, name: `${t}${i}`, type: t as SceneNode['type'], label: 'L', items: [{ label: 'A' }] } as SceneNode)), app);
+    const adv = (await evaluateCanvas(c, { mode: 'fast', categories: ['structure'] })).issues.filter((i) => /No component instances/.test(i.message));
+    if (adv.length) check(`repeated ${t}s count as reuse`, false);
+  }
+  check('every repeated desktop-app primitive counts as reuse', true);
+  for (const [t, colors] of [['toggle', { 'border-strong': '#556677', border: '#EEEEEE' }], ['radio', { 'border-strong': '#556677', border: '#EEEEEE' }]] as const) {
+    const withTok = html({ id: 'x', name: 'x', type: t }, colors);
+    const without = html({ id: 'x', name: 'x', type: t }, { border: '#EEEEEE' });
+    check(`an unchecked ${t} uses $border-strong only when the token exists`, /#556677/.test(withTok) && !/#556677/.test(without) && /#EEEEEE/.test(without));
+  }
+  const { registerStructure } = await import('./src/structures.js');
+  for (const t of ['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider']) {
+    registerStructure({ name: `probe-${t}`, kind: 'component', surface: 'any', description: 'probe', nodes: [{ id: 'n', type: t as SceneNode['type'], name: 'n', label: 'L', placeholder: 'Find', value: 'v', shortcut: '⌘K', error: 'Bad', items: [{ label: 'A' }] } as SceneNode] });
+    const cv = createCanvas(`seed-${t}`, undefined, {}, { type: 'desktop-app', device: 'window-1440' });
+    const res = applyStructure(cv, `probe-${t}`, { existingColors: new Set() });
+    if (!res.seededColors.includes('accent-tint') || !res.seededColors.includes('border-strong')) check(`stamping a ${t} seeds the desktop-app tokens`, false, res.seededColors.join(','));
+    if (t === 'text-input' && !['placeholder', 'value', 'error'].every((prop) => res.placeholders.some((pl) => pl.prop === prop))) check('text-input copy is a placeholder', false, JSON.stringify(res.placeholders));
+    if (t === 'menu-row' && !res.placeholders.some((pl) => pl.prop === 'shortcut')) check('menu-row shortcut is a placeholder', false);
+  }
+  check('every desktop-app primitive seeds the tokens; their copy is a placeholder', true);
+  const withBorder = createCanvas('seed-b', undefined, {}, { type: 'desktop-app', device: 'window-1440' });
+  check('an existing $border suppresses border-strong seeding (it falls back to border)', !applyStructure(withBorder, 'probe-text-input', { existingColors: new Set(['border']) }).seededColors.includes('border-strong'));
+  const sc = { id: 'm', name: 'm', type: 'menu-row', shortcut: '⌘K' } as SceneNode;
+  const { root: pert } = applyPerturbation('long-text', { id: 'document', type: 'document', name: 'D', children: [sc] });
+  check('long-text reaches a menu-row shortcut', (pert.children?.[0].shortcut ?? '').length > 4);
+  check('a depth-1 nav-item indents 16px', /padding: 0 8px 0 24px/.test(html({ id: 'nd', name: 'nd', type: 'nav-item', label: 'Sub', depth: 1 })));
+  check('a long shortcut truncates (at most half the row)', /max-width: 50%/.test(html({ id: 'ms', name: 'ms', type: 'menu-row', label: 'L', shortcut: 'Ctrl+Shift+Alt+K' })));
+  const r = html({ id: 'tx', name: 'tx', type: 'text', content: 'abcdefghij', links: [{ start: 6, end: 8 }, { start: 1, end: 3 }, { start: 4, end: 4 }, { start: -1, end: 2 }] });
+  check('inline links: unsorted ranges render in order; empty and negative ones are dropped', (r.match(/data-fs-inline-link/g) ?? []).length === 2 && r.indexOf('>bc<') < r.indexOf('>gh<'));
 }
 
 // ── FR-A6: identity dots are not accents ────────────────────────────────────

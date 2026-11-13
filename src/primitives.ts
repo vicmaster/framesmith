@@ -109,9 +109,14 @@ export function tabsItems(n: SceneNode): TabsItem[] {
   return Array.isArray(n.items) ? (n.items as Array<TabsItem | null>).filter((it): it is TabsItem => !!it && typeof it === 'object') : [];
 }
 
+/** A text-input's line count: whole lines, at least 1. */
+export function textInputRows(n: SceneNode): number {
+  return isNum(n.rows) && n.rows >= 2 ? Math.floor(n.rows) : 1;
+}
+
 export function textInputHeight(n: SceneNode): number {
   const base = TEXT_INPUT_HEIGHT[n.size === 'sm' ? 'sm' : 'md'];
-  const rows = isNum(n.rows) && n.rows > 1 ? Math.floor(n.rows) : 1;
+  const rows = textInputRows(n);
   return rows > 1 ? Math.max(base, rows * TEXT_INPUT_LINE + 12) : base;
 }
 
@@ -120,17 +125,23 @@ export function textInputHeight(n: SceneNode): number {
  * item; the rest have one. Not for the phone tappables (see evaluate). */
 export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; h: number; disabled: boolean }> {
   const w = isNum(n.width) ? n.width : undefined;
-  const h = (min: number) => Math.max(isNum(n.height) ? n.height : min, isNum(n.minHeight) ? n.minHeight : 0);
+  // The rendered height: these rows take an explicit `height` and ignore
+  // `minHeight`, so the census does too (it must judge what renders).
+  const h = (fallback: number) => (isNum(n.height) ? n.height : fallback);
   const disabled = n.disabled === true;
   switch (n.type) {
-    case 'link': return [{ what: 'link', w, h: h(LINK_MIN_HEIGHT), disabled }];
-    case 'text-input': return [{ what: 'text-input', w, h: Math.max(textInputHeight(n), isNum(n.height) ? n.height : 0), disabled }];
+    // A link never renders shorter than 24 (min-height), whatever its height.
+    case 'link': return [{ what: 'link', w, h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
+    // A text-input's height comes from its size and rows (the renderer ignores `height`).
+    case 'text-input': return [{ what: 'text-input', w, h: textInputHeight(n), disabled }];
     case 'nav-item': return [{ what: 'nav-item', w: n.collapsed ? NAV_ITEM_HEIGHT : w, h: h(NAV_ITEM_HEIGHT), disabled }];
     case 'tree-row': return [{ what: 'tree-row', w, h: h(TREE_ROW_HEIGHT), disabled }];
     case 'menu-row': return [{ what: 'menu-row', w, h: h(MENU_ROW_HEIGHT), disabled }];
     case 'tabs': {
-      const th = h(TABS_HEIGHT[n.size === 'sm' ? 'sm' : 'md']);
+      // The tablist's height comes from its size alone (the renderer ignores `height`).
+      const th = TABS_HEIGHT[n.size === 'sm' ? 'sm' : 'md'];
       return tabsItems(n).map((it, i) => ({ what: `tab "${typeof it.label === 'string' ? it.label : i + 1}"`, h: th, disabled: disabled || it.disabled === true }));
+      // (A disabled tabs node disables every tab.)
     }
     default: return [];
   }

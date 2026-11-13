@@ -165,7 +165,9 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const text = c['text-primary'] ?? CONTROL_FALLBACK.text;
   const secondary = c['text-secondary'] ?? '#6B7280';
   const danger = c.danger ?? c.error ?? '#DC2626';
-  const tint = c['accent-tint'] ?? '#EFF4FF';
+  // Without an accent-tint token the active fill is the accent washed into the
+  // surface (12%), so it reads on a dark palette as well as a light one.
+  const tint = c['accent-tint'] ?? mixHex(accent, surface, 0.12) ?? '#EFF4FF';
   const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
   if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
 
@@ -251,6 +253,15 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
       break;
     }
   }
+}
+
+/** `top` laid over `base` at `alpha`, as #RRGGBB; undefined unless both are #RRGGBB. */
+function mixHex(top: string, base: string, alpha: number): string | undefined {
+  const t = /^#([0-9a-f]{6})$/i.exec(top);
+  const b = /^#([0-9a-f]{6})$/i.exec(base);
+  if (!t || !b) return undefined;
+  const ch = (hex: string, i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return '#' + [0, 2, 4].map((i) => Math.round(alpha * ch(t[1], i) + (1 - alpha) * ch(b[1], i)).toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
 /** A prop as text, for "is it set?" checks. */
