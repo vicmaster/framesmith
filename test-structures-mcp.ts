@@ -47,7 +47,7 @@ try {
   const plain = (await tool('list_structures', {})).data;
   check('no canvasId or type lists web', names(plain).includes('dashboard') && !names(plain).includes('dashboard-mobile'));
   check('entries carry anatomy, surface and surfaces', plain.find((s: any) => s.name === 'dashboard')?.anatomy === 'dashboard'
-    && JSON.stringify(plain.find((s: any) => s.name === 'dashboard')?.surfaces) === '["web","mobile"]');
+    && JSON.stringify(plain.find((s: any) => s.name === 'dashboard')?.surfaces) === '["web","mobile","desktop-app"]');
   const byCanvas = (await tool('list_structures', { canvasId: phone })).data;
   check('canvasId of a mobile canvas lists the mobile realisations', names(byCanvas).includes('feed-mobile') && !names(byCanvas).includes('pricing'));
   check('canvasId of a web canvas lists web', names((await tool('list_structures', { canvasId: web })).data).includes('pricing'));
@@ -65,6 +65,17 @@ try {
   check('pricing on a mobile canvas refuses, listing the mobile anatomies', refused.isError && /no mobile realisation.*dashboard, settings, auth, onboarding, feed, detail/.test(refused.text), refused.text);
   const forced = (await tool('apply_structure', { canvasId: phone, structure: 'dashboard', replace: true, realisation: 'web' })).data;
   check('realisation "web" stamps the web dashboard on a mobile canvas', forced.applied === 'dashboard' && forced.surface === 'web', forced.applied);
+
+  // Phase 31 slice D — a desktop-app canvas lists and stamps its realisations.
+  const win = (await tool('canvas_create', { name: 'window', type: 'desktop-app' })).data.canvasId;
+  const appList = names((await tool('list_structures', { canvasId: win })).data);
+  check('canvasId of a desktop-app canvas lists the desktop-app realisations', ['browser-app', 'data-table-app', 'empty-state'].every((n) => appList.includes(n)) && !appList.includes('dashboard') && !appList.includes('pricing'), appList.join(', '));
+  const app = (await tool('apply_structure', { canvasId: win, structure: 'dashboard' })).data;
+  check('dashboard on a desktop-app canvas stamps dashboard-app', app.applied === 'dashboard-app' && app.surface === 'desktop-app', app.applied);
+  const appRoot = (await tool('read_nodes', { canvasId: win, maxDepth: 0 })).text;
+  check('the stamp keeps the root at the window height (overflow hidden)', /"overflow":\s*"hidden"/.test(appRoot), appRoot.slice(0, 200));
+  const appRefused = await tool('apply_structure', { canvasId: win, structure: 'pricing', replace: true });
+  check('pricing on a desktop-app canvas refuses, listing the desktop-app anatomies', appRefused.isError && /no desktop-app realisation.*split-workbench, list-detail, editor-inspector, browser, dashboard, settings/.test(appRefused.text), appRefused.text);
 
   // A canvas re-declared mobile resolves the same way.
   await tool('canvas_set_type', { canvasId: web, type: 'mobile' });
