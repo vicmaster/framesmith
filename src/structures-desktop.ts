@@ -169,7 +169,12 @@ function tableToolbar(id: string): SceneNode {
     id, type: 'frame', name: 'Toolbar', width: '100%', height: ROW_HEIGHT, minHeight: ROW_HEIGHT, layout: 'horizontal', alignItems: 'center',
     justifyContent: 'space-between', gap: SPACE.sm,
     children: [
-      { id: `${id}-search`, type: 'text-input', placeholder: 'Search', icon: 'search', size: 'sm', width: 240 },
+      // A text-input never shrinks: its 240px slot does, so a narrow pane
+      // keeps the filter in view.
+      {
+        id: `${id}-search-slot`, type: 'frame', name: 'Search', width: 240, minWidth: 0,
+        children: [{ id: `${id}-search`, type: 'text-input', placeholder: 'Search', icon: 'search', size: 'sm', width: '100%' }],
+      },
       secondary(`${id}-filter`, 'Filter', 'list-filter'),
     ],
   };
@@ -191,7 +196,7 @@ function pager(id: string): SceneNode {
     id, type: 'frame', name: 'Pagination', width: '100%', height: ROW_HEIGHT, minHeight: ROW_HEIGHT, layout: 'horizontal',
     alignItems: 'center', justifyContent: 'space-between', gap: SPACE.sm,
     children: [
-      { id: `${id}-count`, type: 'text', content: 'Row count — TBD', fontSize: TYPE.caption, color: COLOR.textSecondary, tabularNums: true },
+      cut(`${id}-count`, 'Row count — TBD', { fontSize: TYPE.caption, color: COLOR.textSecondary, tabularNums: true }),
       {
         id: `${id}-pages`, type: 'frame', name: 'Pager', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs2,
         children: [iconButton(`${id}-prev`, 'chevron-left', 'Previous page'), iconButton(`${id}-next`, 'chevron-right', 'Next page')],

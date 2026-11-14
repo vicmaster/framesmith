@@ -10,8 +10,9 @@ import './test-env.js';
  *      desktop-app finding at 1280×800 — long labels must truncate, never push
  *      a bar past the window;
  *   2. `data-table` stamped into each page realisation's wide pane (it
- *      resolves to data-table-app) leaves nothing blocking in fast mode, no
- *      desktop-app finding in detailed mode, and a CLEAN stress run.
+ *      resolves to data-table-app), at 1440, 1100 and 1024 wide, leaves
+ *      nothing blocking in fast mode, no desktop-app finding in detailed
+ *      mode, and a CLEAN stress run.
  *
  * Fallback fonts, as in test-patterns-desktop.ts. Needs Chrome.
  * Run with: npx tsx test-patterns-desktop-window.ts
@@ -99,16 +100,17 @@ const WIDE_PANE: Record<string, string> = {
   'settings-app': 'sta-content',
 };
 check('every page realisation names its wide pane', app.filter((s) => s.kind === 'page').every((s) => WIDE_PANE[s.name] !== undefined));
-for (const [page, paneId] of Object.entries(WIDE_PANE)) {
-  const canvas = stamped(page, false, { width: 1440, height: 900 });
+for (const [page, paneId] of Object.entries(WIDE_PANE)) for (const size of [{ width: 1440, height: 900 }, { width: 1100, height: 900 }, SMALL]) {
+  const at = `${size.width}×${size.height}`;
+  const canvas = stamped(page, false, size);
   const stamp = applyStructure(canvas, 'data-table', { targetId: paneId });
-  check(`data-table into ${page}'s ${paneId} stamps data-table-app`, stamp.applied === 'data-table-app');
+  check(`data-table into ${page}'s ${paneId} stamps data-table-app (${at})`, stamp.applied === 'data-table-app');
   const fast = await appFindings(canvas, 'fast');
-  check(`${page} + data-table-app: nothing blocking in fast mode`, fast.length === 0, fast.slice(0, 4).join(' | '));
+  check(`${page} + data-table-app: nothing blocking in fast mode (${at})`, fast.length === 0, fast.slice(0, 4).join(' | '));
   const detailed = await appFindings(canvas, 'detailed');
-  check(`${page} + data-table-app: detailed mode clean`, detailed.length === 0, detailed.slice(0, 4).join(' | '));
+  check(`${page} + data-table-app: detailed mode clean (${at})`, detailed.length === 0, detailed.slice(0, 4).join(' | '));
   const warnings = await stressWarnings(canvas);
-  check(`${page} + data-table-app: full stress run CLEAN`, warnings.length === 0, warnings.slice(0, 4).join(' | '));
+  check(`${page} + data-table-app: full stress run CLEAN (${at})`, warnings.length === 0, warnings.slice(0, 4).join(' | '));
 }
 
 console.log(allPass ? '\nAll desktop-app window tests passed.' : '\nSOME TESTS FAILED');
