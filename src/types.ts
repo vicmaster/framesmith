@@ -453,6 +453,11 @@ export interface Structure {
   /** Phase 30 — the canvas type this realisation is for (default `web`);
    * `any` stamps on every type. (anatomy, surface) is unique in the registry. */
   surface?: 'web' | 'mobile' | 'desktop-app' | 'any';
+  /** Phase 31 slice D — props a page stamp writes onto `canvas.root` (the
+   * desktop-app realisations set `overflow: "hidden"`, so the root keeps the
+   * window's height and the panes scroll). A later page stamp with `replace`
+   * removes the ones the root still holds unchanged. */
+  root?: Partial<Pick<SceneNode, 'overflow'>>;
   /** Placeholder children inserted under `canvas.root` by `apply_structure`. */
   nodes: SceneNode[];
 }

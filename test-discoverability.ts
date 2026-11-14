@@ -105,6 +105,23 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
     gotchas.includes('list_structures({ canvasId })') && anatomies.every((a) => gotchas.includes(a)));
 }
 
+// ── 5c. Phase 31 slice D: desktop-app realisations ───────────────────────────
+// An agent on a desktop-app canvas must learn the realisations it can stamp,
+// the components that replace data-table there, and the pane rule.
+{
+  const instructions = /const INSTRUCTIONS = `([\s\S]*?)`;/.exec(indexSrc)?.[1] ?? '';
+  const gotchas = /const GOTCHAS = \[([\s\S]*?)\n\];/.exec(indexSrc)?.[1] ?? '';
+  const app = listStructures({ type: 'desktop-app' }).filter((s) => s.surface === 'desktop-app');
+  const anatomies = [...new Set(app.filter((s) => s.kind === 'page').map((s) => s.anatomy))];
+  expect('there are desktop-app page anatomies to document', anatomies.length > 0);
+  const missingInstr = app.map((s) => s.name).filter((n) => !instructions.includes(n));
+  expect('every desktop-app structure named in INSTRUCTIONS', instructions !== '' && missingInstr.length === 0, missingInstr.join(', '));
+  const missingGl = [...anatomies, ...app.map((s) => s.name)].filter((a) => !guidelines.includes(`\`${a}\``));
+  expect('every desktop-app anatomy and realisation named (backticked) in GUIDELINES', missingGl.length === 0, missingGl.join(', '));
+  expect('GOTCHAS tell an app agent to start from a realisation', anatomies.every((a) => gotchas.includes(a)) && gotchas.includes('desktop-app realisation'));
+  expect('INSTRUCTIONS and GUIDELINES state the pane rule', /overflow "auto"/.test(instructions) && /overflow: "auto"/.test(guidelines));
+}
+
 // ── 6. every cliche tell is surfaced where agents look ───────────────────────
 // Tell slugs are kebab ('accent-hue') but the agent surfaces describe them in
 // prose, so each slug maps to a phrase that MUST appear in both the index.ts

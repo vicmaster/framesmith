@@ -1,5 +1,7 @@
 import type { BuildLogEntry, Canvas, SceneNode, Structure, StructureAxes } from './types.js';
 import { resolveSurface, SURFACE_TYPES, type SurfaceType } from './surfaces.js';
+import { COLOR, SPACE, RADIUS, ELEV, TYPE, TINT } from './structure-tokens.js';
+import { DESKTOP_APP_STRUCTURES } from './structures-desktop.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -14,60 +16,6 @@ import { resolveSurface, SURFACE_TYPES, type SurfaceType } from './surfaces.js';
 // Distinct from presets (`src/presets.ts`): presets carry tokens/components,
 // structures carry the layout skeleton. `registerStructure` keeps the door open
 // for dynamically contributed structures, mirroring `registerPreset`.
-
-/** Standard color tokens these scaffolds reference (the preset vocabulary). */
-const COLOR = {
-  bgPrimary: '$bg-primary',
-  bgSurface: '$bg-surface',
-  bgElevated: '$bg-elevated',
-  textPrimary: '$text-primary',
-  textSecondary: '$text-secondary',
-  accent: '$accent',
-  border: '$border',
-} as const;
-
-/** Phase 27 slice B — density comes from tokens, not literals. Scaffolds
- * reference the space/radius/elevation vocabulary generate_design_system
- * writes; applyStructure seeds neutral defaults (the pre-27 literal values)
- * for anything not already resolvable, so unthemed canvases render exactly
- * as before and a personality re-densifies every stamp. */
-const SPACE = {
-  xxs: '$space-3xs',   // 2
-  xs2: '$space-2xs',   // 4
-  xs: '$space-xs',     // 8
-  sm: '$space-sm',     // 12
-  md: '$space-md',     // 16
-  lg: '$space-lg',     // 24
-  xl: '$space-xl',     // 32
-  xl2: '$space-2xl',   // 48
-} as const;
-const RADIUS = {
-  sm: '$radius-sm',    // 8
-  md: '$radius-md',    // 12
-  lg: '$radius-lg',    // 16
-} as const;
-const ELEV = {
-  flat: '$elevation.flat',
-  raised: '$elevation.raised',
-} as const;
-const TYPE = {
-  display: '$display',   // hero headlines — the display face at full size
-  title: '$title',       // page/screen titles, one step below display
-  heading: '$heading',   // section heads
-  textLg: '$text-lg',    // card titles, subheads — the step above body
-  textSm: '$text-sm',    // small body text — untracked (nav items, prose, meta)
-  body: '$body',         // prose and item text
-  label: '$label',       // control, CTA, breadcrumb and table-header text
-  caption: '$caption',   // metadata, timestamps, eyebrows
-} as const;
-/** Phase 28 — the tint pair: tint as the FILL, base color as the INK. */
-const TINT = {
-  accent: { bg: '$accent-tint', ink: COLOR.accent },
-  success: { bg: '$success-tint', ink: '$success' },
-  warning: { bg: '$warning-tint', ink: '$warning' },
-  danger: { bg: '$danger-tint', ink: '$danger' },
-  neutral: { bg: '$neutral-tint', ink: COLOR.textSecondary },
-} as const;
 
 /** A labeled placeholder card — a surface with a role label + neutral body. */
 function card(
@@ -1784,6 +1732,8 @@ const structureMap = new Map<string, Structure>([
   ['onboarding-mobile', onboardingMobile],
   ['feed-mobile', feedMobile],
   ['detail-mobile', detailMobile],
+  // Phase 31 slice D — desktop-app realisations and components
+  ...DESKTOP_APP_STRUCTURES,
 ]);
 
 // ── anatomy and realisation (Phase 30 slice E) ──────────────────────────────
@@ -1988,7 +1938,10 @@ const PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = {
  * fill of nav-item / tree-row / contained tabs, and a text-input's boundary
  * (which falls back to `border`). Mobile stamps never seed them. */
 const DESKTOP_PRIMITIVE_TYPES = new Set(['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider']);
-const DESKTOP_PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = { 'accent-tint': [], 'border-strong': ['border'] };
+// Phase 31 slice D (spec change S6) — no `accent-tint` seed: presets carry no
+// tint, so a dark seed survived a later light preset; without the token the
+// renderer mixes 12% accent into whatever surface is applied.
+const DESKTOP_PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = { 'border-strong': ['border'] };
 
 /** A primitive's copy fields as [path, text]: what an agent replaces. */
 function primitiveCopy(n: SceneNode): [string, string][] {
@@ -2123,6 +2076,15 @@ export function applyStructure(
     // Insert — clone so the registry template is never mutated.
     inserted = structure.nodes.map((n) => structuredClone(n));
     canvas.root.children = inserted;
+
+    // Root props (Phase 31 slice D): drop the ones the previous page stamp
+    // wrote and the root still holds unchanged, then write this structure's.
+    const previous = getStructure(canvas.metadata?.provenance?.structure ?? '');
+    const rootProps = canvas.root as unknown as Record<string, unknown>;
+    for (const [key, value] of Object.entries(previous?.root ?? {})) {
+      if (rootProps[key] === value) delete rootProps[key];
+    }
+    Object.assign(canvas.root, structuredClone(structure.root ?? {}));
 
     // Give the document root a page background so the scaffold fills the viewport
     // rather than showing browser-default white. createCanvas seeds a white root

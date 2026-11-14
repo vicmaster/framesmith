@@ -2233,6 +2233,13 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
       if (node.type !== 'select') {
         let scope = parentOf.get(node.id) ?? null;
         let labeled = false;
+        // Phase 31 slice D — a property-row's label names its value, and it
+        // is the only label that does: a blank one is not rescued by a
+        // sibling row's label one hop up.
+        if (scope?.type === 'property-row') {
+          labeled = typeof scope.label === 'string' && scope.label.trim().length > 0;
+          scope = null;
+        }
         for (let hop = 0; hop < 2 && scope && !labeled; hop++) {
           labeled = hasText(scope);
           scope = parentOf.get(scope.id) ?? null;
@@ -2367,6 +2374,12 @@ const COVERAGE_HINTS: Record<string, string> = {
   loading: 'canvas_add_variant with state "loading", replace the data rows with the skeleton-table (or skeleton-card) scaffold.',
   error: 'canvas_add_variant with state "error", show the form\'s validation-failure treatment (field messages + summary).',
 };
+/** Phase 31 slice D — on a desktop-app canvas the loading hint names the
+ * desktop-app skeleton (the web skeleton-table is refused there). */
+const COVERAGE_HINTS_APP: Record<string, string> = {
+  ...COVERAGE_HINTS,
+  loading: 'canvas_add_variant with state "loading", replace the data rows with the skeleton-table-app scaffold (data-table-app\'s loading state), or skeleton-card for cards.',
+};
 
 function checkCoverage(canvas: Canvas, designedStates: string[]): { result: CheckResult; report?: EvaluationResult['coverage'] } {
   // A variant IS a designed state — demanding states of it would recurse.
@@ -2436,7 +2449,7 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
     severity: 'warning',
     nodeId: canvas.root.id,
     message: `This screen has ${demanded.get(state)} but no "${state}" state variant is designed — the shipped UI will improvise it.`,
-    suggestion: COVERAGE_HINTS[state],
+    suggestion: (resolveSurface(canvas).type === 'desktop-app' ? COVERAGE_HINTS_APP : COVERAGE_HINTS)[state],
   }));
   return {
     result: { score: Math.max(0, 100 - missing.length * 35), issues },
