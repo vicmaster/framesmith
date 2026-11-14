@@ -2233,11 +2233,11 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
       if (node.type !== 'select') {
         let scope = parentOf.get(node.id) ?? null;
         let labeled = false;
-        // Phase 31 slice D — a property-row's label names its value, and it
-        // is the only label that does: a blank one is not rescued by a
-        // sibling row's label one hop up.
+        // Phase 31 slice D — a property-row's label names its value. With a
+        // blank label only text inside the row itself can, never a sibling
+        // row's text one hop up.
         if (scope?.type === 'property-row') {
-          labeled = typeof scope.label === 'string' && scope.label.trim().length > 0;
+          labeled = (typeof scope.label === 'string' && scope.label.trim().length > 0) || hasText(scope);
           scope = null;
         }
         for (let hop = 0; hop < 2 && scope && !labeled; hop++) {

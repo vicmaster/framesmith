@@ -57,6 +57,11 @@ const count = (root: SceneNode, pred: (n: SceneNode) => boolean): number =>
   check('twin: a grid of two cards is not a card grid', applyPerturbation('many', two, { type: 'desktop-app' }).touched.length === 0);
   const odd = doc([{ id: 'g3', type: 'frame', layout: 'grid', children: [card('k1'), card('k2'), { id: 'k3', type: 'text', content: 'x' }] }]);
   check('twin: a grid with a differently shaped child is not a card grid', applyPerturbation('many', odd, { type: 'desktop-app' }).touched.length === 0);
+  const stack = doc([{ id: 'v', type: 'frame', layout: 'vertical', children: [card('k1'), card('k2'), card('k3')] }]);
+  check('twin: three identical cards in a vertical frame are not a card grid', applyPerturbation('many', stack, { type: 'desktop-app' }).touched.length === 0);
+  const deep = (id: string, inner: SceneNode['type']): SceneNode => ({ id, type: 'frame', children: [{ id: `${id}-a`, type: 'frame', children: [{ id: `${id}-b`, type: inner }] }] });
+  const unlike = doc([{ id: 'g4', type: 'frame', layout: 'grid', children: [deep('d1', 'text'), deep('d2', 'text'), deep('d3', 'icon')] }]);
+  check('twin: cards that differ two levels down are not a card grid', applyPerturbation('many', unlike, { type: 'desktop-app' }).touched.length === 0);
 }
 
 // ── a property-row's label names its control ────────────────────────────────
@@ -67,6 +72,10 @@ const count = (root: SceneNode, pred: (n: SceneNode) => boolean): number =>
     return (await evaluateCanvas(c, { mode: 'fast', categories: ['usability'] })).issues.filter((i) => /has no text label/.test(i.message)).map((i) => i.nodeId);
   };
   check('a toggle in a labelled property-row is labelled', (await unlabeled([{ id: 'r', type: 'property-row', label: 'Visible', children: [{ id: 't', type: 'toggle' }] }])).length === 0);
+  check('a blank-labelled property-row with its own text beside the toggle is labelled',
+    (await unlabeled([{ id: 'r', type: 'property-row', label: '', children: [{ id: 't', type: 'toggle' }, { id: 'x', type: 'text', content: 'Notify me' }] }])).length === 0);
+  check('twin: a property-row with no label prop flags its toggle (no throw)',
+    (await unlabeled([{ id: 'r', type: 'property-row', children: [{ id: 't', type: 'toggle' }] }])).includes('t'));
   check('twin: a toggle in a blank-labelled property-row is not',
     (await unlabeled([{ id: 'r', type: 'property-row', label: ' ', children: [{ id: 't', type: 'toggle' }] }])).includes('t'));
   check('twin: a sibling row\'s label does not rescue a blank one', (await unlabeled([

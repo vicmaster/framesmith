@@ -173,6 +173,20 @@ check(APP_PAGES.every((n) => appList.includes(n)) && appList.includes('data-tabl
 check(!appList.includes('dashboard') && !appList.includes('dashboard-mobile') && !webList.includes('dashboard-app') && !mobileList.includes('dashboard-app'), 'no type lists another type\'s realisation');
 check(JSON.stringify(byName.get('browser-app')?.surfaces) === '["desktop-app"]', 'browser is realised on desktop-app only');
 
+const walkAll = (n: SceneNode): SceneNode[] => [n, ...(n.children ?? []).flatMap(walkAll)];
+for (const name of [...APP_PAGES, 'data-table-app', 'skeleton-table-app']) {
+  const nodes = getStructure(name)!.nodes.flatMap(walkAll);
+  const panes = nodes.filter((n) => n.overflow === 'auto');
+  const unfloored = panes.filter((p) => typeof p.width === 'number' && !(typeof p.minWidth === 'number' && p.minWidth >= p.width));
+  check(unfloored.length === 0, `${name}: every fixed-width pane has a matching minWidth${unfloored.length ? ' — ' + unfloored.map((p) => p.id).join(', ') : ''}`);
+  const icons = nodes.filter((n) => n.type === 'button' && !n.label && n.icon);
+  check(icons.every((b) => b.ariaLabel && b.color === '$text-secondary'), `${name}: icon-only buttons are named and in $text-secondary`);
+  const rows = nodes.filter((n) => n.name === 'Row' || n.name === 'Skeleton row' || n.name === 'Toolbar' || n.name === 'Pagination');
+  check(rows.every((r) => r.height === 32), `${name}: table toolbar, rows and pager are 32 tall`);
+}
+check(walkAll(getStructure('editor-inspector-app')!.nodes[0]).find((n) => n.id === 'eia-inspector')?.minWidth === 280, 'the editor inspector keeps a 280px floor beside its 30% width');
+check(walkAll(getStructure('browser-app')!.nodes[0]).find((n) => n.id === 'bra-grid')?.gridColumns === 'repeat(auto-fill, minmax(240px, 1fr))', 'the browser grid\'s columns are at least 240px wide');
+
 console.log('Phase 31 slice D — root props on a page stamp (G5)');
 const win = createCanvas('e-win', undefined, {}, { type: 'desktop-app' });
 const stampApp = applyStructure(win, 'dashboard');

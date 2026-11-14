@@ -167,12 +167,18 @@ function appCanvas(name: string, component: boolean): Canvas {
   return canvas;
 }
 
-async function judge(canvas: Canvas, label: string, structure: string, genre?: string) {
+/** G2's pass rule on one canvas. */
+async function verdict(canvas: Canvas, genre?: string): Promise<{ ok: boolean; detail: string }> {
   const ev = await evaluateCanvas(canvas, { mode: 'fast', genre, categories: CATEGORIES });
   const bad = blocking(ev.issues);
   const weak = tintContrast(canvas).filter((r) => r < 4.5);
   const ok = ev.overallScore > BAR && bad.length === 0 && weak.length === 0;
-  assert(ok, `${structure} @ ${label} — ${ev.overallScore}${bad.length ? ' · ' + bad.join(', ') : ''}${weak.length ? ' · tint ' + weak.map((r) => r.toFixed(2)).join('/') : ''}`);
+  return { ok, detail: `${ev.overallScore}${bad.length ? ' · ' + bad.join(', ') : ''}${weak.length ? ' · tint ' + weak.map((r) => r.toFixed(2)).join('/') : ''}` };
+}
+
+async function judge(canvas: Canvas, label: string, structure: string, genre?: string) {
+  const { ok, detail } = await verdict(canvas, genre);
+  assert(ok, `${structure} @ ${label} — ${detail}`);
 }
 
 async function desktopGate() {
@@ -232,7 +238,22 @@ async function desktopGate() {
   applyStructure(darkTint, 'split-workbench-app');
   darkTint.variables.colors = { ...darkTint.variables.colors, 'accent-tint': '#152A47' };
   applyPresetTokens(darkTint, getPreset('light')!.variables, getVariables(darkTint));
-  assert(tintContrast(darkTint).some((r) => r < 4.5), 'twin: a dark $accent-tint left under the light preset fails the tint check');
+  assert(tintContrast(darkTint).some((r) => r < 4.5) && !(await verdict(darkTint, 'light')).ok, 'twin: a dark $accent-tint left under the light preset fails the gate');
+  // An info-level desktop-app finding (a hand-built 28px icon frame) fails it too.
+  const handBuilt = appCanvas('twin-handbuilt', false);
+  applyStructure(handBuilt, 'split-workbench-app');
+  walk(handBuilt.root).find((n) => n.id === 'swa-header-actions')!.children!.push({
+    id: 'hb', type: 'frame', name: 'Hand-built', width: 28, height: 28, layout: 'vertical', alignItems: 'center', justifyContent: 'center',
+    children: [{ id: 'hb-icon', type: 'icon', icon: 'bell', iconSize: 16, iconColor: '$text-secondary' }],
+  });
+  const hb = await verdict(handBuilt);
+  assert(!hb.ok && hb.detail.includes('info:desktop-app-handbuilt-target'), `twin: an info-level desktop-app finding fails the gate — ${hb.detail}`);
+  // So does a cliché tell, whatever its severity.
+  const slop = appCanvas('twin-slop', false);
+  applyStructure(slop, 'split-workbench-app');
+  walk(slop.root).find((n) => n.id === 'swa-canvas-label')!.content = 'Unlock seamless synergy and supercharge your workflow';
+  const sl = await verdict(slop);
+  assert(!sl.ok && /cliche|slop/.test(sl.detail), `twin: a cliché tell fails the gate — ${sl.detail}`);
 
   // Components marked for every type stamp on a bare desktop-app canvas with
   // no desktop-app warning or error (spec change S7: their infos, such as a

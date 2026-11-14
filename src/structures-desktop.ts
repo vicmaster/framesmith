@@ -5,8 +5,9 @@ import { COLOR, SPACE, RADIUS, ELEV, TYPE } from './structure-tokens.js';
 // primitives and $tokens. Each fills the window: the stamp sets the root's
 // overflow to hidden (Structure.root) so the root keeps the artboard's height,
 // the shell is `height: "100%"`, and every pane scrolls on its own
-// (`overflow: "auto"`) around an inner content frame, so tripled content
-// scrolls inside its pane instead of squashing its rows or growing the page.
+// (`overflow: "auto"`). A pane's direct children carry no fixed height and no
+// overflow, so tripled content scrolls inside its pane instead of squashing
+// its rows or growing the page.
 // Fixed widths carry a matching minWidth, since a scrolling flex item may
 // otherwise shrink below its width.
 
@@ -60,7 +61,8 @@ function header(id: string, title: string, actions: SceneNode[]): SceneNode {
     padding: [0, SPACE.md], borderBottom: { width: 1, color: COLOR.border },
     children: [
       { id: `${id}-title`, type: 'text', content: title, fontSize: TYPE.textLg, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis', title },
-      { id: `${id}-actions`, type: 'frame', name: 'Actions', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs, children: actions },
+      // The title truncates; the actions (each button capped) never shrink.
+      { id: `${id}-actions`, type: 'frame', name: 'Actions', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs, minWidth: 'max-content', children: actions },
     ],
   };
 }
@@ -78,9 +80,12 @@ function main(id: string, bars: SceneNode[], panes: SceneNode[]): SceneNode {
   };
 }
 
+/** A labelled button caps its width, so a long label truncates instead of
+ * pushing its bar past a 1024px window. */
+const BUTTON_MAX = 200;
 const secondary = (id: string, label: string, icon?: string): SceneNode =>
-  ({ id, type: 'button', label, variant: 'secondary', size: 'sm', ...(icon ? { icon } : {}) });
-const primary = (id: string, label: string): SceneNode => ({ id, type: 'button', label, size: 'sm' });
+  ({ id, type: 'button', label, variant: 'secondary', size: 'sm', maxWidth: BUTTON_MAX, ...(icon ? { icon } : {}) });
+const primary = (id: string, label: string): SceneNode => ({ id, type: 'button', label, size: 'sm', maxWidth: BUTTON_MAX });
 /** A 24px icon-only tool, named for screen readers, in quiet ink (a toolbar
  * of accent-coloured glyphs would compete with the one primary action). */
 const iconButton = (id: string, icon: string, ariaLabel: string): SceneNode =>
@@ -98,12 +103,17 @@ const sectionTitle = (id: string, content: string): SceneNode =>
 // ── the app table (data-table-app, skeleton-table-app, dashboard-app) ───────
 // Carbon's ladder: the toolbar, the header row and every body row are 32 tall.
 
+// The row-actions column is the button's own 24px under a blank header (the
+// usual overflow-menu column), so the button sits straight in the row: one
+// level less, which keeps a table stamped into a realisation's pane within
+// the 8-level depth advisory.
+const ACTIONS_WIDTH = 24;
 const COLUMNS: Array<{ key: string; label: string; width: string; end?: boolean }> = [
   { key: 'name', label: 'Name', width: '36%' },
   { key: 'status', label: 'Status', width: '18%' },
   { key: 'updated', label: 'Updated', width: '20%' },
   { key: 'amount', label: 'Amount', width: '18%', end: true },
-  { key: 'actions', label: 'Actions', width: '8%', end: true },
+  { key: 'actions', label: '', width: `${ACTIONS_WIDTH}px`, end: true },
 ];
 
 /** A 32px row: one cell per column, a text cell sized straight to its
@@ -115,7 +125,7 @@ function tableRow(id: string, cells: (col: (typeof COLUMNS)[number]) => SceneNod
     children: COLUMNS.map((col) => {
       const cell = cells(col);
       if (cell.type === 'text') return { ...cell, width: col.width, ...(col.end ? { textAlign: 'right' as const } : {}) };
-      return { id: `${id}-${col.key}`, type: 'frame' as const, width: col.width, minWidth: 0, alignItems: 'end' as const, children: [cell] };
+      return { ...cell, width: ACTIONS_WIDTH, minWidth: ACTIONS_WIDTH };
     }),
   };
 }
@@ -123,9 +133,10 @@ function tableRow(id: string, cells: (col: (typeof COLUMNS)[number]) => SceneNod
 /** The header row: column names in full (a header is never cut), so it has
  * no fixed height: 32 at rest, taller when a long name wraps. */
 function headerRow(id: string): SceneNode {
-  const row = tableRow(id, (col) => ({
-    id: `${id}-${col.key}-text`, type: 'text', content: col.label, fontSize: TYPE.caption, fontWeight: 600, color: COLOR.textSecondary,
-  }), { name: 'Header' });
+  // minWidth 0 lets a long unbroken name break inside its column.
+  const row = tableRow(id, (col) => (col.key === 'actions'
+    ? { id: `${id}-${col.key}`, type: 'frame', name: 'Actions' }
+    : { id: `${id}-${col.key}-text`, type: 'text', content: col.label, fontSize: TYPE.caption, fontWeight: 600, color: COLOR.textSecondary, minWidth: 0 }), { name: 'Header' });
   delete row.height;
   return row;
 }
@@ -133,7 +144,7 @@ function headerRow(id: string): SceneNode {
 function bodyRow(id: string, last = false): SceneNode {
   return tableRow(id, (col) => {
     const cid = `${id}-${col.key}-cell`;
-    if (col.key === 'actions') return iconButton(cid, 'ellipsis', 'Row actions');
+    if (col.key === 'actions') return iconButton(`${id}-actions`, 'ellipsis', 'Row actions');
     if (col.key === 'amount') return cut(cid, 'Amount — TBD', { tabularNums: true });
     if (col.key === 'name') return cut(cid, 'Item name', { fontWeight: 500 });
     return cut(cid, col.key === 'status' ? 'Status' : 'Date', { color: COLOR.textSecondary });
@@ -141,7 +152,7 @@ function bodyRow(id: string, last = false): SceneNode {
 }
 
 function skeletonRow(id: string, last = false): SceneNode {
-  const bar: Record<string, string> = { name: '60%', status: '50%', updated: '55%', amount: '45%', actions: '24px' };
+  const bar: Record<string, string> = { name: '60%', status: '50%', updated: '55%', amount: '45%', actions: '100%' };
   return {
     id, type: 'frame', name: 'Skeleton row', width: '100%', height: ROW_HEIGHT, minHeight: ROW_HEIGHT, layout: 'horizontal', alignItems: 'center',
     gap: SPACE.md, padding: [0, SPACE.md], ...(last ? {} : { borderBottom: { width: 1, color: COLOR.border } }),
@@ -194,7 +205,7 @@ export const dataTableApp: Structure = {
   kind: 'component',
   anatomy: 'data-table',
   surface: 'desktop-app',
-  description: 'The desktop-app data table on the density ladder: a 32px toolbar (search field, filter), a 32px header row over 32px body rows (name, status, date, a right-aligned amount, an icon-only row-actions button), and a 32px pager. Copy rows with batch_design C ops to extend. Its loading state is skeleton-table-app.',
+  description: 'The desktop-app data table on the density ladder: a 32px toolbar (search field, filter), a 32px header row over 32px body rows (name, status, date, a right-aligned amount, an icon-only row-actions button under a blank header), and a 32px pager. Stamp it into a wide pane (a content, work or detail pane), not a 300px side panel. Copy rows with batch_design C ops to extend. Its loading state is skeleton-table-app.',
   nodes: [{
     id: 'dta', type: 'frame', name: 'Data table', width: '100%', layout: 'vertical', gap: SPACE.sm,
     children: [
@@ -326,13 +337,14 @@ export const editorInspectorApp: Structure = {
         {
           id: 'eia-crumbs', type: 'frame', name: 'Breadcrumb', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs, minWidth: 0,
           children: [
-            { id: 'eia-crumb-parent', type: 'link', label: 'Documents' },
+            // The slot shrinks (a link never does), so a long parent name truncates.
+            { id: 'eia-crumb-slot', type: 'frame', name: 'Parent', minWidth: 0, children: [{ id: 'eia-crumb-parent', type: 'link', label: 'Documents' }] },
             { id: 'eia-crumb-sep', type: 'icon', icon: 'chevron-right', iconSize: 14, iconColor: COLOR.textSecondary },
             { id: 'eia-title', type: 'text', content: 'Document title', fontSize: TYPE.label, fontWeight: 600, color: COLOR.textPrimary, textOverflow: 'ellipsis', title: 'Document title', minWidth: 0 },
           ],
         },
         {
-          id: 'eia-actions', type: 'frame', name: 'Actions', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs,
+          id: 'eia-actions', type: 'frame', name: 'Actions', layout: 'horizontal', alignItems: 'center', gap: SPACE.xs, minWidth: 'max-content',
           children: [secondary('eia-share', 'Share'), primary('eia-publish', 'Publish')],
         },
       ],
@@ -366,6 +378,7 @@ export const editorInspectorApp: Structure = {
             { id: 'eia-prop-width', type: 'property-row', label: 'Width', children: [{ id: 'eia-prop-width-input', type: 'text-input', value: 'Value', size: 'sm', width: '100%' }] },
             { id: 'eia-prop-mode', type: 'property-row', label: 'Mode', children: [{ id: 'eia-prop-mode-select', type: 'select', value: 'Option', width: '100%' }] },
             { id: 'eia-prop-visible', type: 'property-row', label: 'Visible', children: [{ id: 'eia-prop-visible-toggle', type: 'toggle', checked: true }] },
+            { id: 'eia-prop-source', type: 'property-row', label: 'Source', children: [{ ...secondary('eia-prop-source-button', 'Choose'), maxWidth: '100%' }] },
           ],
         },
       ], { width: '30%', minWidth: 280, fill: COLOR.bgSurface, gap: SPACE.sm, padding: SPACE.md }),
