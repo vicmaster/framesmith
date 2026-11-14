@@ -1934,13 +1934,13 @@ const PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = {
   // that resolves the fallback keeps it rather than getting a seeded default.
   accent: ['primary'], 'bg-surface': ['surface'], danger: ['error'],
 };
-/** Phase 31 — the extra tokens the desktop-app vocabulary reads: the active
- * fill of nav-item / tree-row / contained tabs, and a text-input's boundary
- * (which falls back to `border`). Mobile stamps never seed them. */
+/** Phase 31 — the extra token the desktop-app vocabulary reads: a
+ * text-input's and a control's boundary (which falls back to `border`).
+ * Mobile stamps never seed it. Slice D (spec change S6) stopped seeding
+ * `accent-tint`, the active fill of nav-item / tree-row / contained tabs:
+ * presets carry no tint, so a dark seed survived a later light preset; without
+ * the token the renderer mixes 12% accent into whatever surface is applied. */
 const DESKTOP_PRIMITIVE_TYPES = new Set(['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider']);
-// Phase 31 slice D (spec change S6) — no `accent-tint` seed: presets carry no
-// tint, so a dark seed survived a later light preset; without the token the
-// renderer mixes 12% accent into whatever surface is applied.
 const DESKTOP_PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = { 'border-strong': ['border'] };
 
 /** A primitive's copy fields as [path, text]: what an agent replaces. */

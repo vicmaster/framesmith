@@ -99,17 +99,17 @@ function walkTexts(root: SceneNode, visit: (slot: TextSlot) => void): void {
   root.children?.forEach((c) => walkTexts(c, visit));
 }
 
-/** Runs of two or more consecutive sibling `list-row`s — a list, for the
- * empty and many perturbations. Lives here, not in the drift inventory, which
- * coverage, typography and drift share and which must not change. */
 /** Phase 31 slice D (spec change S5) — the desktop-app rows `many` and
  * `empty` also act on. */
 const DESKTOP_ROW_TYPES = new Set(['nav-item', 'tree-row', 'menu-row', 'property-row']);
 const CARD_GRID_MIN = 3;
 
-/** Runs of two or more sibling rows of one type: `list-row` on every type,
- * plus the desktop-app rows on a desktop-app canvas, where the children of a
- * grid holding three or more same-shaped children (a card grid) are a run too. */
+/** Runs of two or more sibling rows of one type, for the empty and many
+ * perturbations: `list-row` on every type, plus the desktop-app rows on a
+ * desktop-app canvas, where the children of a grid holding three or more
+ * same-shaped children (a card grid) are a run too. Lives here, not in the
+ * drift inventory, which coverage, typography and drift share and which must
+ * not change. */
 function listRuns(root: SceneNode, desktop = false): Array<{ container: SceneNode; start: number; length: number }> {
   const runs: Array<{ container: SceneNode; start: number; length: number }> = [];
   const isRow = (n: SceneNode): boolean => n.type === 'list-row' || (desktop && DESKTOP_ROW_TYPES.has(n.type));

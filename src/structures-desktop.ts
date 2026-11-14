@@ -101,7 +101,8 @@ const sectionTitle = (id: string, content: string): SceneNode =>
   ({ id, type: 'text', content, fontSize: TYPE.body, fontWeight: 600, color: COLOR.textPrimary });
 
 // ── the app table (data-table-app, skeleton-table-app, dashboard-app) ───────
-// Carbon's ladder: the toolbar, the header row and every body row are 32 tall.
+// Carbon's ladder: the toolbar, every body row and (at rest) the header row
+// are 32 tall.
 
 // The row-actions column is the button's own 24px under a blank header (the
 // usual overflow-menu column), so the button sits straight in the row: one
@@ -117,7 +118,8 @@ const COLUMNS: Array<{ key: string; label: string; width: string; end?: boolean 
 ];
 
 /** A 32px row: one cell per column, a text cell sized straight to its
- * column width, the actions cell a frame that right-aligns its content. */
+ * column width, the actions cell (the icon button, or the header's blank
+ * frame) at the column's fixed 24px. */
 function tableRow(id: string, cells: (col: (typeof COLUMNS)[number]) => SceneNode, extra: Partial<SceneNode> = {}): SceneNode {
   return {
     id, type: 'frame', name: 'Row', width: '100%', height: ROW_HEIGHT, minHeight: ROW_HEIGHT, layout: 'horizontal', alignItems: 'center',
@@ -330,7 +332,7 @@ export const editorInspectorApp: Structure = {
   name: 'editor-inspector-app',
   anatomy: 'editor-inspector',
   surface: 'desktop-app',
-  description: 'An editor: a header (a breadcrumb of links, the document title, actions) over a work area with a tool strip of icon-only buttons, beside a 70/30 inspector of tabs and property rows (text inputs, a select, a toggle). Each pane scrolls on its own.',
+  description: 'An editor: a header (a breadcrumb of links, the document title, actions) over a work area with a tool strip of icon-only buttons, beside a 70/30 inspector of tabs and property rows (text inputs, a select, a toggle, a button). Each pane scrolls on its own.',
   axes: { heroTreatment: 'split', density: 'dense', rhythm: 'asymmetric', alignment: 'split' },
   root: APP_ROOT,
   nodes: [shell('eia-shell', [

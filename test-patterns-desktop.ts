@@ -17,7 +17,9 @@ import './test-env.js';
  *      shorter than at baseline (rows scroll, they never squash); tripled
  *      twice, the content outgrows its pane, which then scrolls;
  *   4. a stamp on a 1024×768 window raises no desktop-app finding in detailed
- *      mode and no node reaches past the artboard's right edge.
+ *      mode and no node reaches past the artboard's right edge (stress at the
+ *      narrower windows and tables stamped into panes live in
+ *      test-patterns-desktop-window.ts).
  *
  * Components marked for every type get detailed mode (no desktop-app warning
  * or error, spec change S7) and a CLEAN stress run on a bare desktop-app
@@ -46,7 +48,8 @@ function check(name: string, cond: boolean, extra?: string) {
 }
 
 /** Detailed-mode findings that block a realisation: any desktop-app finding,
- * any tell, any warning or error. `infos` false keeps only warnings and errors. */
+ * any tell, any warning or error. `infos` false keeps only desktop-app
+ * warnings and errors (the rule for the components marked `any`). */
 async function detailedFindings(canvas: Canvas, infos = true): Promise<string[]> {
   const ev = await evaluateCanvas(canvas, { mode: 'detailed', categories: CATEGORIES });
   return ev.issues.flatMap((i) => {
