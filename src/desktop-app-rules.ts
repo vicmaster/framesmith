@@ -4,7 +4,7 @@
 import type { EvaluationIssue } from './evaluate.js';
 import type { LayoutRect } from './screenshot.js';
 import type { SceneNode } from './types.js';
-import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, modalActions, tabsItems } from './primitives.js';
+import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, modalActions, modalWidth, tabsItems } from './primitives.js';
 import { fontPx, paddingSides, proseWords } from './mobile-rules.js';
 import { shapeHash } from './shape-hash.js';
 import { windowProfile, DEFAULT_WINDOW, WINDOW_PROFILES, type SurfaceDeclaration, type WindowProfile } from './surfaces.js';
@@ -605,4 +605,170 @@ export function checkPrimaryCount(ctx: DesktopContext): EvaluationIssue[] {
       'Keep one primary; make the others variant "secondary" or "ghost". A button with no variant renders as primary.'));
   }
   return issues;
+}
+
+// ── desktop-app-overlay (FR-F1) ────────────────────────────────────────────
+
+/** A modal's body table past this many body rows belongs on a page (a house
+ * value; Atlassian: no large tables in a modal). */
+const MODAL_TABLE_ROWS = 10;
+/** The renderer clamps a modal to the viewport less this (max-width). */
+const MODAL_CLAMP = 32;
+const OVERLAY_TOLERANCE = 1;
+/** What an overlay's anchor may name: a clickable primitive or a control. */
+const ANCHOR_TARGETS = new Set([...CLICKABLE_PRIMITIVES, ...CONTROLS]);
+
+/** The overlay rules: one modal per canvas, text-only tooltips, no large
+ * tables or sideways scrolling inside a modal, every overlay inside the
+ * viewport, and no popover or menu under a scrim (spec change S8) warn; a
+ * second toast, a danger toast and an anchor that names no clickable node are
+ * infos. The viewport is the overlay layer's box (the root's numeric size,
+ * else the window profile's); fast mode reads authored rects as root
+ * coordinates, detailed mode the rendered rects. */
+export function checkOverlays(ctx: DesktopContext, tableIds: Set<string>): EvaluationIssue[] {
+  const issues: EvaluationIssue[] = [];
+  const rule = 'desktop-app-overlay';
+  const view = {
+    width: isNum(ctx.root.width) ? ctx.root.width : ctx.profile.width,
+    height: isNum(ctx.root.height) ? ctx.root.height : ctx.profile.height,
+  };
+  const rootRect = ctx.rects?.get(ctx.root.id);
+  const byId = new Map<string, SceneNode>();
+  const overlays: SceneNode[] = [];
+  // Each node's nearest overlay ancestor (M3: a lifted overlay owns its subtree).
+  const owner = new Map<SceneNode, SceneNode | undefined>();
+  (function walk(n: SceneNode, over: SceneNode | undefined) {
+    byId.set(n.id, n);
+    owner.set(n, over);
+    if (OVERLAY_TYPES.has(n.type)) overlays.push(n);
+    const next = OVERLAY_TYPES.has(n.type) ? n : over;
+    n.children?.forEach((c) => walk(c, next));
+  })(ctx.root, undefined);
+  if (overlays.length === 0) return issues;
+
+  const modals = overlays.filter((n) => n.type === 'modal');
+  if (modals.length > 1) {
+    for (const m of modals.slice(1)) {
+      issues.push(issue('usability', rule, 'warning', m,
+        `This canvas holds ${modals.length} modals — one dialog is open at a time, and a second one stacks over the first behind two scrims.`,
+        'Keep one modal per screen state; design the other as its own variant (canvas_add_variant).'));
+    }
+  }
+  const scrimmed = modals.length > 0 || overlays.some((n) => n.type === 'drawer' && n.scrim === true);
+
+  for (const n of overlays) {
+    if (n.type === 'tooltip' && (n.children?.length ?? 0) > 0) {
+      issues.push(issue('usability', rule, 'warning', n,
+        `Tooltip "${nameOf(n)}" has ${n.children!.length} child node${n.children!.length === 1 ? '' : 's'} — a tooltip is text only, and its children never render.`,
+        'Put the words in its text (U(id, { text: "…" })); for richer content use a popover.'));
+    }
+    if (scrimmed && (n.type === 'popover' || n.type === 'menu')) {
+      issues.push(issue('usability', rule, 'warning', n,
+        `${n.type === 'menu' ? 'Menu' : 'Popover'} "${nameOf(n)}" renders under the ${modals.length > 0 ? 'modal' : 'drawer'}'s scrim — it shows dimmed behind the dialog and looks disabled.`,
+        `Put its content in the ${modals.length > 0 ? 'modal' : 'drawer'} itself, or design the ${n.type} open on a variant without the dialog.`));
+    }
+    const out = leavesViewport(n);
+    if (out) {
+      issues.push(issue('usability', rule, 'warning', n, out.message, out.suggestion));
+    }
+  }
+
+  // Inside a modal (M3): large tables and frames that scroll sideways.
+  for (const [n, over] of owner) {
+    if (over?.type !== 'modal') continue;
+    if (tableIds.has(n.id)) {
+      const rows = rowsOf(n);
+      const body = rows.length > 0 && isHeaderRow(rows[0], rows[1]) ? rows.length - 1 : rows.length;
+      if (body > MODAL_TABLE_ROWS) {
+        issues.push(issue('usability', rule, 'warning', n,
+          `Table "${nameOf(n)}" shows ${body} rows inside modal "${nameOf(over)}" — a dialog is for a short decision, not for browsing data (Atlassian).`,
+          `Keep the table to ${MODAL_TABLE_ROWS} rows or fewer in the modal, or move it to a page or a drawer.`));
+      }
+    }
+    if (n.type === 'frame' && n.overflow === 'auto') {
+      const wide = sidewaysScroll(n, over);
+      if (wide) {
+        issues.push(issue('usability', rule, 'warning', n,
+          `Scrolling frame "${nameOf(n)}" inside modal "${nameOf(over)}" ${wide} — horizontal scrolling inside a dialog is easy to miss (Atlassian).`,
+          'Fit the content to the modal (fewer columns, wrapping), give the modal a larger size, or move the content to a page.'));
+      }
+    }
+  }
+
+  const toasts = overlays.filter((n) => n.type === 'toast');
+  for (const t of toasts.slice(1)) {
+    issues.push(issue('usability', rule, 'info', t,
+      `This canvas shows ${toasts.length} toasts at once — toasts stack over each other and each one gets less attention.`,
+      'Show one toast at a time; fold related messages into one.'));
+  }
+  for (const t of toasts) {
+    if (t.tone !== 'danger') continue;
+    issues.push(issue('usability', rule, 'info', t,
+      `Toast "${nameOf(t)}" carries an error (tone "danger") — a transient toast is easy to miss, and the error disappears before it is read (NN/g).`,
+      'Show the error inline next to what failed, or in a banner that stays until it is dismissed.'));
+  }
+  for (const n of overlays) {
+    if (typeof n.anchor !== 'string' || n.anchor.trim() === '') continue;
+    const slash = n.id.lastIndexOf('/');
+    const target = (slash >= 0 ? byId.get(n.id.slice(0, slash + 1) + n.anchor) : undefined) ?? byId.get(n.anchor);
+    if (!target) {
+      issues.push(issue('usability', rule, 'info', n,
+        `${n.type} "${nameOf(n)}" is anchored to "${n.anchor}", which names no node on this canvas.`,
+        'Point anchor at the id of the control that opens it.'));
+    } else if (!ANCHOR_TARGETS.has(target.type)) {
+      issues.push(issue('usability', rule, 'info', n,
+        `${n.type} "${nameOf(n)}" is anchored to "${nameOf(target)}", a ${target.type} — nothing the user can click opens it.`,
+        'Anchor it to the button, link or control that opens it (a frame cannot be clicked or reached by keyboard).'));
+    }
+  }
+  return issues;
+
+  /** M4(e): the modal clamp in both modes, then the four edges. */
+  function leavesViewport(n: SceneNode): { message: string; suggestion: string } | undefined {
+    if (n.type === 'modal' && modalWidth(n) > view.width - MODAL_CLAMP) {
+      return {
+        message: `Modal "${nameOf(n)}" is ${modalWidth(n)}px wide in a ${view.width}px viewport — the render squeezes it to ${view.width - MODAL_CLAMP}px, narrower than its content was laid out for.`,
+        suggestion: 'Use a smaller size (sm 480, md 640, lg 960) or width that fits the viewport with 16px each side.',
+      };
+    }
+    const rect = ctx.rects?.get(n.id);
+    let box: { x: number; y: number; width: number; height: number } | undefined;
+    let tol = 0;
+    if (rect && rootRect) {
+      box = { x: rect.x - rootRect.x, y: rect.y - rootRect.y, width: rect.width, height: rect.height };
+      tol = OVERLAY_TOLERANCE;
+    } else if (n.type !== 'drawer' && isNum(n.x) && isNum(n.y) && isNum(n.width) && isNum(n.height)) {
+      box = { x: n.x, y: n.y, width: n.width, height: n.height };
+    }
+    if (!box) return undefined;
+    const edges = [
+      box.x < -tol && 'left',
+      box.y < -tol && 'top',
+      box.x + box.width > view.width + tol && 'right',
+      box.y + box.height > view.height + tol && 'bottom',
+    ].filter((e): e is string => !!e);
+    if (edges.length === 0) return undefined;
+    return {
+      message: `${n.type} "${nameOf(n)}" leaves the ${view.width}×${view.height} viewport past its ${edges.join(' and ')} edge${edges.length === 1 ? '' : 's'} (at ${box.x}, ${box.y}, ${box.width}×${box.height}) — part of it is cut off.`,
+      suggestion: 'Move it (x / y are root coordinates) or shrink it so the whole box sits inside the window.',
+    };
+  }
+
+  /** M4(d): why a scrolling frame in a modal scrolls sideways, if it does. */
+  function sidewaysScroll(n: SceneNode, modal: SceneNode): string | undefined {
+    if (ctx.rects) {
+      const r = ctx.rects.get(n.id);
+      const m = ctx.rects.get(modal.id);
+      if (r && m && r.width > m.width + OVERLAY_TOLERANCE) return `is ${r.width}px wide in a ${m.width}px modal`;
+      if (r && isNum(r.scrollWidth) && isNum(r.clientWidth) && r.scrollWidth > r.clientWidth + OVERLAY_TOLERANCE) {
+        return `scrolls sideways (${r.scrollWidth}px of content in ${r.clientWidth}px)`;
+      }
+      if (r) return undefined;
+    }
+    // The renderer shrinks a numeric width to its parent unless the node sets
+    // a maxWidth, so only a minWidth, or a width with a maxWidth, renders wider.
+    const fixed = isNum(n.width) && n.maxWidth !== undefined ? (isNum(n.maxWidth) ? Math.min(n.width, n.maxWidth) : n.width) : 0;
+    const w = Math.max(isNum(n.minWidth) ? n.minWidth : 0, fixed);
+    return w > modalWidth(modal) ? `is ${w}px wide in a ${modalWidth(modal)}px modal` : undefined;
+  }
 }

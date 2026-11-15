@@ -4,7 +4,7 @@ import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, resolveInstance } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import {
-  checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkPrimaryCount, checkRowRhythm, checkTruncation,
+  checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkOverlays, checkPrimaryCount, checkRowRhythm, checkTruncation,
   checkTypeLadder, type DesktopContext,
 } from './desktop-app-rules.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
@@ -2684,6 +2684,7 @@ export async function evaluateCanvas(
       ...(desktop && ruleOn.has('desktop-app-icon-label') ? checkIconLabels(desktop) : []),
       ...(desktop && ruleOn.has('desktop-app-current') ? checkCurrent(desktop) : []),
       ...(desktop && ruleOn.has('desktop-app-truncation') ? checkTruncation(desktop, desktopTables) : []),
+      ...(desktop && ruleOn.has('desktop-app-overlay') ? checkOverlays(desktop, desktopTables) : []),
     ], owners);
     results.set('usability', withRuleIssues(usability, extra));
   }

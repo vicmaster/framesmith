@@ -570,7 +570,7 @@ Run on its own viewer (2026-11-08), framesmith scored every page's usability 100
 - [x] Slice D — panes: resolution for any number of types, six desktop-app realisations (workbench, list-detail, editor-inspector, browser, dashboard, settings) and the `data-table-app` / `skeleton-table-app` components under the pattern gate, scrolling panes that stress reads as scrolling, and stress runs that triple app rows and card grids
 - [ ] Follow-up — the web scaffolds' tint tokens (`success-tint` and the rest) are seeded dark and survive a later light `apply_preset`, as `accent-tint` did before Phase 31 slice D stopped seeding it; derive them from the applied palette instead
 - [x] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
-- [ ] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, and advisories on stacked toasts and error toasts
+- [x] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, nothing under a scrim, and advisories on stacked toasts, error toasts and dangling anchors
 - [ ] Slice G — element states: hover, focus, pressed and disabled as a primitive property, drawn from state tokens
 - [ ] Slice H — state checks: focus rings, active indicators, disabled renders and control boundaries checked analytically on every interactive primitive, without being drawn
 - [ ] Slice I — the acceptance re-run: the viewer's gallery, detail with inspector and archive rebuilt as canvases, with the comment popover and delete-confirm states
