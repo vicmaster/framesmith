@@ -291,11 +291,12 @@ const nav = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
     text('big', 'Title', 36), text('small', 'Label', 13),
     frame('users', [frame('head', cells('h', { textOverflow: 'ellipsis' }), { layout: 'horizontal', height: 40 }), ...[0, 1, 2].map((i) => frame(`r${i}`, cells(`r${i}`), { layout: 'horizontal', height: 32 }))]),
     frame('bar', [{ id: 'p1', name: 'p1', type: 'button', label: 'Save', variant: 'primary' }, { id: 'p2', name: 'p2', type: 'button', label: 'Publish', variant: 'primary' }], { layout: 'horizontal' }),
+    { id: 'oops', name: 'oops', type: 'toast', text: 'Could not save', tone: 'danger' },
   ];
   const expected: Record<string, string> = {
     'desktop-app-target': 'usability', 'desktop-app-handbuilt-target': 'usability', 'desktop-app-icon-label': 'usability',
     'desktop-app-current': 'usability', 'desktop-app-type-ladder': 'typography', 'desktop-app-row-rhythm': 'consistency',
-    'desktop-app-truncation': 'usability', 'desktop-app-primary-count': 'structure',
+    'desktop-app-truncation': 'usability', 'desktop-app-primary-count': 'structure', 'desktop-app-overlay': 'usability',
   };
   check('the combined tree covers every registered desktop-app rule', JSON.stringify(Object.keys(expected).sort()) === JSON.stringify([...DESKTOP_APP_RULES].sort()));
   const app = (await evaluateCanvas(canvasOf(everything), { mode: 'fast' })).issues;

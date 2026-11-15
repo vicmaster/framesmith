@@ -199,6 +199,7 @@ export const DESKTOP_APP_RULES: readonly string[] = [
   'desktop-app-row-rhythm',
   'desktop-app-truncation',
   'desktop-app-primary-count',
+  'desktop-app-overlay',
 ];
 
 /** Phase 31: default rules — they run unless an active ruleset disables them.
