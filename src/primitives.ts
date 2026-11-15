@@ -51,6 +51,59 @@ export const CONTROL_OWNERS = new Set(['property-row', 'nav-item', 'menu-row', '
 /** The desktop-app primitives — on a canvas that never declared desktop-app,
  * their presence asks for a declaration (desktop-app-artboard). */
 export const DESKTOP_APP_PRIMITIVES = new Set(['nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row']);
+// Phase 31 slice E — overlays. The renderer lifts them into one layer after
+// the content; the layer order is fixed by kind (Atlassian's ladder).
+export const OVERLAY_TYPES = new Set(['tooltip', 'popover', 'menu', 'modal', 'toast', 'drawer']);
+export const OVERLAY_Z = { popover: 400, menu: 400, scrim: 500, modal: 510, drawer: 510, toast: 600, tooltip: 800 } as const;
+export const TOOLTIP_MAX_WIDTH = 240;
+export const MENU_MIN_WIDTH = 192;
+export const POPOVER_WIDTH = { xs: 192, sm: 320, md: 480, lg: 640 } as const;
+export const MODAL_WIDTH = { sm: 480, md: 640, lg: 960 } as const;
+export const DRAWER_WIDTH = { sm: 320, md: 480 } as const;
+/** The modal's header close button and its actions (sm buttons), and a
+ * toast's action (an xs button). */
+export const MODAL_CONTROL = 32;
+export const TOAST_ACTION = 24;
+
+/** A modal's width: a numeric width, else its size (default md). */
+export function modalWidth(n: SceneNode): number {
+  return isNum(n.width) ? n.width : MODAL_WIDTH[n.size === 'sm' || n.size === 'lg' ? n.size : 'md'];
+}
+
+/** A popover's width: a numeric width, else its size (default sm). */
+export function popoverWidth(n: SceneNode): number {
+  return isNum(n.width) ? n.width : POPOVER_WIDTH[n.size === 'xs' || n.size === 'md' || n.size === 'lg' ? n.size : 'sm'];
+}
+
+/** A drawer's width: a numeric width, else its size (default sm). */
+export function drawerWidth(n: SceneNode): number {
+  return isNum(n.width) ? n.width : DRAWER_WIDTH[n.size === 'md' ? 'md' : 'sm'];
+}
+
+/** A modal's actions that render (a blank label is skipped), in rendered
+ * order: the non-filled ones (no variant renders secondary) as authored, then
+ * the filled ones (primary, destructive), so the filled action is rightmost. */
+export function modalActions(n: SceneNode): Array<NonNullable<SceneNode['actions']>[number]> {
+  const all = Array.isArray(n.actions) ? n.actions.filter((a) => !!a && typeof a === 'object' && hasText(a.label)) : [];
+  const filled = (a: { variant?: string }) => a.variant === 'primary' || a.variant === 'destructive';
+  return [...all.filter((a) => !filled(a)), ...all.filter(filled)];
+}
+
+/** The pointer targets an overlay renders under its own node id: a modal's
+ * close button and actions, a toast's action. */
+export function overlayTargets(n: SceneNode): Array<{ what: string; w?: number; h: number; disabled: boolean }> {
+  if (n.type === 'modal') {
+    return [
+      { what: 'modal close button', w: MODAL_CONTROL, h: MODAL_CONTROL, disabled: false },
+      ...modalActions(n).map((a) => ({ what: `modal action "${String(a.label).trim()}"`, h: MODAL_CONTROL, disabled: false })),
+    ];
+  }
+  if (n.type === 'toast' && n.action && typeof n.action === 'object' && hasText(n.action.label)) {
+    return [{ what: `toast action "${String(n.action.label).trim()}"`, h: TOAST_ACTION, disabled: false }];
+  }
+  return [];
+}
+
 /** Chrome a pinned position reserves room for, and the edge it pins to. */
 export const CHROME_EDGE: Record<string, 'top' | 'bottom'> = { 'status-bar': 'top', 'home-indicator': 'bottom', 'tab-bar': 'bottom' };
 
@@ -59,10 +112,12 @@ const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFin
 /** A label prop that renders: a non-blank string or a finite number. */
 const hasText = (v: unknown): boolean => (typeof v === 'string' && v.trim() !== '') || isNum(v);
 
-/** A node's position as rendered: pinned chrome defaults to `fixed`, and a
- * sheet is always `fixed`. */
+/** A node's position as rendered: pinned chrome defaults to `fixed`, a
+ * sheet is always `fixed`, and an overlay is `absolute` in the overlay layer. */
 export function effectivePosition(n: SceneNode): SceneNode['position'] {
   if (n.type === 'sheet') return 'fixed'; // always an overlay; its position prop is ignored
+  // Phase 31 slice E — lifted into the overlay layer, out of flow.
+  if (OVERLAY_TYPES.has(n.type)) return 'absolute';
   return n.position ?? (Object.hasOwn(CHROME_EDGE, n.type) ? 'fixed' : undefined);
 }
 

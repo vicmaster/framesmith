@@ -7,6 +7,7 @@ import {
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
   LINK_MIN_HEIGHT, LINK_ICON, LINK_EXTERNAL, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
   tabsItems, textInputHeight, textInputRows,
+  OVERLAY_TYPES, OVERLAY_Z, TOOLTIP_MAX_WIDTH, MENU_MIN_WIDTH, drawerWidth, modalActions, modalWidth, popoverWidth,
 } from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
@@ -96,6 +97,13 @@ interface RenderCtx {
   rootChild?: boolean;
   /** Rendering a direct child of a sheet, whose panel scrolls: it never shrinks. */
   sheetChild?: boolean;
+  /** Phase 31 slice E — overlays met while rendering, lifted into the overlay
+   * layer after the content (shared by every derived context). */
+  overlays: SceneNode[];
+  /** Phase 31 slice E — what a viewport-anchored overlay keeps clear of at
+   * each edge: the root's declared safeArea, or the pinned chrome's reach,
+   * whichever is larger (0 on a canvas with neither). */
+  clear: { top: number; bottom: number };
 }
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
@@ -103,8 +111,12 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
   const expand = (n: SceneNode) => (n.type === 'instance' && n.componentId && canvas ? resolveInstance(n, canvas) ?? n : n);
   const columnWidth = Math.min(typeof root.width === 'number' ? root.width : width, width);
   const designWidth = typeof root.width === 'number' && root.width > 0 ? root.width : DESIGN_WIDTH;
-  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation: chromeReservation(root, expand), designWidth };
-  const body = renderNode(root, rc);
+  const overlays: SceneNode[] = [];
+  const reservation = chromeReservation(root, expand);
+  const safe = root.type === 'document' ? usableSafeArea(root.safeArea) : {};
+  const clear = { top: Math.max(safe.top ?? 0, reservation.top), bottom: Math.max(safe.bottom ?? 0, reservation.bottom) };
+  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation, designWidth, overlays, clear };
+  const body = renderNode(root, rc) + overlayLayer(rc, height);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
   // (the live viewer). Without them the fs-skeleton class is inert, so every
@@ -138,7 +150,7 @@ ${preconnect}<style>
   img { display: block; max-width: 100%; }
   p { overflow-wrap: break-word; word-wrap: break-word; }
   [data-focusable]:focus-visible { outline: 2px solid var(--fs-ring, #2563EB); outline-offset: 2px; }
-${fontFaceCss}${responsiveCss}${skeletonCss}
+${overlays.length ? '  body { position: relative; }\n' : ''}${fontFaceCss}${responsiveCss}${skeletonCss}
 </style>
 </head>
 <body>
@@ -594,6 +606,12 @@ function renderNode(node: SceneNode, rc: RenderCtx): string {
   if (node.type === 'instance' && node.componentId && canvas) {
     const resolved = resolveInstance(node, canvas);
     if (resolved) return renderNode(resolved, rc);
+  }
+
+  // Phase 31 slice E — an overlay renders in the overlay layer, not here.
+  if (OVERLAY_TYPES.has(node.type)) {
+    rc.overlays.push(node);
+    return '';
   }
 
   // Phase 30 slice D — mobile primitives: fixed anatomy, own builders.
@@ -1475,6 +1493,174 @@ function renderDivider(node: SceneNode, rc: RenderCtx, attrs: string): string {
     !vertical && node.width !== undefined ? `width: ${cssLength(node.width)}` : undefined,
   ]);
   return `<div${attrs} style="${box}"></div>`;
+}
+
+// ── Phase 31 slice E — the overlay layer ────────────────────────────────────
+// Overlays never render where they sit in the tree: renderNode collects them
+// and the layer renders them after the content, so a menu authored inside a
+// sticky bar or a scrolling pane is never clipped or out-stacked. The layer is
+// the artboard box at the root's origin; authored x / y are offsets from the
+// root's top-left. The layer has no z-index, so each overlay's own (fixed by
+// kind) stacks it above every content layer (fixed 10, sticky 5, sheet 30).
+
+const SCRIM_COLOR = 'rgba(0, 0, 0, 0.4)';
+const OVERLAY_SHADOW = '0 8px 10px -4px rgba(15, 23, 42, 0.06), 0 20px 25px -5px rgba(15, 23, 42, 0.14)';
+const TONE_ICON = { neutral: 'info', success: 'circle-check', warning: 'triangle-alert', danger: 'circle-alert' } as const;
+const TONE_FALLBACK = { neutral: FALLBACK.secondary, success: '#16A34A', warning: '#D97706', danger: FALLBACK.danger } as const;
+
+function overlayLayer(rc: RenderCtx, height: number): string {
+  if (!rc.overlays.length) return '';
+  const layerRc: RenderCtx = { ...rc, rootChild: false, sheetChild: false };
+  let html = '';
+  // Rendering an overlay's children can collect nested overlays: they join the
+  // queue and render as members of the layer too.
+  for (let i = 0; i < rc.overlays.length; i++) html += renderOverlay(rc.overlays[i], layerRc);
+  const box = css(['position: absolute', 'left: 0', 'top: 0', 'width: 100%', `max-width: ${rc.columnWidth}px`, `height: ${height}px`, 'pointer-events: none']);
+  return `\n<div data-fs-overlay-layer style="${box}">${html}</div>`;
+}
+
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Authored x / y in root coordinates (each defaults to 0). */
+function placedAt(node: SceneNode): string[] {
+  return [`left: ${num(node.x) ? node.x : 0}px`, `top: ${num(node.y) ? node.y : 0}px`];
+}
+
+function overlayShadow(node: SceneNode): string {
+  return boxShadowCss(node.shadows, node.shadow) ?? OVERLAY_SHADOW;
+}
+
+function radiusOf(node: SceneNode, fallback: number): number {
+  return typeof node.cornerRadius === 'number' ? node.cornerRadius : fallback;
+}
+
+function scrimHtml(node: SceneNode): string {
+  return `<div data-fs-scrim="${node.id}" style="${css(['position: absolute', 'inset: 0', `z-index: ${OVERLAY_Z.scrim}`, `background-color: ${SCRIM_COLOR}`, 'pointer-events: auto'])}"></div>`;
+}
+
+function renderOverlay(node: SceneNode, rc: RenderCtx): string {
+  const dataAttr = ` data-node-id="${node.id}" data-fs-overlay="${node.type}"`;
+  switch (node.type) {
+    case 'tooltip': return renderTooltip(node, `${dataAttr} data-fs-primitive role="tooltip"`);
+    case 'modal': return renderModal(node, rc, `${dataAttr} data-fs-primitive role="dialog" aria-modal="true"`);
+    case 'toast': return renderToast(node, rc, `${dataAttr} data-fs-primitive role="${node.tone === 'danger' ? 'alert' : 'status'}"`);
+    default: return renderOverlayContainer(node, rc, dataAttr);
+  }
+}
+
+function renderTooltip(node: SceneNode, attrs: string): string {
+  const box = css([
+    'position: absolute', ...placedAt(node), `z-index: ${OVERLAY_Z.tooltip}`, 'pointer-events: auto', 'box-sizing: border-box',
+    'width: max-content', `max-width: ${TOOLTIP_MAX_WIDTH}px`, 'padding: 4px 8px', `border-radius: ${radiusOf(node, 4)}px`,
+    `background-color: ${node.fill ?? FALLBACK.text}`, `color: ${node.color ?? FALLBACK.surface}`,
+    'font-size: 12px', 'line-height: 16px', 'overflow-wrap: anywhere', `box-shadow: ${overlayShadow(node)}`,
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  // Text only: a tooltip's children never render (slice F warns on them).
+  return `<div${attrs} style="${box}">${escapeHtml(text(node.text))}</div>`;
+}
+
+/** popover / menu / drawer: containers whose children render with the usual
+ * layout props; only the placement and the defaults are the overlay's. */
+function renderOverlayContainer(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const drawer = node.type === 'drawer';
+  const menu = node.type === 'menu';
+  const width = drawer ? drawerWidth(node) : node.type === 'popover' ? popoverWidth(node) : num(node.width) ? node.width : undefined;
+  const layout: SceneNode = {
+    ...node, position: undefined, x: undefined, y: undefined, right: undefined, bottom: undefined,
+    width, height: drawer ? undefined : node.height, layout: node.layout ?? 'vertical',
+    padding: node.padding ?? (menu ? 4 : drawer ? 16 : 12),
+    stroke: drawer ? undefined : node.stroke ?? FALLBACK.border, fill: node.fill ?? FALLBACK.surface,
+    color: node.color ?? FALLBACK.text, cornerRadius: node.cornerRadius ?? (drawer ? 0 : 8),
+  };
+  // A drawer runs the artboard's full height: its padding clears the safe
+  // area and pinned chrome at each end, as a sheet's does.
+  const [pt, , pb] = paddingCss(layout.padding);
+  const box = css([
+    buildStyles(layout, rc), 'position: absolute', 'box-sizing: border-box', 'pointer-events: auto',
+    `z-index: ${OVERLAY_Z[drawer ? 'drawer' : menu ? 'menu' : 'popover']}`,
+    ...(drawer ? ['top: 0', 'bottom: 0', 'right: 0', 'overflow-y: auto', `border-left: 1px solid ${node.stroke ?? FALLBACK.border}`] : placedAt(node)),
+    drawer && rc.clear.top > 0 ? `padding-top: calc(${pt} + ${rc.clear.top}px)` : undefined,
+    drawer && rc.clear.bottom > 0 ? `padding-bottom: calc(${pb} + ${rc.clear.bottom}px)` : undefined,
+    menu && width === undefined ? 'width: max-content' : undefined,
+    menu ? `min-width: ${MENU_MIN_WIDTH}px` : undefined,
+    `box-shadow: ${overlayShadow(node)}`,
+  ]);
+  const role = menu ? ' role="menu"' : ' role="dialog"';
+  const scrim = drawer && node.scrim === true ? scrimHtml(node) : '';
+  return `${scrim}<div${attrs}${role}${drawer && node.scrim === true ? ' aria-modal="true"' : ''} style="${box}">${renderChildren(node, rc)}</div>`;
+}
+
+/** A modal action's colours: its own, else what a button of that variant
+ * draws. No variant renders secondary. */
+function actionButton(node: SceneNode, a: NonNullable<SceneNode['actions']>[number]): SceneNode {
+  const variant = a.variant ?? 'secondary';
+  const filled = variant === 'primary' || variant === 'destructive';
+  const fill = a.fill ?? (filled ? (variant === 'destructive' ? FALLBACK.danger : FALLBACK.accent) : 'transparent');
+  const stroke = a.stroke ?? (variant === 'secondary' ? node.stroke ?? FALLBACK.border : undefined);
+  return {
+    id: node.id, type: 'button', size: 'sm', label: String(a.label).trim(), variant, maxWidth: 240, fill,
+    color: a.color ?? (filled ? '#FFFFFF' : variant === 'ghost' ? FALLBACK.accent : node.color ?? FALLBACK.text),
+    ...(stroke ? { stroke } : {}),
+  };
+}
+
+function renderModal(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const title = text(node.title);
+  if (title) attrs += ` aria-label="${escapeAttr(title)}"`;
+  const placed = num(node.x) || num(node.y);
+  // Centred between the edges, 32px clear of each, or 16px past the safe
+  // area and pinned chrome on a phone.
+  const top = Math.max(32, rc.clear.top ? rc.clear.top + 16 : 0);
+  const bottom = Math.max(32, rc.clear.bottom ? rc.clear.bottom + 16 : 0);
+  const box = css([
+    'position: absolute', `z-index: ${OVERLAY_Z.modal}`, 'pointer-events: auto', 'box-sizing: border-box',
+    'display: flex', 'flex-direction: column', `width: ${modalWidth(node)}px`, 'max-width: calc(100% - 32px)', `max-height: calc(100% - ${top + bottom}px)`,
+    ...(placed ? placedAt(node) : [`top: ${top}px`, `bottom: ${bottom}px`, 'left: 0', 'right: 0', 'margin: auto', 'height: fit-content']),
+    `background-color: ${node.fill ?? FALLBACK.surface}`, `border: 1px solid ${node.stroke ?? FALLBACK.border}`,
+    `border-radius: ${radiusOf(node, 12)}px`, `box-shadow: ${overlayShadow(node)}`, `color: ${node.color ?? FALLBACK.text}`, 'overflow: hidden',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const close = renderButton({
+    id: node.id, type: 'button', size: 'sm', icon: 'x', variant: 'ghost', fill: 'transparent',
+    color: node.secondaryColor ?? FALLBACK.secondary, ariaLabel: text(node.closeLabel) || 'Close',
+  }, rc, ' tabindex="0" data-focusable data-fs-modal-close');
+  const header = `<div style="${css(['display: flex', 'align-items: center', 'gap: 12px', 'flex-shrink: 0', 'padding: 12px 12px 4px 20px'])}"><div style="flex: 1 1 0; min-width: 0; display: flex">${title ? titledLabel(title, 'font-size: 16px; font-weight: 600; line-height: 24px') : ''}</div>${close}</div>`;
+  const actions = modalActions(node);
+  const [pt, pr, pb, pl] = node.padding !== undefined ? paddingCss(node.padding) : ['8px', '20px', actions.length ? '8px' : '20px', '20px'];
+  // data-fs-slot: the layout walker steps through it, so the body's nodes are placed.
+  const body = `<div data-fs-slot style="${css([
+    'flex: 1 1 auto', 'min-height: 0', 'overflow-y: auto', 'display: flex', 'flex-direction: column',
+    `gap: ${typeof node.gap === 'number' ? node.gap : 12}px`, node.alignItems ? `align-items: ${cssFlexAlign(node.alignItems)}` : undefined,
+    `padding: ${pt} ${pr} ${pb} ${pl}`,
+  ])}">${renderChildren(node, rc)}</div>`;
+  const footer = actions.length
+    ? `<div style="${css(['display: flex', 'flex-wrap: wrap', 'justify-content: flex-end', 'gap: 8px', 'flex-shrink: 0', 'padding: 12px 20px 16px'])}">${actions.map((a) => renderButton(actionButton(node, a), rc, ' tabindex="0" data-focusable')).join('')}</div>`
+    : '';
+  return `${scrimHtml(node)}<div${attrs} style="${box}">${header}${body}${footer}</div>`;
+}
+
+function renderToast(node: SceneNode, rc: RenderCtx, attrs: string): string {
+  const tone = node.tone === 'success' || node.tone === 'warning' || node.tone === 'danger' ? node.tone : 'neutral';
+  const placed = num(node.x) || num(node.y);
+  const label = node.action && typeof node.action === 'object' ? text(node.action.label) : '';
+  const box = css([
+    'position: absolute', `z-index: ${OVERLAY_Z.toast}`, 'pointer-events: auto', 'box-sizing: border-box',
+    // 24px above the bottom edge, or 16px above the safe area and pinned chrome.
+    ...(placed ? placedAt(node) : ['left: 0', 'right: 0', `bottom: ${rc.clear.bottom ? rc.clear.bottom + 16 : 24}px`, 'margin: 0 auto']),
+    'width: max-content', 'max-width: min(480px, calc(100% - 32px))', 'min-height: 40px',
+    'display: flex', 'align-items: center', 'gap: 10px', label ? 'padding: 8px 8px 8px 12px' : 'padding: 8px 12px',
+    `background-color: ${node.fill ?? FALLBACK.surface}`, `border: 1px solid ${node.stroke ?? FALLBACK.border}`,
+    `border-radius: ${radiusOf(node, 8)}px`, `box-shadow: ${overlayShadow(node)}`, `color: ${node.color ?? FALLBACK.text}`,
+    'font-size: 14px', 'line-height: 20px',
+    node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
+  ]);
+  const glyph = `<span style="flex-shrink: 0; display: flex">${iconHtml(TONE_ICON[tone], 16, node.iconColor ?? TONE_FALLBACK[tone])}</span>`;
+  const message = `<span style="flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere">${escapeHtml(text(node.text))}</span>`;
+  const action = label
+    ? renderButton({ id: node.id, type: 'button', size: 'xs', label, variant: 'ghost', fill: 'transparent', color: node.action?.color ?? FALLBACK.accent, maxWidth: 160 }, rc, ' tabindex="0" data-focusable')
+    : '';
+  return `<div${attrs} style="${box}">${glyph}${message}${action}</div>`;
 }
 
 /** The four authored padding sides as CSS (fluid like every padding). */

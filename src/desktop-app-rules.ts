@@ -4,7 +4,7 @@
 import type { EvaluationIssue } from './evaluate.js';
 import type { LayoutRect } from './screenshot.js';
 import type { SceneNode } from './types.js';
-import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, tabsItems } from './primitives.js';
+import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, modalActions, tabsItems } from './primitives.js';
 import { fontPx, paddingSides, proseWords } from './mobile-rules.js';
 import { shapeHash } from './shape-hash.js';
 import { windowProfile, DEFAULT_WINDOW, WINDOW_PROFILES, type SurfaceDeclaration, type WindowProfile } from './surfaces.js';
@@ -13,8 +13,10 @@ import { windowProfile, DEFAULT_WINDOW, WINDOW_PROFILES, type SurfaceDeclaration
  * narrower than its window's minimum warns (slice A). A canvas that holds a
  * desktop-app primitive (nav-item, tabs, tree-row, menu-row, property-row)
  * must say it is one (slice B): undeclared warns, an explicit `web` gets an
- * info, an explicit `mobile` warns. The overlay clause lands with the
- * overlay primitives (slice E). Reads the tree with instances expanded. */
+ * info, an explicit `mobile` warns. An undeclared canvas holding an overlay
+ * primitive warns too (slice E); overlays alone never trip the web or mobile
+ * cases, since pages and phones use them. Reads the tree with instances
+ * expanded. */
 export function checkDesktopArtboard(root: SceneNode, surface: SurfaceDeclaration): EvaluationIssue[] {
   if (surface.type !== 'desktop-app') return checkAppPrimitivesDeclared(root, surface);
   const profile = windowProfile(surface.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW];
@@ -31,24 +33,30 @@ export function checkDesktopArtboard(root: SceneNode, surface: SurfaceDeclaratio
   }];
 }
 
-function firstAppPrimitive(root: SceneNode): SceneNode | undefined {
-  if (DESKTOP_APP_PRIMITIVES.has(root.type)) return root;
+/** The first node of one of `types`, depth first. A `menu-row` inside a
+ * `menu` belongs to the overlay (pages and phones open menus too), so it is
+ * never counted as a desktop-app primitive. */
+function firstOf(root: SceneNode, types: ReadonlySet<string>, inMenu = false): SceneNode | undefined {
+  if (types.has(root.type) && !(inMenu && root.type === 'menu-row')) return root;
   for (const c of root.children ?? []) {
-    const hit = firstAppPrimitive(c);
+    const hit = firstOf(c, types, inMenu || root.type === 'menu');
     if (hit) return hit;
   }
   return undefined;
 }
 
 function checkAppPrimitivesDeclared(root: SceneNode, surface: SurfaceDeclaration): EvaluationIssue[] {
-  const hit = firstAppPrimitive(root);
+  const app = firstOf(root, DESKTOP_APP_PRIMITIVES);
+  // Only an undeclared canvas is asked about an overlay.
+  const hit = app ?? (surface.source === 'default' ? firstOf(root, OVERLAY_TYPES) : undefined);
   if (!hit) return [];
   const what = `a ${hit.type}${hit.name ? ` ("${hit.name}")` : ''}`;
+  const kind = app ? 'a desktop-app primitive' : 'an overlay primitive';
   const base = { category: 'structure', rule: 'desktop-app-artboard', nodeId: hit.id, nodeName: hit.name } as const;
   if (surface.source === 'default') {
     return [{
       ...base, severity: 'warning',
-      message: `This canvas holds ${what}, a desktop-app primitive, but never declared its type, so it is judged as a web page.`,
+      message: `This canvas holds ${what}, ${kind}, but never declared its type, so it is judged as a web page.`,
       suggestion: 'Declare it: canvas_set_type({ type: "desktop-app" }) for an application screen (a tool you work in), or canvas_set_type({ type: "web" }) if it really is a page you read.',
     }];
   }
@@ -96,13 +104,13 @@ function parents(root: SceneNode): Map<SceneNode, SceneNode | null> {
   return out;
 }
 
-/** A pane: a frame that scrolls on its own (overflow "auto"), or the root.
- * (`modal` and `drawer` join with the overlay primitives, slice E.) */
+/** A pane: a frame that scrolls on its own (overflow "auto"), a `modal`, a
+ * `drawer`, or the root. */
 function paneOf(n: SceneNode, parentOf: Map<SceneNode, SceneNode | null>): SceneNode {
   let cur = parentOf.get(n) ?? null;
   let last = n;
   while (cur) {
-    if (cur.type === 'frame' && cur.overflow === 'auto') return cur;
+    if ((cur.type === 'frame' && cur.overflow === 'auto') || cur.type === 'modal' || cur.type === 'drawer') return cur;
     last = cur;
     cur = parentOf.get(cur) ?? null;
   }
@@ -564,8 +572,8 @@ const REPEAT_MIN = 3;
 
 /** More than one primary button in one region (the nearest pane) is an info.
  * A primary inside one of three or more same-shaped sibling frames (shape
- * hash without names) is not counted. A modal's primary action joins with the
- * overlays (slice E). */
+ * hash without names) is not counted. A modal is a region of its own, and its
+ * `primary` actions count there (a destructive action is not a primary). */
 export function checkPrimaryCount(ctx: DesktopContext): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   const parentOf = parents(ctx.root);
@@ -580,16 +588,20 @@ export function checkPrimaryCount(ctx: DesktopContext): EvaluationIssue[] {
     }
     return false;
   };
-  const byPane = new Map<SceneNode, SceneNode[]>();
+  const byPane = new Map<SceneNode, Array<{ node: SceneNode; label: string }>>();
+  const add = (pane: SceneNode, node: SceneNode, label: string) => byPane.set(pane, [...(byPane.get(pane) ?? []), { node, label }]);
   for (const n of parentOf.keys()) {
+    if (n.type === 'modal') {
+      for (const a of modalActions(n)) if (a.variant === 'primary') add(n, n, String(a.label).trim());
+      continue;
+    }
     if (!isPrimary(n) || n.disabled === true || repeated(n)) continue;
-    const pane = paneOf(n, parentOf);
-    byPane.set(pane, [...(byPane.get(pane) ?? []), n]);
+    add(paneOf(n, parentOf), n, String(n.label ?? n.ariaLabel ?? nameOf(n)));
   }
   for (const [pane, buttons] of byPane) {
     if (buttons.length < 2) continue;
-    issues.push(issue('structure', 'desktop-app-primary-count', 'info', buttons[1],
-      `${buttons.length} primary buttons share ${pane === ctx.root ? 'the screen' : `pane "${nameOf(pane)}"`} (${buttons.map((b) => `"${b.label ?? b.ariaLabel ?? nameOf(b)}"`).slice(0, 5).join(', ')}) — one primary per region tells the user what to do next.`,
+    issues.push(issue('structure', 'desktop-app-primary-count', 'info', buttons[1].node,
+      `${buttons.length} primary buttons share ${pane === ctx.root ? 'the screen' : `${pane.type === 'modal' ? 'modal' : 'pane'} "${nameOf(pane)}"`} (${buttons.map((b) => `"${b.label}"`).slice(0, 5).join(', ')}) — one primary per region tells the user what to do next.`,
       'Keep one primary; make the others variant "secondary" or "ghost". A button with no variant renders as primary.'));
   }
   return issues;

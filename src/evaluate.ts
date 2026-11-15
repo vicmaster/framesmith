@@ -12,7 +12,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
+import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -1356,7 +1356,10 @@ function tellGradientGlow(ctx: ClicheCtx): EvaluationIssue[] {
     const rgb = parseColor(color);
     if (!rgb) return false;
     const { s, l } = rgbToHsl(rgb);
-    if (s > 0.25) return true;                       // colored glow
+    // A coloured glow is a saturated colour you can see. Ink darker than 20%
+    // lightness (the generated $elevation.* use a deep blue-black) reads as a
+    // shadow, whatever its hue.
+    if (s > 0.25 && l > 0.2) return true;            // colored glow
     if (l > 0.85 && parseAlpha(color) < 1) return true; // white bloom / halo
     return false;
   };
@@ -2066,6 +2069,12 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       for (const t of desktopTargets(node)) {
         targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: t.disabled });
       }
+    } else {
+      // Phase 31 slice E — a modal's close button and actions, a toast's
+      // action: drawn by the overlay under its own id, 24px or more.
+      for (const t of overlayTargets(node)) {
+        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: t.disabled });
+      }
     }
   }
   return targets;
@@ -2118,8 +2127,12 @@ function checkPointerTargets(
       continue;
     }
     const c = centre(rect);
-    const unplaced = live.find((o) => !nested(o.node, t.node) && !rects.has(o.node.id));
-    const blocker = live.find((o) => {
+    // A modal's own targets are never a neighbour: its scrim covers everything
+    // outside it, and what is inside is nested. (Its box would stand in for
+    // its buttons, as a shared id does.)
+    const neighbours = live.filter((o) => o.node.type !== 'modal');
+    const unplaced = neighbours.find((o) => !nested(o.node, t.node) && !rects.has(o.node.id));
+    const blocker = neighbours.find((o) => {
       if (nested(o.node, t.node)) return false;
       const r = rects.get(o.node.id);
       if (!r) return false;

@@ -83,6 +83,17 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
       }
     }
   }
+  // Phase 31 slice E — a modal's actions and a toast's action carry colours.
+  const tokenIn = (obj: Record<string, unknown>, key: string) => {
+    const value = obj[key];
+    if (typeof value !== 'string' || !value.startsWith('$')) return;
+    const resolved = lookupToken(value.slice(1), variables);
+    if (resolved !== undefined) obj[key] = resolved;
+  };
+  if (Array.isArray(node.actions)) {
+    for (const a of node.actions) if (a && typeof a === 'object') for (const k of ['fill', 'color', 'stroke']) tokenIn(a as unknown as Record<string, unknown>, k);
+  }
+  if (node.action && typeof node.action === 'object') tokenIn(node.action as unknown as Record<string, unknown>, 'color');
   // Phase 28 slice B — donut segments carry their own colors ($chart-* refs).
   if (Array.isArray(node.segments)) {
     for (const s of node.segments) {
@@ -155,6 +166,7 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
 const PRIMITIVES = new Set([
   'status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet',
   'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider',
+  'tooltip', 'popover', 'menu', 'modal', 'toast', 'drawer',
 ]);
 
 function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
@@ -210,6 +222,48 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
     case 'divider':
       set('stroke', border);
       break;
+    // Phase 31 slice E — overlays: a surface panel at overlay depth.
+    case 'tooltip':
+      // Inverted, so it reads against whatever it floats over.
+      set('fill', text);
+      set('color', surface);
+      if (node.cornerRadius === undefined) node.cornerRadius = 4;
+      setOverlayShadow(node, v);
+      break;
+    case 'popover':
+    case 'menu':
+    case 'modal':
+    case 'toast':
+    case 'drawer': {
+      set('fill', surface);
+      set('stroke', border);
+      set('color', text);
+      set('secondaryColor', secondary);
+      if (node.cornerRadius === undefined) {
+        node.cornerRadius = node.type === 'modal' ? v.radius?.['radius-lg'] ?? 12 : node.type === 'drawer' ? 0 : v.radius?.['radius-md'] ?? 8;
+      }
+      setOverlayShadow(node, v);
+      if (node.type === 'toast') {
+        const tone = node.tone;
+        set('iconColor', tone === 'success' ? c.success ?? '#16A34A' : tone === 'warning' ? c.warning ?? '#D97706' : tone === 'danger' ? danger : secondary);
+        if (node.action && typeof node.action === 'object' && node.action.color === undefined) node.action.color = accent;
+      }
+      if (node.type === 'modal' && Array.isArray(node.actions)) {
+        for (const a of node.actions) {
+          if (!a || typeof a !== 'object') continue;
+          const variant = a.variant ?? 'secondary';
+          if (variant === 'primary' || variant === 'destructive') {
+            if (a.fill === undefined) a.fill = variant === 'destructive' ? danger : accent;
+            if (a.color === undefined) a.color = onFill(a.fill);
+          } else {
+            if (a.fill === undefined) a.fill = 'transparent';
+            if (a.color === undefined) a.color = variant === 'ghost' ? accent : text;
+            if (variant === 'secondary' && a.stroke === undefined) a.stroke = border;
+          }
+        }
+      }
+      break;
+    }
     case 'status-bar':
     case 'home-indicator':
       set('color', text);
@@ -253,6 +307,15 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
       break;
     }
   }
+}
+
+/** An overlay's depth: the design system's `$elevation.overlay` when it has
+ * one; an explicit shadow or shadows win. (Without the token the renderer
+ * draws its own fallback shadow.) */
+function setOverlayShadow(node: SceneNode, v: DesignVariables): void {
+  if (node.shadows !== undefined || node.shadow !== undefined) return;
+  const overlay = v.elevation?.overlay;
+  if (Array.isArray(overlay) && overlay.length) node.shadows = structuredClone(overlay);
 }
 
 /**

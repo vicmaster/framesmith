@@ -12,7 +12,11 @@ export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'i
   | 'status-bar' | 'home-indicator' | 'nav-bar' | 'tab-bar' | 'button' | 'list-row' | 'sheet'
   // Phase 31 slice B — desktop-app vocabulary: links, inputs, navigation,
   // menus and inspector rows (each carries its own hit area), and a hairline.
-  | 'link' | 'text-input' | 'nav-item' | 'tabs' | 'tree-row' | 'menu-row' | 'property-row' | 'divider';
+  | 'link' | 'text-input' | 'nav-item' | 'tabs' | 'tree-row' | 'menu-row' | 'property-row' | 'divider'
+  // Phase 31 slice E — overlays: lifted out of the tree into one layer after
+  // the content, stacked by kind (popover/menu, scrim, modal/drawer, toast,
+  // tooltip), positioned by authored x/y in root coordinates.
+  | 'tooltip' | 'popover' | 'menu' | 'modal' | 'toast' | 'drawer';
 
 /** Phase 30 slice D — one `nav-bar` action: an icon or a text label. */
 export interface NavAction { icon?: string; label?: string }
@@ -23,6 +27,14 @@ export interface TabItem { icon: string; label: string; active?: boolean; badge?
 /** Phase 31 slice B — one `tabs` item (its own type: unlike a tab-bar item
  * it has no icon). */
 export interface TabsItem { label: string; count?: string | number; active?: boolean; disabled?: boolean }
+
+/** Phase 31 slice E — one `modal` action. No variant renders "secondary";
+ * the filled ones (primary, destructive) render rightmost. Colours default by
+ * variant as a button's do; explicit ones win. */
+export interface ModalAction { label: string; variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'; fill?: string; color?: string; stroke?: string }
+
+/** Phase 31 slice E — a `toast`'s action (a ghost text button). */
+export interface ToastAction { label: string; color?: string }
 
 /** Phase 31 slice B — an inline link inside a `text` node's content:
  * character offsets [start, end). */
@@ -290,7 +302,7 @@ export interface SceneNode {
   /** status-bar / home-indicator: "dark" glyphs for a light screen, "light"
    * for a dark one; absent follows `color` ($text-primary). */
   appearance?: 'dark' | 'light';
-  /** nav-bar / list-row title; on a `text` node (Phase 31) the tooltip, rendered as the title attribute. */
+  /** nav-bar / list-row / modal title; on a `text` node (Phase 31) the tooltip, rendered as the title attribute. */
   title?: string;
   /** list-row secondary line. */
   subtitle?: string;
@@ -310,7 +322,9 @@ export interface SceneNode {
   /** button label. */
   label?: string;
   iconPosition?: 'leading' | 'trailing';
-  /** button: xs 24 / sm 32 / md 44 / lg 52; tabs and text-input: sm 32 / md 40. */
+  /** button: xs 24 / sm 32 / md 44 / lg 52; tabs and text-input: sm 32 / md 40;
+   * modal: sm 480 / md 640 / lg 960; popover: xs 192 / sm 320 / md 480 / lg 640;
+   * drawer: sm 320 / md 480. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
   /** list-row: a hairline under the row from the 16px inset. */
   divider?: boolean;
@@ -361,6 +375,23 @@ export interface SceneNode {
   orientation?: 'horizontal' | 'vertical';
   /** divider: inset from both ends (px). */
   inset?: number;
+
+  // Phase 31 slice E — overlays.
+  /** tooltip / toast: the message. */
+  text?: string;
+  /** Any overlay: the id of the node that opens it. Read by rules, never
+   * rendered (overlays are positioned by x/y). */
+  anchor?: string;
+  /** modal: the header close button's accessible name (default "Close"). */
+  closeLabel?: string;
+  /** modal: the footer actions, right-aligned, the filled one rightmost. */
+  actions?: ModalAction[];
+  /** toast: neutral (default) | success | warning | danger. */
+  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+  /** toast: one action, a ghost text button. */
+  action?: ToastAction;
+  /** drawer: a scrim behind it (default false; a modal always has one). */
+  scrim?: boolean;
 
   // Component / Instance
   componentId?: string;

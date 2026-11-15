@@ -556,6 +556,7 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 All seven slices are merged and the acceptance re-run passed. The phase is closed.
 
 - [ ] Follow-up — `link` and `text-input` join the mobile 44px touch census. Phase 31 slice B added both primitives for app screens; on a phone canvas they are not measured today, so a 32px text-input passes silently.
+- [ ] Follow-up — overlay controls on a phone. Phase 31 slice E's `modal` close button and actions (32px) and `toast` action (24px) are drawn at fixed pointer sizes and are not in the mobile 44px touch census, so a modal on a phone canvas passes silently; meeting 44px needs a size option on the overlay (render never depends on type), and the census then measures it. Until then the docs send phone dialogs to `sheet`.
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 
@@ -568,7 +569,7 @@ Run on its own viewer (2026-11-08), framesmith scored every page's usability 100
 - [x] Slice C — app rules: every click target measured, hand-built targets named, icon-only actions named, one current item per navigation group, a dense type ladder, row rhythm, honest truncation (a tablist whose every label is truncated included), one primary per region, the declaration matching the window, and form coverage counting text-inputs
 - [x] Slice D — panes: resolution for any number of types, six desktop-app realisations (workbench, list-detail, editor-inspector, browser, dashboard, settings) and the `data-table-app` / `skeleton-table-app` components under the pattern gate, scrolling panes that stress reads as scrolling, and stress runs that triple app rows and card grids
 - [ ] Follow-up — the web scaffolds' tint tokens (`success-tint` and the rest) are seeded dark and survive a later light `apply_preset`, as `accent-tint` did before Phase 31 slice D stopped seeding it; derive them from the applied palette instead
-- [ ] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
+- [x] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
 - [ ] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, and advisories on stacked toasts and error toasts
 - [ ] Slice G — element states: hover, focus, pressed and disabled as a primitive property, drawn from state tokens
 - [ ] Slice H — state checks: focus rings, active indicators, disabled renders and control boundaries checked analytically on every interactive primitive, without being drawn

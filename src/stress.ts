@@ -60,6 +60,12 @@ export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean
   { type: 'menu-row', path: 'shortcut' },
   { type: 'property-row', path: 'label' },
   { type: 'text-input', path: 'value' },
+  // Phase 31 slice E — overlays.
+  { type: 'tooltip', path: 'text' },
+  { type: 'toast', path: 'text' },
+  { type: 'toast', path: 'action.label' },
+  { type: 'modal', path: 'title' },
+  { type: 'modal', path: 'actions[].label' },
 ];
 
 /** One perturbable string: a text node's content or a primitive's prop. */

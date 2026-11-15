@@ -174,6 +174,8 @@ export interface LayoutRect {
   /** Phase 30 slice D — a `data-fs-scroll` element (a sheet panel): its
    * vertical overflow scrolls, it is not a clip. */
   scrolls?: boolean;
+  /** Phase 31 slice E — a modal's (or a drawer's) scrim, as rendered. */
+  scrim?: { x: number; y: number; width: number; height: number };
   children?: LayoutRect[];
 }
 
@@ -210,6 +212,13 @@ const LAYOUT_WALKER_SOURCE = `(function (rootId, depth) {
       if (own.length > 0 && (result.truncated || el.getAttribute('role') === 'tablist')) result.labels = own;
     }
     if (el.hasAttribute('data-fs-scroll')) result.scrolls = true;
+    if (el.hasAttribute('data-fs-overlay')) {
+      var scrim = document.querySelector('[data-fs-scrim="' + nodeId + '"]');
+      if (scrim) {
+        var sr = scrim.getBoundingClientRect();
+        result.scrim = { x: Math.round(sr.x), y: Math.round(sr.y), width: Math.round(sr.width), height: Math.round(sr.height) };
+      }
+    }
     if (currentDepth < depth) {
       var childRects = [];
       collect(el, currentDepth + 1, childRects);
@@ -231,7 +240,16 @@ const LAYOUT_WALKER_SOURCE = `(function (rootId, depth) {
   var root = document.querySelector(rootSelector);
   if (!root) return [];
   var result = getRect(root, 0);
-  return result ? [result] : [];
+  if (!result) return [];
+  // Phase 31 slice E — overlays render in a layer after the root; from the
+  // document root they are placed as the root's children (root coordinates).
+  var layer = document.querySelector('[data-fs-overlay-layer]');
+  if (layer && depth > 0 && root === document.body.firstElementChild) {
+    var overlays = [];
+    collect(layer, 1, overlays);
+    if (overlays.length > 0) result.children = (result.children || []).concat(overlays);
+  }
+  return [result];
 })`;
 
 export async function computeLayout(html: string, rootNodeId?: string, maxDepth = 10, viewport?: { width: number; height: number }): Promise<LayoutRect[]> {
