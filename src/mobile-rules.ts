@@ -117,12 +117,22 @@ function indexFor(ctx: MobileContext): TreeIndex {
   return index;
 }
 
-/** Overlays the renderer itself keeps clear of the safe area and pinned
- * chrome: a sheet, a drawer, and a modal or toast left at its default place
- * (no x / y). The safe-area walks skip them and what they hold. */
-function selfInset(n: SceneNode): boolean {
-  return n.type === 'sheet' || n.type === 'drawer'
-    || ((n.type === 'modal' || n.type === 'toast') && !isNum(n.x) && !isNum(n.y));
+/** Overlays the renderer itself keeps clear of the insets: a sheet always;
+ * a drawer, and a modal or toast left at its default place (no x / y), only
+ * when the render's clearance (the root's declared safeArea or the pinned
+ * chrome's reach, the renderer's `clear`) covers the insets this rule
+ * judges by. The safe-area walks skip them and what they hold. */
+function selfInset(n: SceneNode, ctx: MobileContext): boolean {
+  if (n.type === 'sheet') return true;
+  const unplaced = !isNum(n.x) && !isNum(n.y);
+  if (n.type !== 'drawer' && !((n.type === 'modal' || n.type === 'toast') && unplaced)) return false;
+  const insets = insetsFor(ctx);
+  const declared = ctx.root.type === 'document' ? usableSafeArea(ctx.root.safeArea) : {};
+  const reach = chromeReservation(ctx.root);
+  const clearTop = Math.max(declared.top ?? 0, reach.top);
+  const clearBottom = Math.max(declared.bottom ?? 0, reach.bottom);
+  // A toast only meets the bottom edge.
+  return clearBottom >= insets.bottom && (n.type === 'toast' || clearTop >= insets.top);
 }
 
 /** Inside a sheet (a modal overlay the renderer pads): skipped by the
@@ -320,7 +330,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   const placedY = new Map<SceneNode, number>();
   const holds = (n: SceneNode) => isContent(n, ctx) || holdsFlowContent(n, ctx);
   const visit = (n: SceneNode, parent: SceneNode | undefined): void => {
-    if (selfInset(n)) return;
+    if (selfInset(n, ctx)) return;
     if (parent && isPositioned(n) && !PINNED_CHROME.has(n.type)) {
       const position = effectivePosition(n);
       if (position === 'fixed' && fixedUnpinned(n, ctx)) {
@@ -388,7 +398,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   // the first or last content for good.
   let unresolved = false;
   (function bars(n: SceneNode) {
-    if (selfInset(n)) return;
+    if (selfInset(n, ctx)) return;
     if (n !== ctx.root && effectivePosition(n) === 'fixed' && !PINNED_CHROME.has(n.type) && !fixedUnpinned(n, ctx) && holds(n)) {
       const bottomBar = pinsBottom(n);
       const topBar = !bottomBar && pinsTop(n);
@@ -452,7 +462,7 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
   const sticky: Array<{ node: SceneNode; rect: LayoutRect; content: Array<{ node: SceneNode; rect: LayoutRect }> }> = [];
 
   const visit = (n: SceneNode, positioned: boolean, stuck: typeof sticky[number] | undefined, clipped: boolean): void => {
-    if (selfInset(n)) return;
+    if (selfInset(n, ctx)) return;
     const r = rects.get(n.id);
     if (isContentNode(n, r)) {
       if (r && r.width > 0 && r.height > 0) {
@@ -504,7 +514,7 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
     a.y < top + b.height && a.y + a.height > top && a.x < b.x + b.width && a.x + a.width > b.x;
   const scroll = docBottom - ctx.height;
   (function bars(n: SceneNode) {
-    if (selfInset(n)) return;
+    if (selfInset(n, ctx)) return;
     const r = rects.get(n.id);
     // A fixed node under a blurred or animated ancestor pins to that ancestor,
     // not the screen, so it is not a bar at the scroll's ends.

@@ -219,6 +219,13 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
   check('phone: a tall centred modal raises no safe-area finding (detailed)', (await safe(tallCanvas, 'detailed')).length === 0);
   const mr = flat(await computeLayout(renderToHtml(tallCanvas.root, 390, 844, tallCanvas), undefined, 5, { width: 390, height: 844 })).get('m')!;
   check('phone: the modal stays 16px past the insets', mr.y === 63 && mr.y + mr.height === 794, JSON.stringify({ y: mr.y, bottom: mr.y + mr.height }));
+  // Without a declared safeArea (or pinned chrome) the render keeps only 32px
+  // clear, so the rule still judges the overlay against the device insets.
+  const undeclared = { ...tallCanvas, root: { ...tallCanvas.root, safeArea: undefined } } as Canvas;
+  check('phone without a safeArea: a tall modal still raises the safe-area finding', (await safe(undeclared, 'detailed')).length > 0);
+  const bareDrawer = phone([{ id: 'd', name: 'd', type: 'drawer', children: [{ id: 'dt', name: 'dt', type: 'text', content: 'Filters', fontSize: 16 }] }]);
+  bareDrawer.root.safeArea = undefined;
+  check('phone without a safeArea: a drawer\'s content under the status bar warns', (await safe(bareDrawer, 'detailed')).some((i) => i.nodeId === 'dt'));
   const drawerCanvas = phone([{ id: 'd', name: 'd', type: 'drawer', children: [{ id: 'dt', name: 'dt', type: 'text', content: 'Filters', fontSize: 16 }] }]);
   check('phone: a drawer\'s content clears the status bar, and no safe-area finding', (await safe(drawerCanvas, 'detailed')).length === 0
     && flat(await computeLayout(renderToHtml(drawerCanvas.root, 390, 844, drawerCanvas), undefined, 5, { width: 390, height: 844 })).get('dt')!.y >= 47);
