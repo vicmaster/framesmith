@@ -65,6 +65,39 @@ const LONG = 'Rename this canvas; the new name shows in the gallery and in every
   check('(e) twin: a centred modal and a default toast sit inside the viewport (scrim not judged)', f.length === 0, show(f));
 }
 
+// ── verify round 2: what fast mode leaves to detailed, and agreement ───────
+{
+  let f = await findings([{ id: 'tip', name: 'tip', type: 'tooltip', text: LONG, x: -4, y: 100 }]);
+  check('R2 a tooltip past the left edge warns in detailed mode', f.length === 1 && /left edge/.test(f[0].message), show(f));
+  f = await findings([{ id: 'to', name: 'to', type: 'toast', text: LONG, x: 1200, y: 800 }]);
+  check('R2 a placed toast hugging long text past the right edge warns in detailed mode', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  f = await findings([{ id: 'to', name: 'to', type: 'toast', text: 'Saved', x: 1200, y: 800 }]);
+  check('R2 twin: a short toast there fits', f.length === 0, show(f));
+  const body = (n: number) => Array.from({ length: n }, (_, i) => text(`b${i}`, `Paragraph ${i} of the dialog body, long enough to take a line.`));
+  f = await findings([{ id: 'm', name: 'm', type: 'modal', title: 'Tall', size: 'sm', x: 100, y: 100, children: body(60) }]);
+  check('R2 a placed modal with tall content at y 100 leaves the bottom (capped at 836)', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
+  f = await findings([{ id: 'm', name: 'm', type: 'modal', title: 'Short', size: 'sm', x: 100, y: 700, height: 300, children: body(1) } as SceneNode]);
+  check('R2 twin: a short placed modal at y 700 fits whatever its authored height', f.length === 0, show(f));
+
+  // Fast and detailed agree wherever fast mode boxes an overlay.
+  const scenes: Array<[string, SceneNode]> = [
+    ['popover in', { id: 'o', name: 'o', type: 'popover', x: 1120, y: 100, width: 320, height: 200, children: [] }],
+    ['popover out', { id: 'o', name: 'o', type: 'popover', x: 1200, y: 100, width: 320, height: 200, children: [] }],
+    ['popover shrunk', { id: 'o', name: 'o', type: 'popover', x: 0, y: 0, width: 2000, height: 100, children: [] }],
+    ['popover none', { id: 'o', name: 'o', type: 'popover', x: 0, y: 0, width: 2000, height: 100, maxWidth: 'none', children: [] }],
+    ['popover 50%', { id: 'o', name: 'o', type: 'popover', x: 700, y: 0, width: 2000, height: 100, maxWidth: '50%', children: [] }],
+    ['popover minWidth', { id: 'o', name: 'o', type: 'popover', x: 0, y: 0, width: 300, height: 100, minWidth: 1500, children: [] }],
+    ['menu floor', { id: 'o', name: 'o', type: 'menu', x: 1300, y: 10, width: 100, height: 100, children: [] }],
+    ['menu fits', { id: 'o', name: 'o', type: 'menu', x: 1248, y: 10, width: 100, height: 100, children: [] }],
+    ['popover bottom', { id: 'o', name: 'o', type: 'popover', x: 100, y: 850, width: 320, height: 100, children: [] }],
+    ['modal right', { id: 'o', name: 'o', type: 'modal', title: 'x', size: 'sm', x: 1100, y: 100, children: [text('mb', 'Body')] }],
+  ];
+  for (const [name, node] of scenes) {
+    const [fast, det] = [await findings([node], 'fast'), await findings([node])];
+    check(`R2 fast and detailed agree: ${name}`, fast.length === det.length, `fast ${show(fast)} detailed ${show(det)}`);
+  }
+}
+
 // ── M4(d): sideways scrolling inside a modal ───────────────────────────────
 {
   const strip = (w: number) => frame('scroll', [frame('row', [text('r', 'Wide row')], { minWidth: w, height: 40, layout: 'horizontal' })], { overflow: 'auto', width: '100%' } as Partial<SceneNode>);

@@ -4,7 +4,7 @@
 import type { EvaluationIssue } from './evaluate.js';
 import type { LayoutRect } from './screenshot.js';
 import type { SceneNode } from './types.js';
-import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, TOOLTIP_MAX_WIDTH, modalActions, modalWidth, tabsItems } from './primitives.js';
+import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, MENU_MIN_WIDTH, modalActions, modalWidth, tabsItems } from './primitives.js';
 import { fontPx, paddingSides, proseWords } from './mobile-rules.js';
 import { extractInventory } from './drift.js';
 import { shapeHash } from './shape-hash.js';
@@ -616,18 +616,29 @@ const MODAL_TABLE_ROWS = 10;
 /** The renderer clamps a modal to the viewport less this (max-width). */
 const MODAL_CLAMP = 32;
 const OVERLAY_TOLERANCE = 1;
-/** A modal is never taller than the viewport less this (max-height). */
-const MODAL_HEIGHT_CLAMP = 64;
-/** A toast hugs its text up to this (max-width), and the viewport less 32. */
-const TOAST_MAX_WIDTH = 480;
 
-/** The width the renderer gives a numeric `width` inside `parent`: a bare
- * width shrinks to its parent (max-width: 100%); a px `maxWidth` caps it
- * instead; any other maxWidth ("100%", a calc) is read as the parent. */
-function shrunkWidth(n: SceneNode, parent: number): number | undefined {
+/** The width the renderer gives a numeric `width` inside `parent` (`view` is
+ * the viewport width, for vw), as CSS reads its max-width: a bare width
+ * shrinks to its parent (max-width: 100%); a px, % or vw `maxWidth` caps it;
+ * "none" or a negative px (an invalid declaration) leaves it uncapped; any
+ * other value (a calc, rem) is read as the parent. A `minWidth` wins. */
+function shrunkWidth(n: SceneNode, parent: number, view: number): number | undefined {
   if (!isNum(n.width)) return undefined;
-  const px = isNum(n.maxWidth) ? n.maxWidth : typeof n.maxWidth === 'string' && /^\d+(\.\d+)?px$/.test(n.maxWidth.trim()) ? parseFloat(n.maxWidth) : undefined;
-  return Math.min(n.width, px ?? parent);
+  const cap = maxWidthCap(n.maxWidth, parent, view);
+  return Math.max(Math.min(n.width, cap), isNum(n.minWidth) ? n.minWidth : 0);
+}
+
+function maxWidthCap(v: SceneNode['maxWidth'], parent: number, view: number): number {
+  if (v === undefined) return parent;
+  if (isNum(v)) return v < 0 ? Infinity : v;
+  if (typeof v !== 'string') return parent;
+  const t = v.trim().toLowerCase();
+  if (t === 'none') return Infinity;
+  const m = /^(-?\d*\.?\d+)(px|%|vw)$/.exec(t);
+  if (!m) return parent;
+  const num = parseFloat(m[1]);
+  if (num < 0) return Infinity;
+  return m[2] === 'px' ? num : (num / 100) * (m[2] === '%' ? parent : view);
 }
 /** What an overlay's anchor may name: a clickable primitive or a control. */
 const ANCHOR_TARGETS = new Set([...CLICKABLE_PRIMITIVES, ...CONTROLS]);
@@ -749,38 +760,42 @@ export function checkOverlays(ctx: DesktopContext, tableIds: Set<string>): Evalu
       };
     }
     const rect = ctx.rects?.get(n.id);
-    let box: { x: number; y: number; width: number; height: number } | undefined;
+    let box: { x: number; y: number; width: number; height?: number } | undefined;
     let tol = 0;
     if (rect && rootRect) {
       box = { x: rect.x - rootRect.x, y: rect.y - rootRect.y, width: rect.width, height: rect.height };
       tol = OVERLAY_TOLERANCE;
-    } else if (n.type !== 'drawer' && isNum(n.x) && isNum(n.y) && isNum(n.width) && isNum(n.height)) {
-      box = { x: n.x, y: n.y, ...renderedSize(n, n.width, n.height) };
+    } else {
+      box = fastBox(n);
     }
     if (!box) return undefined;
     const edges = [
       box.x < -tol && 'left',
       box.y < -tol && 'top',
       box.x + box.width > view.width + tol && 'right',
-      box.y + box.height > view.height + tol && 'bottom',
+      box.height !== undefined && box.y + box.height > view.height + tol && 'bottom',
     ].filter((e): e is string => !!e);
     if (edges.length === 0) return undefined;
     return {
-      message: `${n.type} "${nameOf(n)}" leaves the ${view.width}×${view.height} viewport past its ${edges.join(' and ')} edge${edges.length === 1 ? '' : 's'} (at ${box.x}, ${box.y}, ${box.width}×${box.height}) — part of it is cut off.`,
+      message: `${n.type} "${nameOf(n)}" leaves the ${view.width}×${view.height} viewport past its ${edges.join(' and ')} edge${edges.length === 1 ? '' : 's'} (at ${box.x}, ${box.y}, ${box.width}${box.height !== undefined ? `×${box.height}` : ' wide'}) — part of it is cut off.`,
       suggestion: 'Move it (x / y are root coordinates) or shrink it so the whole box sits inside the window.',
     };
   }
 
-  /** An authored size as the renderer caps it (N2): a tooltip is at most 240
-   * wide, a toast 480 (and the viewport less 32), a modal the viewport less 32
-   * by the viewport less 64, and a popover or menu shrinks to the viewport. */
-  function renderedSize(n: SceneNode, width: number, height: number): { width: number; height: number } {
-    switch (n.type) {
-      case 'tooltip': return { width: Math.min(width, TOOLTIP_MAX_WIDTH), height };
-      case 'toast': return { width: Math.min(width, TOAST_MAX_WIDTH, view.width - MODAL_CLAMP), height };
-      case 'modal': return { width: Math.min(width, view.width - MODAL_CLAMP), height: Math.min(height, view.height - MODAL_HEIGHT_CLAMP) };
-      default: return { width: shrunkWidth(n, view.width) ?? width, height };
-    }
+  /** Fast mode's box, only where authored numbers decide the render (N4): a
+   * popover or menu with numeric x, y, width and height, its width as the
+   * render resolves it (shrunk to the viewport, its minWidth, a menu's 192
+   * floor); a placed modal with numeric x and y, at its own width (its height
+   * is its content, so its bottom edge is left to detailed mode). A tooltip
+   * and a toast size to their text, and a drawer is pinned right, so fast
+   * mode never boxes them. */
+  function fastBox(n: SceneNode): { x: number; y: number; width: number; height?: number } | undefined {
+    if (!isNum(n.x) || !isNum(n.y)) return undefined;
+    if (n.type === 'modal') return { x: n.x, y: n.y, width: modalWidth(n) };
+    if ((n.type !== 'popover' && n.type !== 'menu') || !isNum(n.height)) return undefined;
+    const width = shrunkWidth(n, view.width, view.width);
+    if (width === undefined) return undefined;
+    return { x: n.x, y: n.y, width: n.type === 'menu' ? Math.max(width, MENU_MIN_WIDTH) : width, height: n.height };
   }
 
   /** M4(d): why a scrolling frame in a modal scrolls sideways, if it does. */
@@ -796,7 +811,7 @@ export function checkOverlays(ctx: DesktopContext, tableIds: Set<string>): Evalu
     }
     // N1: a numeric width shrinks to the modal unless a px maxWidth lets it
     // stay wider; a minWidth always holds.
-    const w = Math.max(isNum(n.minWidth) ? n.minWidth : 0, shrunkWidth(n, modalWidth(modal)) ?? 0);
+    const w = shrunkWidth(n, modalWidth(modal), view.width) ?? (isNum(n.minWidth) ? n.minWidth : 0);
     return w > modalWidth(modal) ? `is ${w}px wide in a ${modalWidth(modal)}px modal` : undefined;
   }
 }

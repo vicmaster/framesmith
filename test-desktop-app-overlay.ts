@@ -149,8 +149,10 @@ const btn = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   check('(e) twin: fast mode skips a box with no authored height', f.length === 0, show(f));
   f = await findings([pop({ x: 1300, width: 320, height: 200 })]);
   check('(e) twin: fast mode skips a box with only x', f.length === 0, show(f));
+  f = await findings([pop({ x: -4, y: 10, width: 60, height: 24 })]);
+  check('(e) a popover past the left edge warns', f.length === 1 && /left edge/.test(f[0].message), show(f));
   f = await findings([{ id: 'tip', name: 'tip', type: 'tooltip', text: 'Hi', x: -4, y: 10, width: 60, height: 24 }]);
-  check('(e) a tooltip past the left edge warns', f.length === 1 && /left edge/.test(f[0].message), show(f));
+  check('(e) twin: a tooltip sizes to its text, so fast mode never boxes it (detailed does)', f.length === 0, show(f));
   f = await findings([pop({ x: 100, y: 850, width: 320, height: 100 })]);
   check('(e) past the bottom of a 900px root warns', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
   f = await findings([pop({ x: 100, y: 850, width: 320, height: 100 })], { root: { height: 1200 } });
@@ -195,18 +197,50 @@ const btn = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   f = await findings([tip(1100, 400)]);
   check('R1.3 a tooltip never renders past 240 wide: x 1100 + 400 is silent', f.length === 0, show(f));
   f = await findings([tip(1300, 200)]);
-  check('R1.3 keep: a 200px tooltip at x 1300 warns', f.length === 1 && /right edge/.test(f[0].message), show(f));
-  f = await findings([modal('m', [], { x: 100, y: 40, width: 400, height: 2000 })]);
-  check('R1.3 a placed modal is capped at the viewport less 64 tall: at y 40 it ends at 876, silent', f.length === 0, show(f));
-  f = await findings([modal('m', [], { x: 100, y: 100, width: 400, height: 2000 })]);
-  check('R1.3 keep: capped at 836, a tall placed modal at y 100 ends at 936 and warns', f.length === 1 && /400×836/.test(f[0].message), show(f));
-  f = await findings([modal('m', [], { x: 100, y: 800, width: 400, height: 300 })]);
-  check('R1.3 keep: a placed modal at y 800, 300 tall, warns', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
+  check('R2 a tooltip ignores an authored width, so fast mode never boxes it', f.length === 0, show(f));
+  f = await findings([modal('m', [], { x: 100, y: 700, width: 400, height: 300 })]);
+  check('R2 a placed modal\'s height is its content: fast mode leaves its bottom edge to detailed', f.length === 0, show(f));
+  f = await findings([modal('m', [], { x: 1100, y: 100, size: 'sm' })]);
+  check('R2 keep: a placed sm modal (480) at x 1100 leaves the right edge, no height needed', f.length === 1 && /right edge/.test(f[0].message) && /480 wide/.test(f[0].message), show(f));
+  f = await findings([modal('m', [], { x: 900, y: 100, size: 'sm' })]);
+  check('R2 twin: at x 900 it ends at 1380, silent', f.length === 0, show(f));
+  f = await findings([modal('m', [], { x: 100, y: -10, size: 'sm' })]);
+  check('R2 keep: a placed modal above the top warns', f.length === 1 && /top edge/.test(f[0].message), show(f));
+  f = await findings([modal('m', [], { x: 1100, size: 'sm' })]);
+  check('R2 twin: a modal with only x is not boxed in fast mode', f.length === 0, show(f));
   const toast = (x: number): SceneNode => ({ id: 'to', name: 'to', type: 'toast', text: 'Saved', x, y: 800, width: 600, height: 40 });
   f = await findings([toast(900)]);
   check('R1.3 a toast is at most 480 wide: x 900 + 600 is silent', f.length === 0, show(f));
-  f = await findings([toast(1000)]);
-  check('R1.3 keep: at x 1000 its 480px box leaves the right edge', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  f = await findings([toast(1300)]);
+  check('R2 a toast sizes to its text, so fast mode never boxes it (detailed does)', f.length === 0, show(f));
+
+  // maxWidth read as CSS reads it; minWidth and the menu's 192 floor.
+  f = await findings([pop({ x: 0, y: 0, width: 2000, height: 100, maxWidth: 'none' })]);
+  check('R2 maxWidth "none" leaves a 2000px popover uncapped: it leaves the right edge', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  f = await findings([pop({ x: 0, y: 0, width: 2000, height: 100, maxWidth: -5 })]);
+  check('R2 a negative maxWidth is an invalid declaration: uncapped, it warns', f.length === 1, show(f));
+  for (const mw of ['50%', '50vw']) {
+    f = await findings([pop({ x: 700, y: 0, width: 2000, height: 100, maxWidth: mw })]);
+    check(`R2 maxWidth "${mw}" caps it at 720: at x 700 it fits`, f.length === 0, show(f));
+  }
+  f = await findings([pop({ x: 800, y: 0, width: 2000, height: 100, maxWidth: '50%' })]);
+  check('R2 twin: at x 800 the 720px box leaves', f.length === 1, show(f));
+  f = await findings([pop({ x: 0, y: 0, width: 300, height: 100, minWidth: 1500 })]);
+  check('R2 a minWidth past the viewport wins over width: it leaves', f.length === 1 && /1500/.test(f[0].message), show(f));
+  f = await findings([pop({ x: 0, y: 0, width: 300, height: 100, minWidth: 1400 })]);
+  check('R2 twin: a minWidth that fits is silent', f.length === 0, show(f));
+  const menuAt = (x: number): SceneNode => ({ id: 'menu', name: 'menu', type: 'menu', x, y: 10, width: 100, height: 100, children: [] });
+  f = await findings([menuAt(1300)]);
+  check('R2 a menu is at least 192 wide: 100px authored at x 1300 leaves', f.length === 1 && /192/.test(f[0].message), show(f));
+  f = await findings([menuAt(1248)]);
+  check('R2 twin: at x 1248 its 192px box ends at the edge', f.length === 0, show(f));
+  const wide = (mw: string, width = 900) => modal('m', [frame('scroll', [text('s', 'x')], { overflow: 'auto', width, maxWidth: mw })], { size: 'md' });
+  f = await findings([wide(' 900PX ')]);
+  check('R2 a px maxWidth is read trimmed and case-blind', f.length === 1 && /900px wide/.test(f[0].message), show(f));
+  f = await findings([wide('640.5px', 700)]);
+  check('R2 a fractional px maxWidth keeps its fraction (640.5 > 640 warns)', f.length === 1, show(f));
+  f = await findings([wide('60rem')]);
+  check('R2 an unknown unit is read as the parent: silent', f.length === 0, show(f));
 }
 
 // ── M4(f) / S8: nothing under a scrim ──────────────────────────────────────
