@@ -10,7 +10,8 @@ import './test-env.js';
  *      desktop-app finding at 1280×800 — long labels must truncate, never push
  *      a bar past the window;
  *   2. `data-table` stamped into each page realisation's wide pane (it
- *      resolves to data-table-app), at 1440, 1100 and 1024 wide, leaves
+ *      resolves to data-table-app), at 1440, 1100 and 1024 wide wherever the
+ *      pane is at least 480px wide (the documented minimum), leaves
  *      nothing blocking in fast mode, no desktop-app finding in detailed
  *      mode, and a CLEAN stress run.
  *
@@ -68,6 +69,17 @@ async function stressWarnings(canvas: Canvas): Promise<string[]> {
   return warnings;
 }
 
+/** Every rendered rect of the canvas, flattened. */
+async function layoutRects(canvas: Canvas): Promise<{ nodeId: string; width: number }[]> {
+  const w = canvas.root.width as number;
+  const h = canvas.root.height as number;
+  const rects = await computeLayout(renderToHtml(resolveVariables(structuredClone(expandInstances(canvas.root, canvas)), getVariables(canvas)), w, h, canvas), undefined, 25, { width: w, height: h });
+  const out: { nodeId: string; width: number }[] = [];
+  const walk = (r: { nodeId: string; width: number; children?: unknown[] }) => { out.push(r); (r.children as typeof r[] | undefined)?.forEach(walk); };
+  rects.forEach(walk);
+  return out;
+}
+
 const appFindings = async (canvas: Canvas, mode: 'fast' | 'detailed'): Promise<string[]> =>
   (await evaluateCanvas(canvas, { mode, categories: CATEGORIES })).issues.flatMap((i) =>
     (i.rule?.startsWith('desktop-app-') || i.severity !== 'info' || i.category === 'cliche' ? [`${i.severity}:${i.rule ?? i.tell ?? i.category}@${i.nodeId}`] : []));
@@ -100,9 +112,19 @@ const WIDE_PANE: Record<string, string> = {
   'settings-app': 'sta-content',
 };
 check('every page realisation names its wide pane', app.filter((s) => s.kind === 'page').every((s) => WIDE_PANE[s.name] !== undefined));
+// data-table-app's five columns need a pane at least this wide: narrower, the
+// column names wrap (on Linux fonts already in list-detail's 422px detail pane
+// at 1024 wide) and the header outgrows its 32px rows. The docs state it.
+const TABLE_MIN_PANE = 480;
+const narrowPanes: string[] = [];
 for (const [page, paneId] of Object.entries(WIDE_PANE)) for (const size of [{ width: 1440, height: 900 }, { width: 1100, height: 900 }, SMALL]) {
   const at = `${size.width}×${size.height}`;
   const canvas = stamped(page, false, size);
+  const paneWidth = (await layoutRects(canvas)).find((r) => r.nodeId === paneId)?.width ?? 0;
+  if (paneWidth < TABLE_MIN_PANE) {
+    narrowPanes.push(`${paneId}@${at}`);
+    continue;
+  }
   const stamp = applyStructure(canvas, 'data-table', { targetId: paneId });
   check(`data-table into ${page}'s ${paneId} stamps data-table-app (${at})`, stamp.applied === 'data-table-app');
   const fast = await appFindings(canvas, 'fast');
@@ -112,6 +134,10 @@ for (const [page, paneId] of Object.entries(WIDE_PANE)) for (const size of [{ wi
   const warnings = await stressWarnings(canvas);
   check(`${page} + data-table-app: full stress run CLEAN (${at})`, warnings.length === 0, warnings.slice(0, 4).join(' | '));
 }
+
+// The only pane the docs' minimum rules out, so the skip can never grow silently.
+check(`only list-detail's detail pane in a 1024px window is narrower than ${TABLE_MIN_PANE}px`,
+  JSON.stringify(narrowPanes) === JSON.stringify(['lda-detail@1024×768']), narrowPanes.join(', '));
 
 console.log(allPass ? '\nAll desktop-app window tests passed.' : '\nSOME TESTS FAILED');
 await shutdown();

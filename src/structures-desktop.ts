@@ -212,7 +212,7 @@ export const dataTableApp: Structure = {
   kind: 'component',
   anatomy: 'data-table',
   surface: 'desktop-app',
-  description: 'The desktop-app data table on the density ladder: a 32px toolbar (search field, filter), a 32px header row over 32px body rows (name, status, date, a right-aligned amount, an icon-only row-actions button under a blank header), and a 32px pager. Stamp it into a wide pane (a content, work or detail pane), not a 300px side panel. Copy rows with batch_design C ops to extend. Its loading state is skeleton-table-app.',
+  description: 'The desktop-app data table on the density ladder: a 32px toolbar (search field, filter), a 32px header row over 32px body rows (name, status, date, a right-aligned amount, an icon-only row-actions button under a blank header), and a 32px pager. Stamp it into a pane at least 480px wide (a content, work or detail pane), not a 300px side panel: narrower, its column names wrap. Copy rows with batch_design C ops to extend. Its loading state is skeleton-table-app.',
   nodes: [{
     id: 'dta', type: 'frame', name: 'Data table', width: '100%', layout: 'vertical', gap: SPACE.sm,
     children: [
