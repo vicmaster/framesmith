@@ -414,7 +414,7 @@ Six overlays draw screen states: an open menu, a comment popover, a confirm dial
 I("document", { type: "modal", title: "Delete \"Checkout\"?", actions: [{ label: "Cancel" }, { label: "Delete", variant: "destructive" }] })
 ```
 
-A modal and a drawer are panes of their own for `desktop-app-current` and `desktop-app-primary-count`; a modal's close button and actions and a toast's action are pointer targets. An undeclared canvas holding an overlay warns until it declares a type (`desktop-app-artboard`); web and mobile canvases may hold overlays freely. On a desktop-app canvas `desktop-app-overlay` warns on a second modal, a tooltip with children, a long table or a sideways scroller inside a modal, an overlay that leaves the viewport, and a popover or menu under a modal's scrim (popovers and menus stack below it); a second toast, a danger toast and an anchor that names nothing clickable are infos.
+A modal and a drawer are panes of their own for `desktop-app-current` and `desktop-app-primary-count`; a modal's close button and actions and a toast's action are pointer targets. An undeclared canvas holding an overlay warns until it declares a type (`desktop-app-artboard`); web and mobile canvases may hold overlays freely. On a desktop-app canvas `desktop-app-overlay` warns on a second modal, a tooltip with children, a long table or a sideways scroller inside a modal, an overlay that leaves the viewport, and a popover or menu under the scrim of a modal or a drawer with `scrim: true` (popovers and menus stack below it); a second toast, a danger toast and an anchor that names nothing clickable are infos.
 
 ### `find_nodes`
 

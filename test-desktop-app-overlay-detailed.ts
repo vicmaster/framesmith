@@ -59,6 +59,8 @@ const LONG = 'Rename this canvas; the new name shows in the gallery and in every
   f = await findings([{ id: 'dr', name: 'dr', type: 'drawer', width: 1600, children: [text('d', 'Details')] }]);
   check('(e) twin: a bare 1600px drawer width is squeezed to the window, so it is silent', f.length === 0, show(f));
 
+  f = await findings([{ id: 'm', name: 'm', type: 'modal', title: 'Rename', width: 1420, children: [text('b', 'Body')] }]);
+  check('(e) a modal wider than the viewport less 32 warns in detailed mode too', f.length === 1 && /squeezes it to 1408px/.test(f[0].message), show(f));
   f = await findings([{ id: 'm', name: 'm', type: 'modal', title: 'Rename', size: 'lg', children: [text('b', 'Body')] }, { id: 'to', name: 'to', type: 'toast', text: 'Saved' }]);
   check('(e) twin: a centred modal and a default toast sit inside the viewport (scrim not judged)', f.length === 0, show(f));
 }

@@ -33,8 +33,11 @@ function canvasOf(children: SceneNode[], o: Opts = {}): Canvas {
 const RULE = 'desktop-app-overlay';
 async function findings(children: SceneNode[], o: Opts = {}): Promise<EvaluationIssue[]> {
   const r = await evaluateCanvas(canvasOf(children, o), { mode: 'fast' });
-  return r.issues.filter((i) => i.rule === RULE);
+  const f = r.issues.filter((i) => i.rule === RULE);
+  for (const i of f) if (i.category !== 'usability') wrongCategory.push(`${i.nodeId}: ${i.category}`);
+  return f;
 }
+const wrongCategory: string[] = [];
 const show = (f: EvaluationIssue[]) => JSON.stringify(f.map((i) => `${i.severity} ${i.nodeId}: ${i.message}`));
 const text = (id: string, content: string, extra: Partial<SceneNode> = {}): SceneNode =>
   ({ id, name: id, type: 'text', content, fontSize: 14, color: '#111111', ...extra });
@@ -161,6 +164,51 @@ const btn = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   check('(e) twin: inside an offset sticky bar, x / y stay root coordinates', f.length === 0, show(f));
 }
 
+// ── verify round 1 fixes: what the render shrinks, modals inside tables ────
+{
+  const pane = (extra: Partial<SceneNode>) => frame('scroll', [text('s', 'Wide content')], { overflow: 'auto', ...extra });
+  let f = await findings([modal('m', [pane({ width: 900, maxWidth: '100%' })], { size: 'md' })]);
+  check('R1.1 a width with maxWidth "100%" is squeezed to the modal: silent', f.length === 0, show(f));
+  f = await findings([modal('m', [pane({ width: 900, maxWidth: 'calc(100% - 8px)' })], { size: 'md' })]);
+  check('R1.1 a width with a calc maxWidth is read as the parent: silent', f.length === 0, show(f));
+  f = await findings([modal('m', [pane({ width: 900, maxWidth: '1000px' })], { size: 'md' })]);
+  check('R1.1 keep: a width with a px-string maxWidth stays wide and warns', f.length === 1 && /900px wide/.test(f[0].message), show(f));
+
+  // A modal authored in a table-shaped frame (a per-row confirm dialog).
+  const cell = (id: string, s: string, extra: Partial<SceneNode> = {}) => frame(id, [text(`${id}t`, s, extra)], { width: 120 });
+  const hdr = (p: string) => frame(`${p}h`, [cell(`${p}h1`, 'Name', { fontWeight: 600 }), cell(`${p}h2`, 'Owner', { fontWeight: 600 })], { layout: 'horizontal', height: 32 });
+  const row = (p: string, i: number, extra: SceneNode[] = []) => frame(`${p}r${i}`, [cell(`${p}r${i}a`, `Item ${i}`), cell(`${p}r${i}b`, 'Ana'), ...extra], { layout: 'horizontal', height: 32 });
+  const inner = (rows: number) => frame('inner', [hdr('i'), ...Array.from({ length: rows }, (_, i) => row('i', i))]);
+  const outer = (rows: number) => frame('outer', [hdr('o'), row('o', 0), row('o', 1), row('o', 2, [frame('oc', [modal('m', [inner(rows)], { size: 'lg' })])])]);
+  f = await findings([outer(11)]);
+  check('R1.2 a modal inside a table-shaped frame still has its 11-row table checked', f.length === 1 && f[0].nodeId === 'inner' && /11 rows/.test(f[0].message), show(f));
+  f = await findings([outer(10)]);
+  check('R1.2 twin: 10 body rows there are silent', f.length === 0, show(f));
+
+  // Fast boxes as the render caps them (N2).
+  const pop = (extra: Partial<SceneNode>): SceneNode => ({ id: 'pop', name: 'pop', type: 'popover', children: [text('p', 'Hi')], ...extra });
+  f = await findings([pop({ x: 0, y: 0, width: 2000, height: 100 })]);
+  check('R1.3 a 2000px popover at x 0 shrinks to the viewport: silent', f.length === 0, show(f));
+  f = await findings([pop({ x: 100, y: 0, width: 2000, height: 100 })]);
+  check('R1.3 keep: shrunk to 1440 at x 100 it still leaves the right edge', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  const tip = (x: number, width: number): SceneNode => ({ id: 'tip', name: 'tip', type: 'tooltip', text: 'hi', x, y: 10, width, height: 40 });
+  f = await findings([tip(1100, 400)]);
+  check('R1.3 a tooltip never renders past 240 wide: x 1100 + 400 is silent', f.length === 0, show(f));
+  f = await findings([tip(1300, 200)]);
+  check('R1.3 keep: a 200px tooltip at x 1300 warns', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  f = await findings([modal('m', [], { x: 100, y: 40, width: 400, height: 2000 })]);
+  check('R1.3 a placed modal is capped at the viewport less 64 tall: at y 40 it ends at 876, silent', f.length === 0, show(f));
+  f = await findings([modal('m', [], { x: 100, y: 100, width: 400, height: 2000 })]);
+  check('R1.3 keep: capped at 836, a tall placed modal at y 100 ends at 936 and warns', f.length === 1 && /400×836/.test(f[0].message), show(f));
+  f = await findings([modal('m', [], { x: 100, y: 800, width: 400, height: 300 })]);
+  check('R1.3 keep: a placed modal at y 800, 300 tall, warns', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
+  const toast = (x: number): SceneNode => ({ id: 'to', name: 'to', type: 'toast', text: 'Saved', x, y: 800, width: 600, height: 40 });
+  f = await findings([toast(900)]);
+  check('R1.3 a toast is at most 480 wide: x 900 + 600 is silent', f.length === 0, show(f));
+  f = await findings([toast(1000)]);
+  check('R1.3 keep: at x 1000 its 480px box leaves the right edge', f.length === 1 && /right edge/.test(f[0].message), show(f));
+}
+
 // ── M4(f) / S8: nothing under a scrim ──────────────────────────────────────
 {
   const menu: SceneNode = { id: 'menu', name: 'menu', type: 'menu', x: 40, y: 40, children: [{ id: 'mr', name: 'mr', type: 'menu-row', label: 'Rename' }] };
@@ -240,6 +288,87 @@ const btn = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
   check('(e) rendered rects are read relative to the root rect', f.length === 0, show(f));
 }
 
+// ── verify round 1: boundaries, severities and fallbacks (mutation survivors) ─
+{
+  const pop = (extra: Partial<SceneNode>): SceneNode => ({ id: 'pop', name: 'pop', type: 'popover', children: [text('p', 'Hi')], ...extra });
+  let f = await findings([pop({ x: 0, y: 0, width: 320, height: 200 })]);
+  check('B: a box at exactly x 0, y 0 is inside', f.length === 0, show(f));
+  f = await findings([pop({ x: 100, y: 700, width: 320, height: 200 })]);
+  check('B: a box ending exactly at the bottom (900) is inside', f.length === 0, show(f));
+  f = await findings([pop({ x: 100, y: -2, width: 320, height: 200 })]);
+  check('B: a box at y -2 leaves the top edge', f.length === 1 && /top edge/.test(f[0].message), show(f));
+  f = await findings([pop({ x: -1, y: 10, width: 320, height: 200 })]);
+  check('B: fast mode has no tolerance: x -1 leaves the left edge', f.length === 1 && /left edge/.test(f[0].message), show(f));
+  f = await findings([pop({ x: 1121, y: 10, width: 320, height: 200 })]);
+  check('B: fast mode has no tolerance: 1px past the right edge warns', f.length === 1 && /right edge/.test(f[0].message), show(f));
+  f = await findings([pop({ y: 850, width: 320, height: 100 })]);
+  check('B: fast mode skips a box with no x', f.length === 0, show(f));
+  f = await findings([modal('m', [], { x: 1300, y: 100, width: 400, height: 300 })]);
+  check('B: a placed modal past the right edge warns', f.length === 1 && /right edge/.test(f[0].message), show(f));
+
+  // Detailed rects, injected: root origin y, the fallbacks, the sideways clauses.
+  const profile = WINDOW_PROFILES['window-1440'];
+  const rect = (nodeId: string, x: number, y: number, width: number, height: number, extra = {}) => ({ nodeId, x, y, width, height, ...extra });
+  const popRoot = canvasOf([pop({ x: 100, y: 800, width: 320, height: 100 })]).root;
+  f = checkOverlays({ root: popRoot, profile, rects: new Map([['document', rect('document', 0, 100, 1440, 900)], ['pop', rect('pop', 100, 900, 320, 100)]]) }, new Set());
+  check('B: rendered y is read from the root rect\'s top (ends at 900 relative)', f.length === 0, show(f));
+  f = checkOverlays({ root: popRoot, profile, rects: new Map([['document', rect('document', 0, 100, 1440, 900)], ['pop', rect('pop', 100, 902, 320, 100)]]) }, new Set());
+  check('B: twin: 2px further it leaves the bottom', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
+  f = checkOverlays({ root: popRoot, profile, rects: new Map([['pop', rect('pop', 100, 0, 320, 100)]]) }, new Set());
+  check('B: with no root rect the authored box is used (it fits)', f.length === 0, show(f));
+  const tallRoot = canvasOf([pop({ x: 100, y: 850, width: 320, height: 100 })]).root;
+  f = checkOverlays({ root: tallRoot, profile, rects: new Map([['pop', rect('pop', 100, 0, 320, 100)]]) }, new Set());
+  check('B: twin: with no root rect a leaving authored box warns', f.length === 1 && /bottom edge/.test(f[0].message), show(f));
+
+  const scrollRoot = (extra: Partial<SceneNode>) => canvasOf([modal('m', [frame('scroll', [text('s', 'x')], { overflow: 'auto', ...extra })], { size: 'md' })]).root;
+  const modalRect = rect('m', 400, 300, 640, 300);
+  const sideways = (frameRect: object | undefined, extra: Partial<SceneNode> = {}) => checkOverlays({
+    root: scrollRoot(extra), profile,
+    rects: new Map<string, ReturnType<typeof rect>>([['document', rect('document', 0, 0, 1440, 900)], ['m', modalRect], ...(frameRect ? [['scroll', frameRect] as [string, ReturnType<typeof rect>]] : [])]),
+  }, new Set());
+  f = sideways(rect('scroll', 400, 340, 641, 20));
+  check('B: a rendered scroller 1px wider than the modal is rounding', f.length === 0, show(f));
+  f = sideways(rect('scroll', 400, 340, 642, 20));
+  check('B: 2px wider warns', f.length === 1 && /642px wide in a 640px modal/.test(f[0].message), show(f));
+  f = sideways(rect('scroll', 400, 340, 600, 20, { scrollWidth: 601, clientWidth: 600 }));
+  check('B: content 1px past the scroller is rounding', f.length === 0, show(f));
+  f = sideways(rect('scroll', 400, 340, 600, 20, { scrollWidth: 602, clientWidth: 600 }));
+  check('B: content 2px past it scrolls sideways', f.length === 1 && /scrolls sideways/.test(f[0].message), show(f));
+  f = sideways(rect('scroll', 400, 340, 500, 20), { minWidth: 900 });
+  check('B: a rendered rect wins over an authored minWidth', f.length === 0, show(f));
+  f = sideways(undefined, { minWidth: 900 });
+  check('B: twin: with no rect for the scroller its minWidth is read', f.length === 1 && /900px wide/.test(f[0].message), show(f));
+
+  f = await findings([modal('m', [{ id: 'box', name: 'box', type: 'rectangle', overflow: 'auto', minWidth: 900, height: 40 } as SceneNode], { size: 'md' })]);
+  check('B: only a frame is a scroller (a wide rectangle is not)', f.length === 0, show(f));
+  // A navigation list of icon rows is not a table (FR-A5), whatever its length.
+  const navRows = Array.from({ length: 12 }, (_, i) => frame(`nr${i}`, [{ id: `ni${i}`, name: 'i', type: 'icon', icon: 'folder' } as SceneNode, text(`nt${i}`, `Folder ${i}`)], { layout: 'horizontal', height: 32 }));
+  f = await findings([modal('m', [frame('folders', navRows)], { size: 'lg' })]);
+  check('B: 12 icon-led rows in a modal are a list, not a table: silent', f.length === 0, show(f));
+
+  // Every warning and info at its severity.
+  const sev = new Map<string, string>();
+  const all = await findings([
+    { id: 'tip', name: 'tip', type: 'tooltip', text: 'x', x: 10, y: 10, children: [text('tc', 'child')] } as SceneNode,
+    modal('m', [frame('tbl', [frame('h', [text('h1', 'A', { fontWeight: 600 }), text('h2', 'B', { fontWeight: 600 })], { layout: 'horizontal' }),
+      ...Array.from({ length: 11 }, (_, i) => frame(`r${i}`, [text(`a${i}`, 'a'), text(`b${i}`, 'b')], { layout: 'horizontal' }))]),
+      frame('scroll', [text('s', 'x')], { overflow: 'auto', minWidth: 2000 })], { size: 'lg' }),
+    { id: 'menu', name: 'menu', type: 'menu', x: 10, y: 10, children: [] } as SceneNode,
+    pop({ id: 'off', x: 1300, y: 10, width: 320, height: 100, anchor: 'tbl' }),
+  ]);
+  for (const i of all) sev.set(`${i.nodeId}:${/text only/.test(i.message) ? 'tip' : /scrim/.test(i.message) ? 'scrim' : /viewport/.test(i.message) ? 'view' : /rows inside/.test(i.message) ? 'table' : /sideways|wide in a/.test(i.message) ? 'scroll' : /anchored/.test(i.message) ? 'anchor' : 'other'}`, i.severity);
+  const want: Record<string, string> = { 'tip:tip': 'warning', 'tbl:table': 'warning', 'scroll:scroll': 'warning', 'menu:scrim': 'warning', 'off:scrim': 'warning', 'off:view': 'warning', 'off:anchor': 'info' };
+  const got = Object.fromEntries(sev);
+  check('B: each finding at its severity (tooltip, table, scroller, scrim, viewport warn; anchor info)', JSON.stringify(got, Object.keys(want).sort()) === JSON.stringify(want, Object.keys(want).sort()) && sev.size === Object.keys(want).length, JSON.stringify(got));
+
+  // Twins for earlier passes.
+  f = await findings([{ id: 'i1', name: 'i1', type: 'instance', componentId: 'bc' }, { id: 'tip', name: 'tip', type: 'tooltip', text: 'x', x: 10, y: 80, anchor: 'i1' } as SceneNode],
+    { components: { bc: btn('bc') } });
+  check('B: an anchor naming an instance of a button component is silent', f.length === 0, show(f));
+  const r = await evaluateCanvas(canvasOf([modal('m1'), modal('m2')]), { mode: 'fast', categories: ['usability'] });
+  check('B: twin: the categories filter with usability raises it', r.issues.some((i) => i.rule === RULE));
+}
+
 // ── only desktop-app runs it; the categories filter ────────────────────────
 {
   const bad = [modal('m1'), modal('m2'), { id: 'to', name: 'to', type: 'toast', text: 'x', tone: 'danger' } as SceneNode];
@@ -281,6 +410,16 @@ async function standIn(overlay: (c: Canvas) => SceneNode[]): Promise<{ overlay: 
   check('M7: comment-open raises no desktop-app-overlay finding (fast)', comment.overlay.length === 0, show(comment.overlay));
   console.log(`      comment-open blocking findings (any rule): ${comment.blocking.length} ${show(comment.blocking)}`);
 }
+
+// M7 failing twins: the same stand-ins broken on one axis.
+{
+  const twice = await standIn(() => ['a', 'b'].map((k) => ({ id: `confirm-${k}`, name: 'Confirm', type: 'modal', title: 'Delete project?', size: 'sm', actions: [{ label: 'Cancel' }, { label: 'Delete', variant: 'destructive' }] } as SceneNode)));
+  check('M7 twin: confirm-delete with a second modal warns', twice.overlay.length === 1 && twice.overlay[0].severity === 'warning', show(twice.overlay));
+  const toFrame = await standIn((c) => [{ id: 'comment', name: 'Comment', type: 'popover', anchor: c.root.children![0].id, x: 1000, y: 160, size: 'sm', children: [] } as SceneNode]);
+  check('M7 twin: comment-open anchored to a frame is an info', toFrame.overlay.length === 1 && toFrame.overlay[0].severity === 'info' && /anchored/.test(toFrame.overlay[0].message), show(toFrame.overlay));
+}
+
+check('every desktop-app-overlay finding is category usability', wrongCategory.length === 0, wrongCategory.join(', '));
 
 console.log(allPass ? '\nAll desktop-app-overlay tests passed.' : '\nSOME TESTS FAILED');
 process.exit(allPass ? 0 : 1);
