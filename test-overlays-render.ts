@@ -195,6 +195,61 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
   }
 }
 
+// ── Round 1 fixes: neighbours and phones ────────────────────────────────────
+{
+  // A modal's box is never a 24px-circle neighbour (its scrim covers what is outside).
+  const C = (children: SceneNode[]): Canvas => ({ ...canvasOf(children, {}, { layout: 'none', fill: '#FFFFFF' }) });
+  const at = (x: number, y: number): SceneNode => ({ id: 'w', name: 'w', type: 'frame', position: 'absolute', x, y, width: 18, height: 18, children: [{ id: 'cb', name: 'cb', type: 'checkbox' }] });
+  const small = async (children: SceneNode[]) => (await evaluateCanvas(C(children), { mode: 'detailed', categories: ['usability'] })).issues.filter((i) => /24px/.test(i.message));
+  const m: SceneNode = { id: 'm', name: 'm', type: 'modal', title: 'T', actions: [{ label: 'OK', variant: 'primary' }], children: [{ id: 'mt', name: 'mt', type: 'text', content: 'Body' }] };
+  check('a small target 11px from a modal\'s box is not blocked by it', (await small([at(382, 420), m])).length === 0);
+  const toastNear = await small([at(382, 840), { id: 't', name: 't', type: 'toast', text: 'Saved', action: { label: 'Undo' }, x: 400, y: 830 }]);
+  check('twin: the same target beside a toast still errors', toastNear.length === 1 && toastNear[0].severity === 'error');
+  const pageNear = await small([at(382, 420), { id: 'wb', name: 'wb', type: 'frame', position: 'absolute', x: 400, y: 410, children: [{ id: 'b', name: 'b', type: 'button', label: 'Go', size: 'sm' }] }]);
+  check('twin: the same target beside a page button still errors', pageNear.length === 1 && pageNear[0].severity === 'error');
+
+  // Phones: the anchored overlays keep clear, and the safe-area rule skips them.
+  const phone = (children: SceneNode[]): Canvas => ({
+    ...canvasOf(children, {}, { width: 390, height: 844, safeArea: { top: 47, bottom: 34 }, fill: '#FFFFFF' }),
+    metadata: { surface: { type: 'mobile', device: 'iphone-390' } },
+  } as Canvas);
+  const safe = async (c: Canvas, mode: 'fast' | 'detailed') => (await evaluateCanvas(c, { mode, categories: ['usability'] })).issues.filter((i) => i.rule === 'mobile-safe-area');
+  const tall: SceneNode = { id: 'm', name: 'm', type: 'modal', title: 'Long', children: Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, name: `p${i}`, type: 'text', content: `Paragraph ${i} of a long modal body.`, fontSize: 16 })) };
+  const tallCanvas = phone([tall]);
+  check('phone: a tall centred modal raises no safe-area finding (detailed)', (await safe(tallCanvas, 'detailed')).length === 0);
+  const mr = flat(await computeLayout(renderToHtml(tallCanvas.root, 390, 844, tallCanvas), undefined, 5, { width: 390, height: 844 })).get('m')!;
+  check('phone: the modal stays 16px past the insets', mr.y === 63 && mr.y + mr.height === 794, JSON.stringify({ y: mr.y, bottom: mr.y + mr.height }));
+  const drawerCanvas = phone([{ id: 'd', name: 'd', type: 'drawer', children: [{ id: 'dt', name: 'dt', type: 'text', content: 'Filters', fontSize: 16 }] }]);
+  check('phone: a drawer\'s content clears the status bar, and no safe-area finding', (await safe(drawerCanvas, 'detailed')).length === 0
+    && flat(await computeLayout(renderToHtml(drawerCanvas.root, 390, 844, drawerCanvas), undefined, 5, { width: 390, height: 844 })).get('dt')!.y >= 47);
+  const tabCanvas = phone([{ id: 'tab', name: 'tab', type: 'tab-bar', items: [{ icon: 'house', label: 'Home', active: true }, { icon: 'user', label: 'Me' }] }, { id: 't', name: 't', type: 'toast', text: 'Saved' }]);
+  const tr = flat(await computeLayout(renderToHtml(tabCanvas.root, 390, 844, tabCanvas), undefined, 5, { width: 390, height: 844 }));
+  check('phone: a default toast sits above the tab bar', tr.get('t')!.y + tr.get('t')!.height <= tr.get('tab')!.y, JSON.stringify({ toast: tr.get('t')!.y + tr.get('t')!.height, tab: tr.get('tab')!.y }));
+  const pop = phone([{ id: 'pop', name: 'pop', type: 'popover', x: 20, y: 10, children: [{ id: 'pt', name: 'pt', type: 'text', content: 'Hi there', fontSize: 16 }] }]);
+  check('twin: a popover placed under the status bar warns (fast)', (await safe(pop, 'fast')).some((i) => i.nodeId === 'pt'));
+  check('twin: a popover placed under the status bar warns (detailed)', (await safe(pop, 'detailed')).some((i) => i.nodeId === 'pt'));
+  const nested = phone([{ id: 'fr', name: 'fr', type: 'frame', position: 'absolute', x: 0, y: 300, width: 390, height: 100, children: [
+    { id: 'pop2', name: 'pop2', type: 'popover', x: 20, y: 10, children: [{ id: 'pt2', name: 'pt2', type: 'text', content: 'Hi there', fontSize: 16 }] },
+  ] }]);
+  check('fast mode reads a nested overlay\'s y as root coordinates (warns at y 10, not 310)', (await safe(nested, 'fast')).some((i) => i.nodeId === 'pt2'));
+}
+
+// ── Round 1 mutation gaps (rendered) ────────────────────────────────────────
+{
+  const long = 'A tooltip with enough words in it to wrap well past its maximum width of two hundred and forty pixels';
+  const html = htmlOf(canvasOf([
+    { id: 'tip', name: 'tip', type: 'tooltip', text: long, x: 10, y: 10 },
+    { id: 'pop', name: 'pop', type: 'popover', x: 400, y: 100, children: [{ id: 'pt', name: 'pt', type: 'text', content: 'In' }] },
+  ], tech));
+  const r = flat(await computeLayout(html, undefined, 5, { width: 1440, height: 900 }));
+  check('a long tooltip wraps at 240 (not narrower)', r.get('tip')!.width >= 236 && r.get('tip')!.width <= 240, String(r.get('tip')!.width));
+  const sub = await computeLayout(html, 'pop', 5, { width: 1440, height: 900 });
+  check('twin: walking from an overlay does not append the other overlays', !(sub[0]?.children ?? []).some((c) => c.nodeId === 'tip'));
+  const narrow = { ...canvasOf([{ id: 'm', name: 'm', type: 'modal', title: 'Narrow', children: [] }], tech, { width: 390, height: 844 }) } as Canvas;
+  const m = flat(await computeLayout(renderToHtml(resolveVariables(narrow.root, tech), 390, 844, narrow), undefined, 3, { width: 390, height: 844 })).get('m')!;
+  check('a modal wider than the artboard keeps 16px each side', m.x === 16 && m.width === 358, JSON.stringify({ x: m.x, w: m.width }));
+}
+
 await shutdown();
 console.log(allPass ? '\nAll checks passed.' : '\nSome checks FAILED.');
 process.exit(allPass ? 0 : 1);

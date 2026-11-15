@@ -19,6 +19,7 @@ import { createCanvas, addVariant, listCanvases, getCanvas } from './src/scene-g
 import { OVERLAY_TYPES, OVERLAY_Z, effectivePosition, modalActions, modalWidth, overlayTargets, popoverWidth, drawerWidth } from './src/primitives.js';
 import { checkCurrent, checkPrimaryCount } from './src/desktop-app-rules.js';
 import { WINDOW_PROFILES } from './src/surfaces.js';
+import { generateDesignSystem } from './src/design-language.js';
 import type { Canvas, SceneNode } from './src/types.js';
 
 let allPass = true;
@@ -140,8 +141,8 @@ const modal = (extra: Partial<SceneNode> = {}): SceneNode => ({
   check('modal close button: named "Close" by default', /data-fs-modal-close[^>]*aria-label="Close"/.test(layer));
   check('closeLabel names it', /data-fs-modal-close[^>]*aria-label="Dismiss"/.test(layerOf(htmlOf(canvasWith([modal({ closeLabel: 'Dismiss' })], app)))));
   check('modal: role dialog, aria-modal, labelled by its title', /role="dialog" aria-modal="true" aria-label="Delete canvas\?"/.test(layer));
-  check('modal: centred unless placed', /data-node-id="m"[^>]*inset: 0; margin: auto/.test(layer));
-  check('twin: a placed modal is not centred', !/data-node-id="m"[^>]*inset: 0; margin: auto/.test(layerOf(htmlOf(canvasWith([modal({ x: 40, y: 60 })], app)))));
+  check('modal: centred unless placed', /data-node-id="m"[^>]*left: 0; right: 0; margin: auto/.test(layer));
+  check('twin: a placed modal is not centred', !/data-node-id="m"[^>]*left: 0; right: 0; margin: auto/.test(layerOf(htmlOf(canvasWith([modal({ x: 40, y: 60 })], app)))));
   check('modal widths: sm 480 / md 640 / lg 960 / numeric wins', modalWidth({ id: 'a', type: 'modal', size: 'sm' }) === 480 && modalWidth({ id: 'a', type: 'modal' }) === 640 && modalWidth({ id: 'a', type: 'modal', size: 'lg' }) === 960 && modalWidth({ id: 'a', type: 'modal', width: 500 }) === 500);
   check('popover widths: default 320, xs 192, numeric wins', popoverWidth({ id: 'a', type: 'popover' }) === 320 && popoverWidth({ id: 'a', type: 'popover', size: 'xs' }) === 192 && popoverWidth({ id: 'a', type: 'popover', width: 250 }) === 250);
   check('drawer widths: default 320, md 480', drawerWidth({ id: 'a', type: 'drawer' }) === 320 && drawerWidth({ id: 'a', type: 'drawer', size: 'md' }) === 480);
@@ -237,6 +238,98 @@ const modal = (extra: Partial<SceneNode> = {}): SceneNode => ({
   // A frame in a modal body is still judged by FR-C2 (modal is not a clickable primitive).
   const hand = (await evaluateCanvas(canvasWith([modal({ children: [{ id: 'hb', name: 'hb', type: 'frame', padding: 4, children: [{ id: 'hi', name: 'hi', type: 'icon', icon: 'x', iconSize: 16 }] }] })], app), { mode: 'fast', categories: ['usability'] })).issues.filter((i) => i.rule === 'desktop-app-handbuilt-target');
   check('FR-C2 still names a hand-built icon frame inside a modal body', hand.length === 1);
+}
+
+// ── Round 1 fixes ───────────────────────────────────────────────────────────
+{
+  // The generated overlay elevation is a shadow, not a glow (the halo tell).
+  const glow = async (color: string) => (await evaluateCanvas(canvasWith([{ id: 'f', name: 'f', type: 'frame', width: 200, height: 100, shadows: [{ x: 0, y: 20, blur: 25, color }] }], app), { mode: 'fast', categories: ['cliche'] })).issues.filter((i) => i.tell === 'gradient-glow').length;
+  check('halo tell: the generated deep-ink overlay shadow is not a glow', await glow('rgba(16, 24, 40, 0.14)') === 0);
+  check('twin: a saturated dark red shadow (lightness .31) still is', await glow('rgba(127, 29, 29, 0.5)') === 1);
+  check('twin: an indigo glow still is', await glow('rgba(99, 102, 241, 0.5)') === 1);
+  const themedModal = canvasWith([modal()], app);
+  const ds = generateDesignSystem('#2563EB', 'technical').variables;
+  themedModal.variables = ds;
+  const tells = (await evaluateCanvas(themedModal, { mode: 'fast', categories: ['cliche'] })).issues.filter((i) => i.tell === 'gradient-glow');
+  check('a modal on a generated design system raises no halo tell', tells.length === 0, tells.map((i) => i.nodeId).join(','));
+
+  // A menu's rows belong to the menu: pages and phones open menus too.
+  const art = async (children: SceneNode[], surface?: Surface) => (await evaluateCanvas(canvasWith(children, surface), { mode: 'fast', categories: ['structure'] })).issues.filter((i) => i.rule === 'desktop-app-artboard');
+  const menu: SceneNode = { id: 'menu', name: 'menu', type: 'menu', children: [{ id: 'r', name: 'r', type: 'menu-row', label: 'Open' }] };
+  check('FR-C9: a menu on an explicit web canvas raises nothing', (await art([menu], { type: 'web' })).length === 0);
+  check('FR-C9: a menu on an explicit mobile canvas raises nothing', (await art([menu], { type: 'mobile', device: 'iphone-390' })).length === 0);
+  const loose = await art([{ id: 'fr', name: 'fr', type: 'frame', children: [{ id: 'r3', name: 'r3', type: 'menu-row', label: 'x' }] }], { type: 'mobile', device: 'iphone-390' });
+  check('twin: a menu-row outside a menu on mobile still warns', loose.length === 1 && loose[0].severity === 'warning');
+  const navInMenu = await art([{ ...menu, children: [{ id: 'nv', name: 'nv', type: 'nav-item', label: 'x' }] }], { type: 'mobile', device: 'iphone-390' });
+  check('twin: a nav-item inside a menu on mobile still warns', navInMenu.length === 1 && navInMenu[0].nodeId === 'nv');
+  const undeclaredMenu = await art([menu]);
+  check('an undeclared canvas with a menu warns on the menu (the overlay clause)', undeclaredMenu.length === 1 && undeclaredMenu[0].nodeId === 'menu');
+
+  // A popover / menu / drawer falls back to the neutral text colour, as modal and toast do.
+  const unthemed = layerOf(renderToHtml(canvasWith([{ id: 'pop', name: 'pop', type: 'popover' }]).root, 1440, 900));
+  check('unthemed popover: #111827 text', /data-node-id="pop"[^>]*color: #111827/.test(unthemed));
+
+  // On a phone (safeArea, pinned tab bar) the viewport-anchored overlays keep clear.
+  const phone = (children: SceneNode[]) => {
+    const c = canvasWith(children, { type: 'mobile', device: 'iphone-390' });
+    c.root.width = 390; c.root.height = 844; c.root.safeArea = { top: 47, bottom: 34 };
+    return renderToHtml(c.root, 390, 844, c);
+  };
+  const tab: SceneNode = { id: 'tab', name: 'tab', type: 'tab-bar', items: [{ icon: 'house', label: 'Home', active: true }, { icon: 'user', label: 'Me' }] };
+  check('phone: a centred modal clears the insets (top 63, bottom 50)', /data-node-id="m"[^>]*max-height: calc\(100% - 113px\); top: 63px; bottom: 50px/.test(layerOf(phone([modal()]))));
+  check('phone: a default toast sits 16px above the tab bar', /data-node-id="t"[^>]*bottom: 99px/.test(layerOf(phone([tab, { id: 't', name: 't', type: 'toast', text: 'Saved' }]))));
+  check('phone: a drawer pads past the insets', /data-node-id="d"[^>]*padding-top: calc\([^)]*\+ 47px\); padding-bottom: calc\([^)]*\+ 34px\)/.test(layerOf(phone([{ id: 'd', name: 'd', type: 'drawer' }]))));
+  const desk = layerOf(htmlOf(canvasWith([modal(), { id: 't', name: 't', type: 'toast', text: 'Saved' }, { id: 'd', name: 'd', type: 'drawer' }], app)));
+  check('twin: on a window they keep the 32 / 24 defaults and no extra padding', /data-node-id="m"[^>]*top: 32px; bottom: 32px/.test(desk) && /data-node-id="t"[^>]*bottom: 24px/.test(desk) && !/data-node-id="d"[^>]*padding-top: calc/.test(desk));
+}
+
+// ── Round 1 mutation gaps ───────────────────────────────────────────────────
+{
+  const un = (children: SceneNode[]) => layerOf(renderToHtml(canvasWith(children).root, 1440, 900));
+  // Unthemed modal actions: the renderer's own fallbacks (no resolveVariables).
+  const bare = un([modal({ actions: [{ label: 'Later' }] })]);
+  check('unthemed bare action: secondary (transparent, bordered, dark text)', /background-color: transparent; border: 1px solid #D1D5DB; color: #111827[^"]*"><span data-fs-label[^>]*>Later/.test(bare), bare.match(/<div tabindex="0" data-focusable style="[^"]*">(<[^>]*>)?Later/)?.[0]?.slice(0, 200));
+  const filled = un([modal({ actions: [{ label: 'Go', variant: 'primary' }] })]);
+  check('twin: an unthemed primary action is filled, white text, no border', /background-color: #2563EB; color: #FFFFFF[^"]*"><span data-fs-label[^>]*>Go/.test(filled));
+  // Scrim, aria-modal, tooltip box, toast anatomy.
+  const tip = un([{ id: 'tip', name: 'tip', type: 'tooltip', text: 'x' }]);
+  check('tooltip: 4px 8px padding, radius 4', /data-node-id="tip"[^>]*padding: 4px 8px; border-radius: 4px/.test(tip));
+  check('scrim: rgba(0, 0, 0, 0.4)', /data-fs-scrim="m"[^>]*background-color: rgba\(0, 0, 0, 0.4\)/.test(un([modal()])));
+  const dr = un([{ id: 'd', name: 'd', type: 'drawer', scrim: true }]);
+  check('drawer with scrim: aria-modal', /data-node-id="d"[^>]*role="dialog" aria-modal="true"/.test(dr));
+  check('twin: drawer without scrim: no aria-modal', !/aria-modal/.test(un([{ id: 'd', name: 'd', type: 'drawer' }])));
+  check('drawer: radius 0, a left border only', /data-node-id="d"[^>]*border-radius: 0px[^"]*border-left: 1px solid #D1D5DB/.test(dr) && !/data-node-id="d"[^>]*border: 1px/.test(dr));
+  check('default paddings: menu 4, popover 12, drawer 16', /data-node-id="mn"[^>]*padding: 4px/.test(un([{ id: 'mn', name: 'mn', type: 'menu' }]))
+    && /data-node-id="pp"[^>]*padding: 12px/.test(un([{ id: 'pp', name: 'pp', type: 'popover' }])) && /data-node-id="d"[^>]*padding: 16px/.test(dr));
+  check('popover renders 320 wide by default', /data-node-id="pp"[^>]*width: 320px/.test(un([{ id: 'pp', name: 'pp', type: 'popover' }])));
+  check('a root-child popover at height 100% keeps its height (no root flex)', /data-node-id="pp"[^>]*height: 100%/.test(un([{ id: 'pp', name: 'pp', type: 'popover', height: '100%' }])) && !/data-node-id="pp"[^>]*flex: 1 1 auto/.test(un([{ id: 'pp', name: 'pp', type: 'popover', height: '100%' }])));
+  const toastPlaced = un([{ id: 't', name: 't', type: 'toast', text: 'x', x: 40, y: 60 }]);
+  check('a placed toast sits at its x / y', /data-node-id="t"[^>]*left: 40px; top: 60px/.test(toastPlaced) && !/data-node-id="t"[^>]*bottom: 24px/.test(toastPlaced));
+  const withAction = un([{ id: 't', name: 't', type: 'toast', text: 'x', action: { label: 'Undo' } }]);
+  check('toast padding: 8 8 8 12 with an action, 8 12 without', /data-node-id="t"[^>]*padding: 8px 8px 8px 12px/.test(withAction) && /data-node-id="t"[^>]*padding: 8px 12px/.test(un([{ id: 't', name: 't', type: 'toast', text: 'x' }])));
+  const success = un([{ id: 't', name: 't', type: 'toast', text: 'x', tone: 'success' }]);
+  check('success toast: the circle-check glyph in green', success.includes('lucide-circle-check') && /stroke="#16A34A"/.test(success), success.match(/<svg[^>]*>/)?.[0]);
+  check('neutral toast: the info glyph', un([{ id: 't', name: 't', type: 'toast', text: 'x' }]).includes('lucide-info'));
+  // Census: a toast action with no label is no target.
+  check('census: a blank toast action is no target', overlayTargets({ id: 't', type: 'toast', action: { label: '  ' } }).length === 0 && overlayTargets({ id: 't', type: 'toast', action: {} as never }).length === 0);
+  // Defaults: tokens inside actions / action, success tone, explicit shadow, pale accent.
+  const t2 = resolveVariables(canvasWith([
+    modal({ actions: [{ label: 'A', variant: 'secondary', color: '$danger', stroke: '$accent' }] }),
+    { id: 'toast', name: 'toast', type: 'toast', text: 'x', tone: 'success', action: { label: 'Undo', color: '$danger' } },
+    modal({ id: 'm2', shadows: [{ x: 0, y: 1, blur: 2, color: '#000000' }] }),
+  ], app, TOKENS).root, { colors: TOKENS, elevation: { overlay: [{ x: 0, y: 9, blur: 9, color: 'rgba(0,0,0,0.3)' }] } });
+  const k = (id: string) => t2.children!.find((n) => n.id === id)!;
+  check('$token refs resolve in actions[].color / .stroke and action.color', k('m').actions![0].color === TOKENS.danger && k('m').actions![0].stroke === TOKENS.accent && k('toast').action!.color === TOKENS.danger);
+  check('success toast glyph: $success', k('toast').iconColor === TOKENS.success);
+  check('an explicit shadow wins over $elevation.overlay', k('m2').shadows!.length === 1 && k('m2').shadows![0].blur === 2);
+  const pale = resolveVariables(canvasWith([modal({ actions: [{ label: 'Go', variant: 'primary' }] })], app, { ...TOKENS, accent: '#FDE68A' }).root, { colors: { ...TOKENS, accent: '#FDE68A' } });
+  check('a pale accent gives a primary action dark text', pale.children![0].actions![0].color !== '#FFFFFF', pale.children![0].actions![0].color);
+  // Drawer as a region: two primaries inside it are the info.
+  const ctx = { root: canvasWith([{ id: 'dr', name: 'dr', type: 'drawer', children: [{ id: 'p1', name: 'p1', type: 'button', label: 'A' }, { id: 'p2', name: 'p2', type: 'button', label: 'B' }] }], app).root, profile: WINDOW_PROFILES['window-1440'] };
+  check('twin: two primaries inside one drawer are the info', checkPrimaryCount(ctx).length === 1);
+  // Every overlay kind ignores its own position.
+  const pos = un([...OVERLAY_TYPES].map((t, i) => ({ id: `o${i}`, name: `o${i}`, type: t as SceneNode['type'], text: 'x', position: 'fixed' as const })));
+  check('no overlay kind renders its own position: fixed', !/data-fs-overlay[^>]*position: fixed/.test(pos));
 }
 
 // ── K7: stress reaches the overlay copy ─────────────────────────────────────

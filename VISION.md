@@ -556,6 +556,7 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 All seven slices are merged and the acceptance re-run passed. The phase is closed.
 
 - [ ] Follow-up — `link` and `text-input` join the mobile 44px touch census. Phase 31 slice B added both primitives for app screens; on a phone canvas they are not measured today, so a 32px text-input passes silently.
+- [ ] Follow-up — overlay controls on a phone. Phase 31 slice E's `modal` close button and actions (32px) and `toast` action (24px) are drawn at fixed pointer sizes and are not in the mobile 44px touch census, so a modal on a phone canvas passes silently; meeting 44px needs a size option on the overlay (render never depends on type), and the census then measures it. Until then the docs send phone dialogs to `sheet`.
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 

@@ -1356,7 +1356,10 @@ function tellGradientGlow(ctx: ClicheCtx): EvaluationIssue[] {
     const rgb = parseColor(color);
     if (!rgb) return false;
     const { s, l } = rgbToHsl(rgb);
-    if (s > 0.25) return true;                       // colored glow
+    // A coloured glow is a saturated colour you can see. Ink darker than 20%
+    // lightness (the generated $elevation.* use a deep blue-black) reads as a
+    // shadow, whatever its hue.
+    if (s > 0.25 && l > 0.2) return true;            // colored glow
     if (l > 0.85 && parseAlpha(color) < 1) return true; // white bloom / halo
     return false;
   };
@@ -2124,8 +2127,12 @@ function checkPointerTargets(
       continue;
     }
     const c = centre(rect);
-    const unplaced = live.find((o) => !nested(o.node, t.node) && !rects.has(o.node.id));
-    const blocker = live.find((o) => {
+    // A modal's own targets are never a neighbour: its scrim covers everything
+    // outside it, and what is inside is nested. (Its box would stand in for
+    // its buttons, as a shared id does.)
+    const neighbours = live.filter((o) => o.node.type !== 'modal');
+    const unplaced = neighbours.find((o) => !nested(o.node, t.node) && !rects.has(o.node.id));
+    const blocker = neighbours.find((o) => {
       if (nested(o.node, t.node)) return false;
       const r = rects.get(o.node.id);
       if (!r) return false;

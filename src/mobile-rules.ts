@@ -11,7 +11,7 @@ import type { LayoutRect } from './screenshot.js';
 import { renderedPaddingPx } from './renderer.js';
 import { usableSafeArea, type DeviceProfile, type SurfaceDeclaration } from './surfaces.js';
 import {
-  buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, pinsBottom, pinsTop,
+  OVERLAY_TYPES, buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, pinsBottom, pinsTop,
   rootInsets, tabItems, unpinsFixed,
 } from './primitives.js';
 
@@ -115,6 +115,14 @@ function indexFor(ctx: MobileContext): TreeIndex {
     indexes.set(ctx.root, index);
   }
   return index;
+}
+
+/** Overlays the renderer itself keeps clear of the safe area and pinned
+ * chrome: a sheet, a drawer, and a modal or toast left at its default place
+ * (no x / y). The safe-area walks skip them and what they hold. */
+function selfInset(n: SceneNode): boolean {
+  return n.type === 'sheet' || n.type === 'drawer'
+    || ((n.type === 'modal' || n.type === 'toast') && !isNum(n.x) && !isNum(n.y));
 }
 
 /** Inside a sheet (a modal overlay the renderer pads): skipped by the
@@ -312,7 +320,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   const placedY = new Map<SceneNode, number>();
   const holds = (n: SceneNode) => isContent(n, ctx) || holdsFlowContent(n, ctx);
   const visit = (n: SceneNode, parent: SceneNode | undefined): void => {
-    if (n.type === 'sheet') return;
+    if (selfInset(n)) return;
     if (parent && isPositioned(n) && !PINNED_CHROME.has(n.type)) {
       const position = effectivePosition(n);
       if (position === 'fixed' && fixedUnpinned(n, ctx)) {
@@ -328,8 +336,11 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
           checkPlaced(n, h !== undefined ? ctx.height - n.bottom - h : undefined, n.bottom);
         }
       } else {
-        const base = parent === ctx.root ? 0 : placedY.get(parent);
-        const y = base !== undefined && isNum(n.y) ? base + n.y : undefined;
+        // An overlay's x / y are root coordinates (it renders in the overlay
+        // layer, whatever its parent), and an absent y renders at 0.
+        const overlay = OVERLAY_TYPES.has(n.type);
+        const base = parent === ctx.root || overlay ? 0 : placedY.get(parent);
+        const y = base !== undefined && (isNum(n.y) || overlay) ? base + (isNum(n.y) ? n.y : 0) : undefined;
         if (y === undefined) {
           if (holds(n)) unplaceable = true;
         } else {
@@ -377,7 +388,7 @@ export function checkSafeAreaFast(ctx: MobileContext): EvaluationIssue[] {
   // the first or last content for good.
   let unresolved = false;
   (function bars(n: SceneNode) {
-    if (n.type === 'sheet') return;
+    if (selfInset(n)) return;
     if (n !== ctx.root && effectivePosition(n) === 'fixed' && !PINNED_CHROME.has(n.type) && !fixedUnpinned(n, ctx) && holds(n)) {
       const bottomBar = pinsBottom(n);
       const topBar = !bottomBar && pinsTop(n);
@@ -441,7 +452,7 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
   const sticky: Array<{ node: SceneNode; rect: LayoutRect; content: Array<{ node: SceneNode; rect: LayoutRect }> }> = [];
 
   const visit = (n: SceneNode, positioned: boolean, stuck: typeof sticky[number] | undefined, clipped: boolean): void => {
-    if (n.type === 'sheet') return;
+    if (selfInset(n)) return;
     const r = rects.get(n.id);
     if (isContentNode(n, r)) {
       if (r && r.width > 0 && r.height > 0) {
@@ -493,7 +504,7 @@ export function checkSafeAreaDetailed(ctx: MobileContext, layout: LayoutRect[]):
     a.y < top + b.height && a.y + a.height > top && a.x < b.x + b.width && a.x + a.width > b.x;
   const scroll = docBottom - ctx.height;
   (function bars(n: SceneNode) {
-    if (n.type === 'sheet') return;
+    if (selfInset(n)) return;
     const r = rects.get(n.id);
     // A fixed node under a blurred or animated ancestor pins to that ancestor,
     // not the screen, so it is not a bar at the scroll's ends.

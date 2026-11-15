@@ -208,7 +208,7 @@ Clone a screen into a linked **state variant** — the empty / loading / error v
 | Param | Type | Description |
 |-------|------|-------------|
 | `canvasId` | string | The base canvas (a variant id also works — it resolves to the root base; variants never nest) |
-| `state` | string | The state this variant designs — `empty` / `loading` / `error` recommended; free string accepted |
+| `state` | string | The state this variant designs — `empty` / `loading` / `error` for data states, `menu-open` / `comment-open` / `confirm-delete` / `toast` for overlay states; free string accepted |
 
 Returns `{ canvasId, name, state, of, idMap }` — `idMap` maps every base node id to its clone, so follow-up edits target the right nodes immediately. One canvas per state per base (a duplicate state errors). The viewer shows a screen and its variants as one card with state chips; `canvas_list` rolls designed states onto the base row.
 
@@ -399,7 +399,7 @@ Application screens (`type: "desktop-app"`) are built from eight primitives on t
 
 #### Overlays
 
-Six overlays draw screen states: an open menu, a comment popover, a confirm dialog, a toast. Put each in a state variant (`canvas_add_variant` with `menu-open`, `comment-open`, `confirm-delete` or `toast`); coverage lists those states and never demands them. Wherever an overlay sits in the tree, it renders in one layer after the content, so a pane never clips it and a sticky bar never covers it. `x` / `y` are offsets from the root's top-left, not from the parent. Layers are fixed by kind, with no z-index property: `popover` and `menu` 400, the modal's scrim 500, `modal` and `drawer` 510, `toast` 600, `tooltip` 800. `anchor` names the node that opens an overlay, for the rules; it is never rendered. Colours come from `$bg-surface`, `$border`, `$text-primary` and `$text-secondary`, depth from `$elevation.overlay`.
+Six overlays draw screen states: an open menu, a comment popover, a confirm dialog, a toast. Put each in a state variant (`canvas_add_variant` with `menu-open`, `comment-open`, `confirm-delete` or `toast`); coverage lists those states and never demands them. Wherever an overlay sits in the tree, it renders in one layer after the content, so a pane never clips it and a sticky bar never covers it. `x` / `y` are offsets from the root's top-left, not from the parent. Layers are fixed by kind, with no z-index property: `popover` and `menu` 400, the modal's scrim 500, `modal` and `drawer` 510, `toast` 600, `tooltip` 800. `anchor` names the node that opens an overlay; it is never rendered (the overlay rules of a later release read it). Colours come from `$bg-surface`, `$border`, `$text-primary` and `$text-secondary`, depth from `$elevation.overlay`.
 
 | Type | Key props | What it is |
 |---|---|---|
@@ -411,10 +411,10 @@ Six overlays draw screen states: an open menu, a comment popover, a confirm dial
 | `drawer` | `size` (`sm` 320 / `md` 480), `scrim`, children | A panel pinned to the right edge at full height |
 
 ```
-I(variant, { type: "modal", title: "Delete \"Checkout\"?", actions: [{ label: "Cancel" }, { label: "Delete", variant: "destructive" }] })
+I("document", { type: "modal", title: "Delete \"Checkout\"?", actions: [{ label: "Cancel" }, { label: "Delete", variant: "destructive" }] })
 ```
 
-A modal and a drawer are panes of their own for the wayfinding and primary-count rules; a modal's close button and actions and a toast's action are pointer targets. An undeclared canvas holding an overlay warns until it declares a type (`desktop-app-artboard`); web and mobile canvases may hold overlays freely.
+A modal and a drawer are panes of their own for `desktop-app-current` and `desktop-app-primary-count`; a modal's close button and actions and a toast's action are pointer targets. An undeclared canvas holding an overlay warns until it declares a type (`desktop-app-artboard`); web and mobile canvases may hold overlays freely.
 
 ### `find_nodes`
 
@@ -506,7 +506,7 @@ Get computed bounding boxes via browser rendering.
 | `nodeId` | string? | Root node to start from |
 | `maxDepth` | number? | Max depth (default 10) |
 
-Returns `{ nodeId, x, y, width, height, children? }` per node — plus, on any node whose content exceeds its box, overflow data (`scrollWidth`/`clientWidth`/`scrollHeight`/`clientHeight` and an `ellipsis` flag for designed truncation): the same capture `canvas_stress` uses to detect clipping. On a primitive, `truncated: true` when one of its own labels is cut by its ellipsis, and `labels` (`[{ chars, scrollWidth, clientWidth }]`, one per own label, in order) on every `tabs` node and on any primitive with a cut label.
+Returns `{ nodeId, x, y, width, height, children? }` per node — plus, on any node whose content exceeds its box, overflow data (`scrollWidth`/`clientWidth`/`scrollHeight`/`clientHeight` and an `ellipsis` flag for designed truncation): the same capture `canvas_stress` uses to detect clipping. On a primitive, `truncated: true` when one of its own labels is cut by its ellipsis, and `labels` (`[{ chars, scrollWidth, clientWidth }]`, one per own label, in order) on every `tabs` node and on any primitive with a cut label. Overlays (`tooltip`, `popover`, `menu`, `modal`, `toast`, `drawer`) render in a layer after the root: from the root they are listed as its last children wherever they sit in the tree, at root coordinates, and a modal (or a drawer with `scrim: true`) carries `scrim: { x, y, width, height }`, the rect its scrim covers.
 
 ### `generate_scale`
 

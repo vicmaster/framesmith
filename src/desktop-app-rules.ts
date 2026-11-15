@@ -33,10 +33,13 @@ export function checkDesktopArtboard(root: SceneNode, surface: SurfaceDeclaratio
   }];
 }
 
-function firstOf(root: SceneNode, types: ReadonlySet<string>): SceneNode | undefined {
-  if (types.has(root.type)) return root;
+/** The first node of one of `types`, depth first. A `menu-row` inside a
+ * `menu` belongs to the overlay (pages and phones open menus too), so it is
+ * never counted as a desktop-app primitive. */
+function firstOf(root: SceneNode, types: ReadonlySet<string>, inMenu = false): SceneNode | undefined {
+  if (types.has(root.type) && !(inMenu && root.type === 'menu-row')) return root;
   for (const c of root.children ?? []) {
-    const hit = firstOf(c, types);
+    const hit = firstOf(c, types, inMenu || root.type === 'menu');
     if (hit) return hit;
   }
   return undefined;

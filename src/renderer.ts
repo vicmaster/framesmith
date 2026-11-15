@@ -100,6 +100,10 @@ interface RenderCtx {
   /** Phase 31 slice E — overlays met while rendering, lifted into the overlay
    * layer after the content (shared by every derived context). */
   overlays: SceneNode[];
+  /** Phase 31 slice E — what a viewport-anchored overlay keeps clear of at
+   * each edge: the root's declared safeArea, or the pinned chrome's reach,
+   * whichever is larger (0 on a canvas with neither). */
+  clear: { top: number; bottom: number };
 }
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
@@ -108,7 +112,10 @@ export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas
   const columnWidth = Math.min(typeof root.width === 'number' ? root.width : width, width);
   const designWidth = typeof root.width === 'number' && root.width > 0 ? root.width : DESIGN_WIDTH;
   const overlays: SceneNode[] = [];
-  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation: chromeReservation(root, expand), designWidth, overlays };
+  const reservation = chromeReservation(root, expand);
+  const safe = root.type === 'document' ? usableSafeArea(root.safeArea) : {};
+  const clear = { top: Math.max(safe.top ?? 0, reservation.top), bottom: Math.max(safe.bottom ?? 0, reservation.bottom) };
+  const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation, designWidth, overlays, clear };
   const body = renderNode(root, rc) + overlayLayer(rc, height);
   const responsiveCss = buildRendererStylesheet(root, canvas);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
@@ -1564,12 +1571,17 @@ function renderOverlayContainer(node: SceneNode, rc: RenderCtx, attrs: string): 
     width, height: drawer ? undefined : node.height, layout: node.layout ?? 'vertical',
     padding: node.padding ?? (menu ? 4 : drawer ? 16 : 12),
     stroke: drawer ? undefined : node.stroke ?? FALLBACK.border, fill: node.fill ?? FALLBACK.surface,
-    cornerRadius: node.cornerRadius ?? (drawer ? 0 : 8),
+    color: node.color ?? FALLBACK.text, cornerRadius: node.cornerRadius ?? (drawer ? 0 : 8),
   };
+  // A drawer runs the artboard's full height: its padding clears the safe
+  // area and pinned chrome at each end, as a sheet's does.
+  const [pt, , pb] = paddingCss(layout.padding);
   const box = css([
     buildStyles(layout, rc), 'position: absolute', 'box-sizing: border-box', 'pointer-events: auto',
     `z-index: ${OVERLAY_Z[drawer ? 'drawer' : menu ? 'menu' : 'popover']}`,
     ...(drawer ? ['top: 0', 'bottom: 0', 'right: 0', 'overflow-y: auto', `border-left: 1px solid ${node.stroke ?? FALLBACK.border}`] : placedAt(node)),
+    drawer && rc.clear.top > 0 ? `padding-top: calc(${pt} + ${rc.clear.top}px)` : undefined,
+    drawer && rc.clear.bottom > 0 ? `padding-bottom: calc(${pb} + ${rc.clear.bottom}px)` : undefined,
     menu && width === undefined ? 'width: max-content' : undefined,
     menu ? `min-width: ${MENU_MIN_WIDTH}px` : undefined,
     `box-shadow: ${overlayShadow(node)}`,
@@ -1597,10 +1609,14 @@ function renderModal(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const title = text(node.title);
   if (title) attrs += ` aria-label="${escapeAttr(title)}"`;
   const placed = num(node.x) || num(node.y);
+  // Centred between the edges, 32px clear of each, or 16px past the safe
+  // area and pinned chrome on a phone.
+  const top = Math.max(32, rc.clear.top ? rc.clear.top + 16 : 0);
+  const bottom = Math.max(32, rc.clear.bottom ? rc.clear.bottom + 16 : 0);
   const box = css([
     'position: absolute', `z-index: ${OVERLAY_Z.modal}`, 'pointer-events: auto', 'box-sizing: border-box',
-    'display: flex', 'flex-direction: column', `width: ${modalWidth(node)}px`, 'max-width: calc(100% - 32px)', 'max-height: calc(100% - 64px)',
-    ...(placed ? placedAt(node) : ['inset: 0', 'margin: auto', 'height: fit-content']),
+    'display: flex', 'flex-direction: column', `width: ${modalWidth(node)}px`, 'max-width: calc(100% - 32px)', `max-height: calc(100% - ${top + bottom}px)`,
+    ...(placed ? placedAt(node) : [`top: ${top}px`, `bottom: ${bottom}px`, 'left: 0', 'right: 0', 'margin: auto', 'height: fit-content']),
     `background-color: ${node.fill ?? FALLBACK.surface}`, `border: 1px solid ${node.stroke ?? FALLBACK.border}`,
     `border-radius: ${radiusOf(node, 12)}px`, `box-shadow: ${overlayShadow(node)}`, `color: ${node.color ?? FALLBACK.text}`, 'overflow: hidden',
     node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
@@ -1630,7 +1646,8 @@ function renderToast(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const label = node.action && typeof node.action === 'object' ? text(node.action.label) : '';
   const box = css([
     'position: absolute', `z-index: ${OVERLAY_Z.toast}`, 'pointer-events: auto', 'box-sizing: border-box',
-    ...(placed ? placedAt(node) : ['left: 0', 'right: 0', 'bottom: 24px', 'margin: 0 auto']),
+    // 24px above the bottom edge, or 16px above the safe area and pinned chrome.
+    ...(placed ? placedAt(node) : ['left: 0', 'right: 0', `bottom: ${rc.clear.bottom ? rc.clear.bottom + 16 : 24}px`, 'margin: 0 auto']),
     'width: max-content', 'max-width: min(480px, calc(100% - 32px))', 'min-height: 40px',
     'display: flex', 'align-items: center', 'gap: 10px', label ? 'padding: 8px 8px 8px 12px' : 'padding: 8px 12px',
     `background-color: ${node.fill ?? FALLBACK.surface}`, `border: 1px solid ${node.stroke ?? FALLBACK.border}`,
