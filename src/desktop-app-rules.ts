@@ -640,6 +640,7 @@ function maxWidthCap(v: SceneNode['maxWidth'], parent: number, view: number): nu
   if (num < 0) return Infinity;
   return m[2] === 'px' ? num : (num / 100) * (m[2] === '%' ? parent : view);
 }
+
 /** What an overlay's anchor may name: a clickable primitive or a control. */
 const ANCHOR_TARGETS = new Set([...CLICKABLE_PRIMITIVES, ...CONTROLS]);
 
@@ -809,8 +810,8 @@ export function checkOverlays(ctx: DesktopContext, tableIds: Set<string>): Evalu
       }
       if (r) return undefined;
     }
-    // N1: a numeric width shrinks to the modal unless a px maxWidth lets it
-    // stay wider; a minWidth always holds.
+    // N1: a numeric width shrinks to the modal unless its maxWidth (px, %, vw,
+    // "none") lets it stay wider; a minWidth always holds.
     const w = shrunkWidth(n, modalWidth(modal), view.width) ?? (isNum(n.minWidth) ? n.minWidth : 0);
     return w > modalWidth(modal) ? `is ${w}px wide in a ${modalWidth(modal)}px modal` : undefined;
   }
