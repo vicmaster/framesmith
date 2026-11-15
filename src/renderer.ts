@@ -602,7 +602,9 @@ function renderNode(node: SceneNode, rc: RenderCtx): string {
 
   const styles = buildStyles(node, rc);
   const styleAttr = styles ? ` style="${escapeStyleValue(styles)}"` : '';
-  const dataAttr = ` data-node-id="${node.id}"`;
+  // Phase 31 slice D (spec change S4) — a scrolling frame is marked like a
+  // sheet panel, so stress reads its vertical overflow as scrolling.
+  const dataAttr = ` data-node-id="${node.id}"${node.overflow === 'auto' ? ' data-fs-scroll' : ''}`;
 
   if (node.type === 'text') {
     const title = typeof node.title === 'string' && node.title.trim() ? ` title="${escapeAttr(node.title.trim())}"` : '';

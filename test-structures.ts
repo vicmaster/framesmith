@@ -110,7 +110,7 @@ for (const anatomy of ['dashboard', 'settings', 'auth', 'onboarding', 'feed', 'd
   const last = nodes[nodes.length - 1]?.type;
   check(nodes[0]?.type === 'status-bar' && (last === 'home-indicator' || last === 'tab-bar'), `${anatomy}-mobile starts with status-bar, ends with home-indicator or tab-bar (${last})`);
 }
-check(JSON.stringify(byName.get('dashboard')?.surfaces) === '["web","mobile"]', 'dashboard is realised on web and mobile');
+check(JSON.stringify(byName.get('dashboard')?.surfaces) === '["web","mobile","desktop-app"]', 'dashboard is realised on web, mobile and desktop-app');
 check(JSON.stringify(byName.get('feed-mobile')?.surfaces) === '["mobile"]', 'feed is realised on mobile only');
 check(JSON.stringify(byName.get('empty-state')?.surfaces) === '["web","mobile","desktop-app"]' && byName.get('empty-state')?.surface === 'any', 'an any component counts for every type');
 
@@ -128,10 +128,11 @@ check(nodeOf('empty-state', 'es-cta')?.type === 'button', 'empty-state\'s action
 console.log('listStructures({ type }) filters by the surface that covers the type');
 const mobileList = listStructures({ type: 'mobile' }).map((s) => s.name);
 const webList = listStructures({ type: 'web' }).map((s) => s.name);
+const appList = listStructures({ type: 'desktop-app' }).map((s) => s.name);
 check(mobileList.includes('dashboard-mobile') && !mobileList.includes('dashboard') && !mobileList.includes('data-table'), 'mobile listing: realisations, no web-only structures');
 check(mobileList.includes('empty-state') && webList.includes('empty-state'), 'an any component is listed for both');
 check(webList.includes('dashboard') && !webList.includes('dashboard-mobile'), 'web listing: no mobile realisations');
-check(all.length === new Set([...mobileList, ...webList]).size, 'every structure is listed for some type');
+check(all.length === new Set([...mobileList, ...webList, ...appList]).size, 'every structure is listed for some type');
 
 console.log('resolveStructure — every branch');
 check(resolveStructure('dashboard', 'mobile').name === 'dashboard-mobile', 'anatomy name → the mobile realisation on mobile');
@@ -143,6 +144,63 @@ check(throws(() => resolveStructure('data-table', 'mobile'), /Component anatomie
 check(throws(() => resolveStructure('dashboard-mobile', 'web'), /mobile realisation of "dashboard", not a web one.*Pass realisation: "mobile"/), 'a realisation name on the wrong type refuses with its force hint');
 check(resolveStructure('dashboard-mobile', 'mobile').name === 'dashboard-mobile', 'a realisation name on its own type is used as is');
 check(throws(() => resolveStructure('nope', 'web'), /not found/), 'unknown name → not found');
+
+console.log('Phase 31 slice D — desktop-app realisations, N-type resolution (FR-D1, G1, G6)');
+const APP_PAGES = ['split-workbench-app', 'list-detail-app', 'editor-inspector-app', 'browser-app', 'dashboard-app', 'settings-app'];
+const APP_ANATOMY: Record<string, string> = {
+  'split-workbench-app': 'split-workbench', 'list-detail-app': 'list-detail', 'editor-inspector-app': 'editor-inspector',
+  'browser-app': 'browser', 'dashboard-app': 'dashboard', 'settings-app': 'settings',
+};
+for (const name of APP_PAGES) {
+  const s = getStructure(name)!;
+  check(s?.surface === 'desktop-app' && s.anatomy === APP_ANATOMY[name] && s.kind === undefined && s.axes !== undefined, `${name} realises ${APP_ANATOMY[name]} on desktop-app as a page with axes`);
+  check(s?.root?.overflow === 'hidden', `${name} keeps the root at the window height (root overflow hidden)`);
+  check(resolveStructure(APP_ANATOMY[name], 'desktop-app').name === name, `${APP_ANATOMY[name]} on desktop-app resolves to ${name}`);
+}
+check(getStructure('data-table-app')?.kind === 'component' && getStructure('data-table-app')?.anatomy === 'data-table' && resolveStructure('data-table', 'desktop-app').name === 'data-table-app', 'data-table on desktop-app resolves to data-table-app');
+check(getStructure('skeleton-table-app')?.anatomy === 'skeleton-table' && resolveStructure('skeleton-table', 'desktop-app').name === 'skeleton-table-app', 'skeleton-table on desktop-app resolves to skeleton-table-app');
+check(resolveStructure('data-table', 'web').name === 'data-table' && resolveStructure('dashboard', 'web').name === 'dashboard', 'web keeps its own realisations');
+check(throws(() => resolveStructure('pricing', 'desktop-app'), /^"pricing" has no desktop-app realisation\. Page anatomies with a desktop-app realisation: split-workbench, list-detail, editor-inspector, browser, dashboard, settings\. Pass realisation: "web"/), 'pricing on desktop-app refuses, naming the desktop-app anatomies and realisation: "web"');
+check(throws(() => resolveStructure('feed', 'desktop-app'), /"feed" has no desktop-app realisation\..*Pass realisation: "mobile" to stamp/), 'feed on desktop-app refuses and names realisation: "mobile"');
+for (const anatomy of ['list-detail', 'editor-inspector', 'browser']) {
+  for (const type of ['web', 'mobile'] as const) {
+    check(throws(() => resolveStructure(anatomy, type), new RegExp(`"${anatomy}" has no ${type} realisation\\..*Pass realisation: "desktop-app" to stamp`)), `${anatomy} on ${type} refuses and names realisation: "desktop-app"`);
+  }
+}
+check(throws(() => resolveStructure('dashboard-app', 'web'), /desktop-app realisation of "dashboard", not a web one/), 'a desktop-app realisation name on web refuses with its force hint');
+check(throws(() => resolveStructure('toolbar', 'desktop-app'), /Component anatomies with a desktop-app realisation: .*data-table/), 'a web-only component on desktop-app refuses, listing data-table among the component anatomies');
+check(APP_PAGES.every((n) => appList.includes(n)) && appList.includes('data-table-app') && appList.includes('skeleton-table-app') && appList.includes('empty-state'), 'the desktop-app listing holds the six realisations, both components and the any components');
+check(!appList.includes('dashboard') && !appList.includes('dashboard-mobile') && !webList.includes('dashboard-app') && !mobileList.includes('dashboard-app'), 'no type lists another type\'s realisation');
+check(JSON.stringify(byName.get('browser-app')?.surfaces) === '["desktop-app"]', 'browser is realised on desktop-app only');
+
+const walkAll = (n: SceneNode): SceneNode[] => [n, ...(n.children ?? []).flatMap(walkAll)];
+for (const name of [...APP_PAGES, 'data-table-app', 'skeleton-table-app']) {
+  const nodes = getStructure(name)!.nodes.flatMap(walkAll);
+  const panes = nodes.filter((n) => n.overflow === 'auto');
+  const unfloored = panes.filter((p) => typeof p.width === 'number' && !(typeof p.minWidth === 'number' && p.minWidth >= p.width));
+  check(unfloored.length === 0, `${name}: every fixed-width pane has a matching minWidth${unfloored.length ? ' — ' + unfloored.map((p) => p.id).join(', ') : ''}`);
+  const icons = nodes.filter((n) => n.type === 'button' && !n.label && n.icon);
+  check(icons.every((b) => b.ariaLabel && b.color === '$text-secondary'), `${name}: icon-only buttons are named and in $text-secondary`);
+  const rows = nodes.filter((n) => n.name === 'Row' || n.name === 'Skeleton row' || n.name === 'Toolbar' || n.name === 'Pagination');
+  check(rows.every((r) => r.height === 32), `${name}: table toolbar, rows and pager are 32 tall`);
+}
+check(walkAll(getStructure('editor-inspector-app')!.nodes[0]).find((n) => n.id === 'eia-inspector')?.minWidth === 280, 'the editor inspector keeps a 280px floor beside its 30% width');
+check(walkAll(getStructure('browser-app')!.nodes[0]).find((n) => n.id === 'bra-grid')?.gridColumns === 'repeat(auto-fill, minmax(240px, 1fr))', 'the browser grid\'s columns are at least 240px wide');
+
+console.log('Phase 31 slice D — root props on a page stamp (G5)');
+const win = createCanvas('e-win', undefined, {}, { type: 'desktop-app' });
+const stampApp = applyStructure(win, 'dashboard');
+check(stampApp.applied === 'dashboard-app' && win.root.overflow === 'hidden', 'dashboard on a desktop-app canvas stamps dashboard-app and sets root overflow hidden');
+applyStructure(win, 'dashboard', { replace: true, realisation: 'web' });
+check(win.root.overflow === undefined, 'stamping a web page over it with replace removes the root overflow the app stamp set');
+const kept = createCanvas('e-kept', undefined, {}, { type: 'desktop-app' });
+applyStructure(kept, 'settings');
+kept.root.overflow = 'auto';
+applyStructure(kept, 'settings', { replace: true, realisation: 'web' });
+check(kept.root.overflow === 'auto', 'a root overflow the author changed survives the next page stamp');
+const comp = createCanvas('e-comp', undefined, {}, { type: 'desktop-app' });
+applyStructure(comp, 'data-table');
+check(comp.root.overflow === undefined, 'a component stamp writes no root props');
 
 console.log('applyStructure resolves by the canvas type and realisation forces');
 const phone = createCanvas('e-phone', undefined, {}, { type: 'mobile' });

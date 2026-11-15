@@ -4,7 +4,7 @@
 // dots never count as accents (FR-A6), a canvas holding a desktop-app
 // primitive must declare its type (desktop-app-artboard), stress reaches the
 // new copy, repeats count as reuse, the breadcrumb is built from links, and
-// unthemed stamps seed $accent-tint / $border-strong. Rendered geometry lives
+// unthemed stamps seed $border-strong (not $accent-tint, spec change S6). Rendered geometry lives
 // in test-desktop-primitives-render.ts (Chrome).
 //
 // Usage: npx tsx test-desktop-primitives.ts
@@ -200,11 +200,11 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
     registerStructure({ name: `probe-${t}`, kind: 'component', surface: 'any', description: 'probe', nodes: [{ id: 'n', type: t as SceneNode['type'], name: 'n', label: 'L', placeholder: 'Find', value: 'v', shortcut: '⌘K', error: 'Bad', items: [{ label: 'A' }] } as SceneNode] });
     const cv = createCanvas(`seed-${t}`, undefined, {}, { type: 'desktop-app', device: 'window-1440' });
     const res = applyStructure(cv, `probe-${t}`, { existingColors: new Set() });
-    if (!res.seededColors.includes('accent-tint') || !res.seededColors.includes('border-strong')) check(`stamping a ${t} seeds the desktop-app tokens`, false, res.seededColors.join(','));
+    if (res.seededColors.includes('accent-tint') || !res.seededColors.includes('border-strong')) check(`stamping a ${t} seeds $border-strong and not $accent-tint`, false, res.seededColors.join(','));
     if (t === 'text-input' && !['placeholder', 'value', 'error'].every((prop) => res.placeholders.some((pl) => pl.prop === prop))) check('text-input copy is a placeholder', false, JSON.stringify(res.placeholders));
     if (t === 'menu-row' && !res.placeholders.some((pl) => pl.prop === 'shortcut')) check('menu-row shortcut is a placeholder', false);
   }
-  check('every desktop-app primitive seeds the tokens; their copy is a placeholder', true);
+  check('every desktop-app primitive seeds $border-strong, never $accent-tint; their copy is a placeholder', true);
   const withBorder = createCanvas('seed-b', undefined, {}, { type: 'desktop-app', device: 'window-1440' });
   check('an existing $border suppresses border-strong seeding (it falls back to border)', !applyStructure(withBorder, 'probe-text-input', { existingColors: new Set(['border']) }).seededColors.includes('border-strong'));
   const sc = { id: 'm', name: 'm', type: 'menu-row', shortcut: '⌘K' } as SceneNode;
@@ -273,7 +273,9 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
 
   const c = createCanvas('seed', undefined, {}, { type: 'desktop-app', device: 'window-1440' });
   const seed = applyStructure(c, 'breadcrumb', { existingColors: new Set(), realisation: 'web' });
-  check('stamping a structure with a desktop-app primitive on an unthemed canvas seeds $accent-tint and $border-strong', seed.seededColors.includes('accent-tint') && seed.seededColors.includes('border-strong'), seed.seededColors.join(', '));
+  // Spec change S6: no $accent-tint seed, so a later light preset is not left
+  // with a dark tint; the renderer mixes 12% accent into the applied surface.
+  check('stamping a structure with a desktop-app primitive on an unthemed canvas seeds $border-strong, not $accent-tint', !seed.seededColors.includes('accent-tint') && seed.seededColors.includes('border-strong'), seed.seededColors.join(', '));
   check('a desktop-app primitive\'s copy is a placeholder', seed.placeholders.some((p) => p.prop === 'label' && p.role === 'Parent'));
   const m = createCanvas('mob', undefined, {}, { type: 'mobile', device: 'iphone-390' });
   const mob = applyStructure(m, 'settings', { existingColors: new Set() });

@@ -13,6 +13,7 @@ import type { SceneNode } from './types.js';
 import type { LayoutRect } from './screenshot.js';
 import type { SurfaceType } from './surfaces.js';
 import { extractInventory, isDataLike } from './drift.js';
+import { shapeHash } from './shape-hash.js';
 
 export type PerturbationName = 'long-text' | 'i18n' | 'big-numbers' | 'empty' | 'many';
 export const PERTURBATION_NAMES: PerturbationName[] = ['long-text', 'i18n', 'big-numbers', 'empty', 'many'];
@@ -98,18 +99,32 @@ function walkTexts(root: SceneNode, visit: (slot: TextSlot) => void): void {
   root.children?.forEach((c) => walkTexts(c, visit));
 }
 
-/** Runs of two or more consecutive sibling `list-row`s — a list, for the
- * empty and many perturbations. Lives here, not in the drift inventory, which
- * coverage, typography and drift share and which must not change. */
-function listRuns(root: SceneNode): Array<{ container: SceneNode; start: number; length: number }> {
+/** Phase 31 slice D (spec change S5) — the desktop-app rows `many` and
+ * `empty` also act on. */
+const DESKTOP_ROW_TYPES = new Set(['nav-item', 'tree-row', 'menu-row', 'property-row']);
+const CARD_GRID_MIN = 3;
+
+/** Runs of two or more sibling rows of one type, for the empty and many
+ * perturbations: `list-row` on every type, plus the desktop-app rows on a
+ * desktop-app canvas, where the children of a grid holding three or more
+ * same-shaped children (a card grid) are a run too. Lives here, not in the
+ * drift inventory, which coverage, typography and drift share and which must
+ * not change. */
+function listRuns(root: SceneNode, desktop = false): Array<{ container: SceneNode; start: number; length: number }> {
   const runs: Array<{ container: SceneNode; start: number; length: number }> = [];
+  const isRow = (n: SceneNode): boolean => n.type === 'list-row' || (desktop && DESKTOP_ROW_TYPES.has(n.type));
   (function walk(n: SceneNode) {
     const kids = n.children ?? [];
-    for (let i = 0; i < kids.length;) {
-      let j = i;
-      while (j < kids.length && kids[j].type === 'list-row') j++;
-      if (j - i >= 2) runs.push({ container: n, start: i, length: j - i });
-      i = j > i ? j : i + 1;
+    const cardGrid = desktop && n.layout === 'grid' && kids.length >= CARD_GRID_MIN
+      && kids.every((k) => shapeHash(k, 3, { names: false }) === shapeHash(kids[0], 3, { names: false }));
+    if (cardGrid) runs.push({ container: n, start: 0, length: kids.length });
+    else {
+      for (let i = 0; i < kids.length;) {
+        let j = i;
+        while (j < kids.length && isRow(kids[j]) && kids[j].type === kids[i].type) j++;
+        if (j - i >= 2) runs.push({ container: n, start: i, length: j - i });
+        i = j > i ? j : i + 1;
+      }
     }
     kids.forEach(walk);
   })(root);
@@ -137,6 +152,14 @@ export function widenNumber(s: string): string | null {
 /** Candidate data rows of a table container — same shape detectTable counts. */
 function tableRows(container: SceneNode): SceneNode[] {
   return (container.children ?? []).filter((c) => c.type === 'frame' && (c.children?.length ?? 0) >= 2);
+}
+
+/** A copy that is not the current row (Phase 31 slice D: `many` on a run of
+ * nav-items must not add a second active one). */
+function withoutActive(node: SceneNode): SceneNode {
+  if (node.active === undefined) return node;
+  const { active: _active, ...rest } = node;
+  return rest;
 }
 
 function cloneWithSuffix(node: SceneNode, suffix: string): SceneNode {
@@ -199,12 +222,15 @@ export function applyPerturbation(name: PerturbationName, root: SceneNode, opts:
     }
     touched.push(container.id);
   }
-  // Runs of list-rows, last run first so earlier indices stay valid.
-  for (const run of listRuns(clone).reverse()) {
+  // Runs of rows (list-rows; desktop-app rows and card grids on desktop-app),
+  // last run first so earlier indices stay valid. Nested runs are fine: a
+  // container's own indices only move when its own run is edited.
+  for (const run of listRuns(clone, opts.type === 'desktop-app').reverse()) {
     const kids = run.container.children!;
     const rows = kids.slice(run.start, run.start + run.length);
     if (name === 'empty') kids.splice(run.start, run.length);
-    else kids.splice(run.start + run.length, 0, ...[1, 2].flatMap((i) => rows.map((r) => cloneWithSuffix(r, `-x${i}`))));
+    // A tripled list still has one current place: copies drop `active`.
+    else kids.splice(run.start + run.length, 0, ...[1, 2].flatMap((i) => rows.map((r) => withoutActive(cloneWithSuffix(r, `-x${i}`)))));
     touch(run.container.id);
   }
   return { root: clone, touched };

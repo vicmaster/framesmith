@@ -70,10 +70,12 @@ function usedSizes(canvas: Canvas): Map<number, string[]> {
 const structures = listStructures();
 
 /** A structure stamps on a canvas of its own surface (Phase 30 slice E):
- * mobile realisations on a phone canvas, everything else on web as before. */
-const typeOf = (surface: string): 'web' | 'mobile' => (surface === 'mobile' ? 'mobile' : 'web');
+ * mobile realisations on a phone canvas, desktop-app ones on a window
+ * (Phase 31 slice D), everything else on web as before. */
+const typeOf = (surface: string): 'web' | 'mobile' | 'desktop-app' =>
+  (surface === 'mobile' || surface === 'desktop-app' ? surface : 'web');
 const canvasFor = (name: string, surface: string) =>
-  createCanvas(name, undefined, {}, surface === 'mobile' ? { type: 'mobile' } : undefined);
+  createCanvas(name, undefined, {}, typeOf(surface) === 'web' ? undefined : { type: typeOf(surface) as 'mobile' | 'desktop-app' });
 check('structure library is non-empty', structures.length > 0, `${structures.length} structures`);
 
 // ── 1. on the generated scale ────────────────────────────────────────────────
