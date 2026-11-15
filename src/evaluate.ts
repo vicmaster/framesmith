@@ -12,7 +12,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
+import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -2064,6 +2064,12 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       // Phase 31 slice B — the desktop-app vocabulary, each by its own box
       // (a tabs node has one target per item, sharing the node's id).
       for (const t of desktopTargets(node)) {
+        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: t.disabled });
+      }
+    } else {
+      // Phase 31 slice E — a modal's close button and actions, a toast's
+      // action: drawn by the overlay under its own id, 24px or more.
+      for (const t of overlayTargets(node)) {
         targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: t.disabled });
       }
     }
