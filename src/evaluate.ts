@@ -858,6 +858,8 @@ const PRIMITIVE_COPY_PROPS = new Set([
   'title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition',
   // Phase 31 slice B — the desktop-app primitives' copy and enums.
   'placeholder', 'value', 'shortcut', 'error', 'ariaLabel', 'count', 'orientation',
+  // Phase 31 slice G — the element state is an enum, not a style value.
+  'state',
 ]);
 
 /** Spellings worth trying for an icon name that didn't resolve: Material

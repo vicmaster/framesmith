@@ -49,6 +49,10 @@ export interface StateStyle {
   /** The on-surface colour a disabled target with the token pair renders in
    * (spec change S10: `$text-primary`, Material's onSurface). */
   onSurface: string;
+  /** What a mark, knob or badge numeral drawn on a disabled container takes
+   * (`$bg-surface`), so it stays visible on the on-surface colour in both
+   * themes (Material's disabled checkbox mark). */
+  surface: string;
   hover: number;
   focus: number;
   pressed: number;

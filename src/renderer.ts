@@ -8,7 +8,7 @@ import {
   LINK_MIN_HEIGHT, LINK_ICON, LINK_EXTERNAL, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
   tabsItems, textInputHeight, textInputRows,
   OVERLAY_TYPES, OVERLAY_Z, TOOLTIP_MAX_WIDTH, MENU_MIN_WIDTH, drawerWidth, modalActions, modalWidth, popoverWidth,
-  STATE_LAYERS, elementState, isDisabled,
+  STATE_LAYERS, elementState,
 } from './primitives.js';
 
 /** Build a `background: …` declaration from a node's `gradient`.
@@ -653,15 +653,12 @@ function renderNode(node: SceneNode, rc: RenderCtx): string {
   // arrive pre-defaulted by resolveVariables (token-aware with neutral
   // fallbacks), so the builders just consume node.fill / stroke / color.
   if (node.type === 'skeleton') return renderSkeleton(node, dataAttr);
-  // Phase 27 slice C — controls are focusable in the live viewer, with an
-  // accent-derived focus ring (:focus-visible only, so static screenshots
-  // are pixel-identical: nothing is focused in a capture).
-  // Phase 27 slice C — controls are focusable in the live viewer, with an
-  // accent-derived focus ring (:focus-visible only, so static screenshots
-  // are pixel-identical: nothing is focused in a capture). The ring color
-  // rides a CSS var on the control's own style, keeping one style attribute.
+  // Phase 27 slice C — controls are focusable in the live viewer, with a
+  // :focus-visible ring (nothing is focused in a capture). Slice G: the ring
+  // colour is the resolved focus ring (a CSS var on the control's own style),
+  // and `state: "focus"` draws the same ring statically.
   if (node.type === 'toggle' || node.type === 'checkbox' || node.type === 'radio' || node.type === 'select') {
-    const focusAttr = isDisabled(node) ? `${dataAttr} tabindex="-1" aria-disabled="true"` : `${dataAttr} tabindex="0" data-focusable`;
+    const focusAttr = renderState(node) === 'disabled' ? `${dataAttr} tabindex="-1" aria-disabled="true"` : `${dataAttr} tabindex="0" data-focusable`;
     if (node.type === 'toggle') return renderToggle(node, focusAttr);
     if (node.type === 'checkbox') return renderCheckbox(node, focusAttr);
     if (node.type === 'radio') return renderRadio(node, focusAttr);
@@ -892,10 +889,11 @@ function buildStyles(node: SceneNode, rc: RenderCtx): string {
 // apply. Shared bits: numeric width/height with control-appropriate defaults,
 // opacity passthrough (resolveVariables sets 0.5 for disabled).
 
-/** A control's state (slice G): its own content, so one opacity; `ink` is
- * what the control draws on its fill (the mark, the knob, the boundary). */
-function controlState(node: SceneNode, ink: string | undefined, whole = true): StateParts {
-  return stateParts(elementState(node), node.stateStyle, ink, { whole, authored: node.opacity });
+/** A control's state (slice G); `ink` is what the control draws on its fill
+ * (the mark, the knob, the boundary). Its disabled colours come from
+ * `neutralised`, called first. */
+function controlState(node: SceneNode, ink: string | undefined): StateParts {
+  return stateParts(renderState(node), node.stateStyle, ink, { authored: node.opacity });
 }
 
 function controlSize(node: SceneNode, defW: number, defH: number): { w: number; h: number } {
@@ -949,7 +947,7 @@ function renderToggle(node: SceneNode, dataAttr: string): string {
   const knobStyle = [
     'position: absolute', `top: ${inset}px`, `left: ${left}px`,
     `width: ${knob}px`, `height: ${knob}px`, 'border-radius: 50%',
-    'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)',
+    `background-color: ${markOn(node)}`, 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)',
   ].join('; ');
   return `<div${dataAttr} style="${escapeStyleValue(track)}"><div style="${escapeStyleValue(knobStyle)}"></div></div>`;
 }
@@ -966,7 +964,7 @@ function renderCheckbox(node: SceneNode, dataAttr: string): string {
     `border: 1.5px solid ${node.stroke}`, `background-color: ${node.fill}`,
     ...controlOpacity(node), ...st.css,
   ].join('; ');
-  const mark = node.checked ? (getIconSvg('check', Math.round(Math.min(w, h) * 0.78), '#FFFFFF') ?? '') : '';
+  const mark = node.checked ? (getIconSvg('check', Math.round(Math.min(w, h) * 0.78), markOn(node)) ?? '') : '';
   return `<div${dataAttr} style="${escapeStyleValue(box)}">${mark}</div>`;
 }
 
@@ -996,7 +994,7 @@ function renderSelect(node: SceneNode, dataAttr: string): string {
   const isPlaceholder = !node.value;
   const textColor = isPlaceholder ? '#9CA3AF' : node.color;
   // A select's frame is a container: the disabled pair splits it from its text.
-  const st = controlState(node, node.color, false);
+  const st = controlState(node, node.color);
   const frame = [
     ringVar(node.stateStyle),
     'display: flex', 'flex-direction: row', 'align-items: center', 'justify-content: space-between',
@@ -1030,7 +1028,7 @@ const FALLBACK = { accent: '#2563EB', text: '#111827', secondary: '#6B7280', bor
 // 0.5. Resolution (applyControlDefaults) hands over `stateStyle`; a node it
 // skipped (inside a component) uses the fallback.
 
-const STATE_FALLBACK: StateStyle = { ring: FALLBACK.accent, onSurface: FALLBACK.text, hover: STATE_LAYERS.hover, focus: STATE_LAYERS.focus, pressed: STATE_LAYERS.pressed };
+const STATE_FALLBACK: StateStyle = { ring: FALLBACK.accent, onSurface: FALLBACK.text, surface: FALLBACK.surface, hover: STATE_LAYERS.hover, focus: STATE_LAYERS.focus, pressed: STATE_LAYERS.pressed };
 
 /** A 0–1 opacity as a CSS percentage, two decimals at most. */
 const pct = (x: number): number => Math.round(x * 10000) / 100;
@@ -1038,10 +1036,26 @@ const pct = (x: number): number => Math.round(x * 10000) / 100;
 /** A colour at `p` percent over transparent. */
 const atPercent = (color: string, p: number): string => `color-mix(in srgb, ${color} ${p}%, transparent)`;
 
+/** The state the renderer draws: a truthy `disabled` dims, as it did before
+ * slice G (the census keeps `disabled === true`). */
+function renderState(n: { state?: unknown; disabled?: unknown } | null | undefined): ElementState {
+  return n && n.disabled ? 'disabled' : elementState(n);
+}
+
+/** A colour that paints nothing: the keywords, and a zero alpha in hex, rgb()
+ * or hsl() form. A disabled container keeps it clear. */
+function isClear(c: string | undefined): boolean {
+  if (!c) return true;
+  const v = c.trim().toLowerCase();
+  return v === 'transparent' || v === 'none'
+    || /^#(?:[0-9a-f]{3}0|[0-9a-f]{6}00)$/.test(v)
+    || /^(?:rgba?|hsla?)\(.*[,/]\s*0*\.?0+%?\s*\)$/.test(v);
+}
+
 /** The disabled token pair, when the design system sets it (spec P3). */
-function disabledPair(style: StateStyle | undefined): { content: number; container: number; on: string } | undefined {
+function disabledPair(style: StateStyle | undefined): { content: number; container: number; on: string; surface: string } | undefined {
   if (style?.disabledContent === undefined || style.disabledContainer === undefined) return undefined;
-  return { content: style.disabledContent, container: style.disabledContainer, on: style.onSurface };
+  return { content: style.disabledContent, container: style.disabledContainer, on: style.onSurface, surface: style.surface };
 }
 
 /** The share of the on-surface colour a drawn container takes, so that under
@@ -1057,6 +1071,9 @@ interface StateParts {
   container: (color: string | undefined) => string | undefined;
   /** Maps a content colour (label, icon): on-surface when disabled (S10). */
   content: (color: string | undefined) => string | undefined;
+  /** Maps a mark drawn on a filled container (a check, a knob, a badge
+   * numeral): the surface colour when disabled, so it shows on on-surface. */
+  mark: (color: string | undefined) => string | undefined;
 }
 
 const identity = (c: string | undefined) => c;
@@ -1076,7 +1093,7 @@ function stateParts(
   opts: { whole?: boolean; item?: boolean; authored?: number; inset?: boolean } = {},
 ): StateParts {
   const st = style ?? STATE_FALLBACK;
-  const none = { container: identity, content: identity };
+  const none = { container: identity, content: identity, mark: identity };
   if (state === 'rest') return { css: [], ...none };
   if (state === 'disabled') {
     const pair = disabledPair(style);
@@ -1086,8 +1103,9 @@ function stateParts(
     const share = containerShare(pair);
     return {
       css: [`opacity: ${pair.content}`],
-      container: (c) => (c && c !== 'transparent' ? (opts.whole ? pair.on : atPercent(pair.on, share)) : c),
+      container: (c) => (isClear(c) ? c : opts.whole ? pair.on : atPercent(pair.on, share)),
       content: (c) => (c === undefined ? c : pair.on),
+      mark: () => pair.surface,
     };
   }
   const css: string[] = [];
@@ -1099,14 +1117,23 @@ function stateParts(
   return { css, ...none };
 }
 
+/** Drawn in the on-surface colour (S10): disabled, with the token pair, no
+ * authored opacity. True of the node before and after `neutralised`. */
+function isNeutral(node: SceneNode): boolean {
+  return renderState(node) === 'disabled' && node.opacity === undefined && !!disabledPair(node.stateStyle);
+}
+
+/** A mark on a node's filled container: white, or the surface colour when
+ * the node is drawn in the on-surface colour. */
+const markOn = (node: SceneNode): string => (isNeutral(node) ? (node.stateStyle?.surface ?? FALLBACK.surface) : '#FFFFFF');
+
 /** Spec change S10 — a disabled node with the token pair (and no authored
  * opacity) renders in the on-surface colour: its content colours become it,
  * a drawn fill or stroke takes it at the container share (solid for a
  * `whole` control). Any other node is returned as is. */
 function neutralised(node: SceneNode, whole = false): SceneNode {
-  if (elementState(node) !== 'disabled' || node.opacity !== undefined) return node;
-  const pair = disabledPair(node.stateStyle);
-  if (!pair) return node;
+  if (!isNeutral(node)) return node;
+  const pair = disabledPair(node.stateStyle)!;
   const { container, content } = stateParts('disabled', node.stateStyle, undefined, { whole });
   return {
     ...node,
@@ -1208,7 +1235,7 @@ function renderHomeIndicator(node: SceneNode, rc: RenderCtx, dataAttr: string): 
 }
 
 function navAction(action: { icon?: unknown; label?: unknown; state?: unknown; disabled?: unknown }, own: string, back: boolean, style?: StateStyle): string {
-  const st = stateParts(elementState(action), style, own, { item: true });
+  const st = stateParts(renderState(action), style, own, { item: true });
   const color = st.content(own) ?? own;
   const glyph = iconHtml(action.icon ?? (back ? 'chevron-left' : undefined), 24, color);
   const words = text(action.label) ? labelHtml(text(action.label), 'font-size: 17px') : '';
@@ -1249,11 +1276,11 @@ function renderNavBar(node: SceneNode, rc: RenderCtx, dataAttr: string): string 
 function tabItem(item: { icon?: unknown; label?: unknown; active?: unknown; badge?: unknown; state?: unknown; disabled?: unknown }, node: SceneNode): string {
   const own = item.active ? node.iconColor ?? FALLBACK.accent : node.color ?? FALLBACK.secondary;
   // A floating bar clips its pill, so an item's ring is drawn inside (as a tab's).
-  const st = stateParts(elementState(item), node.stateStyle, own, { item: true, inset: true });
+  const st = stateParts(renderState(item), node.stateStyle, own, { item: true, inset: true });
   const color = st.content(own) ?? own;
   const count = badgeText(item.badge);
   const badge = count
-    ? `<span style="${css(['position: absolute', 'top: -4px', 'left: 16px', 'min-width: 16px', 'height: 16px', 'padding: 0 4px', 'border-radius: 8px', `background-color: ${st.content(node.badgeColor ?? FALLBACK.danger)}`, 'color: #FFFFFF', 'font-size: 11px', 'font-weight: 600', 'line-height: 16px', 'text-align: center'])}">${escapeHtml(count)}</span>`
+    ? `<span style="${css(['position: absolute', 'top: -4px', 'left: 16px', 'min-width: 16px', 'height: 16px', 'padding: 0 4px', 'border-radius: 8px', `background-color: ${st.content(node.badgeColor ?? FALLBACK.danger)}`, `color: ${st.mark('#FFFFFF')}`, 'font-size: 11px', 'font-weight: 600', 'line-height: 16px', 'text-align: center'])}">${escapeHtml(count)}</span>`
     : '';
   const words = text(item.label);
   return `<div style="${css(['flex: 1 1 0', 'min-width: 0', 'display: flex', 'flex-direction: column', 'align-items: center', 'justify-content: center', 'gap: 2px', `color: ${color}`, ...st.css])}">`
@@ -1308,7 +1335,7 @@ function renderButton(node: SceneNode, rc: RenderCtx, attrs: string, item = fals
   const color = node.color ?? (fill === 'transparent' ? FALLBACK.accent : '#FFFFFF');
   const glyph = iconHtml(node.icon, size === 'xs' ? 14 : size === 'sm' ? 16 : 20, color);
   const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : size === 'xs' ? 6 : 8;
-  const st = stateParts(elementState(node), node.stateStyle, color, { item, authored: node.opacity });
+  const st = stateParts(renderState(node), node.stateStyle, color, { item, authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'justify-content: center', 'gap: 8px',
@@ -1337,11 +1364,11 @@ function listRowTrailing(node: SceneNode): string {
   if (t.chevron) return `<div style="flex-shrink: 0; display: flex">${iconHtml('chevron-right', 18, secondary)}</div>`;
   if (typeof t.toggle === 'boolean') {
     const track = t.toggle ? node.iconColor ?? FALLBACK.accent : node.stroke ?? FALLBACK.border;
-    return `<div style="${css(['position: relative', 'flex-shrink: 0', 'width: 44px', 'height: 24px', 'border-radius: 12px', `background-color: ${track}`])}"><div style="${css(['position: absolute', 'top: 3px', `left: ${t.toggle ? 23 : 3}px`, 'width: 18px', 'height: 18px', 'border-radius: 50%', 'background-color: #FFFFFF', 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)'])}"></div></div>`;
+    return `<div style="${css(['position: relative', 'flex-shrink: 0', 'width: 44px', 'height: 24px', 'border-radius: 12px', `background-color: ${track}`])}"><div style="${css(['position: absolute', 'top: 3px', `left: ${t.toggle ? 23 : 3}px`, 'width: 18px', 'height: 18px', 'border-radius: 50%', `background-color: ${markOn(node)}`, 'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25)'])}"></div></div>`;
   }
   const count = badgeText(t.badge);
   if (count) {
-    return `<span style="${css(['flex-shrink: 0', 'min-width: 20px', 'height: 20px', 'padding: 0 6px', 'border-radius: 10px', `background-color: ${node.badgeColor ?? node.iconColor ?? FALLBACK.accent}`, 'color: #FFFFFF', 'font-size: 12px', 'font-weight: 600', 'line-height: 20px', 'text-align: center'])}">${escapeHtml(count)}</span>`;
+    return `<span style="${css(['flex-shrink: 0', 'min-width: 20px', 'height: 20px', 'padding: 0 6px', 'border-radius: 10px', `background-color: ${node.badgeColor ?? node.iconColor ?? FALLBACK.accent}`, `color: ${markOn(node)}`, 'font-size: 12px', 'font-weight: 600', 'line-height: 20px', 'text-align: center'])}">${escapeHtml(count)}</span>`;
   }
   return '';
 }
@@ -1363,7 +1390,7 @@ function listRowLeading(node: SceneNode): string {
 function renderListRow(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
   node = neutralised(node);
   const position = effectivePosition(node);
-  const st = stateParts(elementState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
+  const st = stateParts(renderState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
   const box = css([
     ...positionStyles(node, rc), position ? undefined : 'position: relative',
     'display: flex', 'flex-direction: row', 'align-items: center', 'gap: 12px', 'flex-shrink: 0',
@@ -1425,7 +1452,7 @@ function textWithLinks(node: SceneNode): string {
 
 /** A disabled primitive leaves the tab order and says so. */
 function disabledAttrs(node: SceneNode, attrs: string): string {
-  return isDisabled(node) ? `${attrs.replace(' tabindex="0" data-focusable', ' tabindex="-1"')} aria-disabled="true"` : attrs;
+  return renderState(node) === 'disabled' ? `${attrs.replace(' tabindex="0" data-focusable', ' tabindex="-1"')} aria-disabled="true"` : attrs;
 }
 
 function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
@@ -1435,7 +1462,7 @@ function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const name = text(node.ariaLabel);
   if (name) attrs += ` aria-label="${escapeAttr(name)}" title="${escapeAttr(name)}"`;
   const color = node.color ?? FALLBACK.accent;
-  const state = elementState(node);
+  const state = renderState(node);
   const st = stateParts(state, node.stateStyle, color, { authored: node.opacity });
   const glyph = iconHtml(node.icon, LINK_ICON, node.iconColor ?? color);
   const external = node.external ? iconHtml('external-link', LINK_EXTERNAL, node.iconColor ?? color) : '';
@@ -1467,7 +1494,7 @@ function renderTextInput(node: SceneNode, rc: RenderCtx, dataAttr: string): stri
   const radius = typeof node.cornerRadius === 'number' ? node.cornerRadius : 6;
   // The field carries the target's box; the disabled opacity sits on the
   // wrapper with the error message (spec P4).
-  const state = elementState(node);
+  const state = renderState(node);
   const st = stateParts(state, node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
   const opacity = st.css.filter((d) => d.startsWith('opacity:'));
   const field = css([
@@ -1485,8 +1512,11 @@ function renderTextInput(node: SceneNode, rc: RenderCtx, dataAttr: string): stri
       : `<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(shown, `color: ${value ? node.color ?? FALLBACK.text : secondary}`)}</span>`)
     : '<span style="flex: 1 1 0"></span>';
   const error = text(node.error);
+  // The message is content: under S10 it takes the on-surface colour, not
+  // the border's container share.
+  const tone = isNeutral(node) ? node.color ?? border : border;
   const message = error
-    ? `<div style="${css(['display: flex', 'align-items: center', 'gap: 4px', 'font-size: 12px', 'line-height: 16px', `color: ${border}`])}">${iconHtml('circle-alert', 14, border)}${titledLabel(error, '')}</div>`
+    ? `<div style="${css(['display: flex', 'align-items: center', 'gap: 4px', 'font-size: 12px', 'line-height: 16px', `color: ${tone}`])}">${iconHtml('circle-alert', 14, tone)}${titledLabel(error, '')}</div>`
     : '';
   const outer = css([
     ...positionStyles(node, rc), 'display: flex', 'flex-direction: column', 'gap: 4px', 'flex-shrink: 0', rowWidth(node),
@@ -1513,7 +1543,7 @@ function renderNavItem(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const dot = node.dotColor ? `<span style="${css(['flex-shrink: 0', 'width: 8px', 'height: 8px', 'border-radius: 50%', `background-color: ${node.dotColor}`])}"></span>` : '';
   const glyph = iconHtml(node.icon, 16, node.active ? accent : node.secondaryColor ?? FALLBACK.secondary);
   const count = text(node.count);
-  const st = stateParts(elementState(node), node.stateStyle, color, { authored: node.opacity });
+  const st = stateParts(renderState(node), node.stateStyle, color, { authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
     ...positionStyles(node, rc), node.position ? undefined : 'position: relative',
@@ -1537,12 +1567,12 @@ function renderTabs(node: SceneNode, rc: RenderCtx, dataAttr: string): string {
   const accent = node.iconColor ?? FALLBACK.accent;
   const line = node.variant !== 'contained';
   // A disabled tabs node disables every tab (spec P2).
-  const hostDisabled = isDisabled(node);
+  const hostDisabled = !!node.disabled || node.state === 'disabled';
   const tabs = tabsItems(node).map((it) => {
     const label = text(it.label);
     const count = text(it.count);
     const active = it.active === true;
-    const state = hostDisabled ? 'disabled' : elementState(it);
+    const state = hostDisabled ? 'disabled' : renderState(it);
     const ink = active ? node.color ?? FALLBACK.text : node.secondaryColor ?? FALLBACK.secondary;
     // The tablist clips its overflow, so a tab's ring is drawn inside (S9).
     const st = stateParts(state, node.stateStyle, ink, { item: true, inset: true });
@@ -1579,7 +1609,7 @@ function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
   if (typeof node.expanded === 'boolean') attrs += ` aria-expanded="${node.expanded}"`;
   if (node.active) attrs += ' aria-selected="true"';
   const chevron = typeof node.expanded === 'boolean' ? iconHtml(node.expanded ? 'chevron-down' : 'chevron-right', 14, secondary) : '';
-  const st = stateParts(elementState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
+  const st = stateParts(renderState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
     ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
@@ -1610,7 +1640,7 @@ function renderMenuRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
     ? `<kbd style="${css(['flex: 0 1 auto', 'min-width: 0', 'max-width: 50%', 'display: flex', 'margin-left: auto', 'padding-left: 16px', 'font-family: inherit', 'font-size: 12px', `color: ${secondary}`])}">${titledLabel(text(node.shortcut), '')}</kbd>`
     : '';
   const chevron = node.submenu ? `<span style="flex-shrink: 0; margin-left: ${shortcut ? '8px' : 'auto'}; display: flex">${iconHtml('chevron-right', 14, secondary)}</span>` : '';
-  const st = stateParts(elementState(node), node.stateStyle, color, { authored: node.opacity });
+  const st = stateParts(renderState(node), node.stateStyle, color, { authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
     ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 8px', 'flex-shrink: 0', 'box-sizing: border-box',

@@ -19,7 +19,7 @@ import type { Canvas, DesignVariables, SceneNode } from './src/types.js';
 let allPass = true;
 function check(name: string, cond: boolean, extra?: string) {
   if (!cond) allPass = false;
-  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
+  console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${!cond && extra ? ` — ${extra}` : ''}`);
 }
 
 const SYSTEM = generateDesignSystem('#2563EB', 'technical', { surface: 'desktop-app' }).variables;
@@ -198,6 +198,171 @@ for (const s of ['rest', 'hover', 'focus', 'pressed'] as const) {
   check('S10: a disabled active nav-item draws its bar, dot and tint in the on-surface colour', !nav.includes(C.accent) && !nav.includes('#16A34A') && nav.includes(`background-color: ${ON}`) && nav.includes('opacity: 0.38'), nav.slice(0, 600));
   const navNoDot = chunk(render([{ id: 'n', type: 'nav-item', label: 'Inbox', state: 'disabled' }]), 'n');
   check('S10 twin: a disabled nav-item with no dot grows no dot', !navNoDot.includes('border-radius: 50%'));
+}
+
+// ── Verify round 1 fixes ────────────────────────────────────────────────
+{
+  // F1: a mark, knob or badge numeral on a disabled container takes the surface
+  // colour, so it shows on the on-surface fill in a dark theme.
+  const dark = (n: SceneNode) => chunk(renderToHtml(resolveVariables({ id: 'root', type: 'frame', fill: '#000000', children: [n] }, SYSTEM, { theme: 'dark' }), 900, 600), 'n');
+  const surfDark = { ...C, ...SYSTEM.dark!.colors }['bg-surface'];
+  const onDark = { ...C, ...SYSTEM.dark!.colors }['text-primary'];
+  check('F1: dark surface and on-surface differ (the fixture can tell them apart)', !!surfDark && surfDark !== onDark && surfDark !== '#FFFFFF');
+  const cb = dark({ id: 'n', type: 'checkbox', checked: true, disabled: true });
+  check('F1: a disabled checked checkbox draws its mark in the surface colour (dark)', cb.includes(`stroke="${surfDark}"`) && !cb.includes('stroke="#FFFFFF"'), cb.slice(0, 500));
+  check('F1 twin: an enabled checkbox keeps a white mark (dark)', dark({ id: 'n', type: 'checkbox', checked: true }).includes('stroke="#FFFFFF"'));
+  const tg = dark({ id: 'n', type: 'toggle', checked: true, state: 'disabled' });
+  check('F1: a disabled toggle knob is the surface colour (dark)', tg.includes(`border-radius: 50%; background-color: ${surfDark}`), tg);
+  check('F1 twin: an enabled toggle knob stays white', dark({ id: 'n', type: 'toggle', checked: true }).includes('border-radius: 50%; background-color: #FFFFFF'));
+  check('F1 twin: without tokens a disabled toggle knob stays white', chunk(render([{ id: 'n', type: 'toggle', disabled: true }], COLORS_ONLY), 'n').includes('border-radius: 50%; background-color: #FFFFFF'));
+  const lr = dark({ id: 'n', type: 'list-row', title: 'Inbox', trailing: { badge: 3 }, disabled: true });
+  check('F1: a disabled list-row badge numeral is the surface colour', lr.includes(`color: ${surfDark}; font-size: 12px`), lr.slice(0, 900));
+  const lrt = dark({ id: 'n', type: 'list-row', title: 'Wi-Fi', trailing: { toggle: true }, disabled: true });
+  check('F1: a disabled list-row toggle knob is the surface colour', lrt.includes(`border-radius: 50%; background-color: ${surfDark}`));
+  const tb = dark({ id: 'n', type: 'tab-bar', items: [{ icon: 'house', label: 'Home', badge: 5, state: 'disabled' }, { icon: 'search', label: 'Find', badge: 2 }] });
+  check('F1: a disabled tab-bar item\'s badge numeral is the surface colour; an enabled one stays white', tb.includes(`color: ${surfDark}; font-size: 11px`) && tb.includes('color: #FFFFFF; font-size: 11px'), tb.slice(0, 900));
+
+  // F2: a truthy non-boolean disabled still dims (pre-slice behaviour); an
+  // overlay with disabled keeps its 0.5 when the design system has the pair.
+  for (const d of ['true', 1] as unknown[]) {
+    const t = tag(render([{ id: 'n', type: 'button', label: 'S', disabled: d as boolean }], COLORS_ONLY), 'n');
+    check(`F2: disabled ${JSON.stringify(d)} still dims a button to 0.5 without tokens`, t.includes('opacity: 0.5'), t);
+  }
+  check('F2 twin: an enabled button has no opacity', !tag(render([{ id: 'n', type: 'button', label: 'S', disabled: false }], COLORS_ONLY), 'n').includes('opacity'));
+  for (const type of ['tooltip', 'popover', 'menu', 'modal', 'toast', 'drawer'] as const) {
+    const h = render([{ id: 'n', type, text: 'x', title: 'T', disabled: true }]);
+    check(`F2: a disabled ${type} keeps 0.5 on a canvas with the token pair`, tag(h, 'n').includes('opacity: 0.5'));
+  }
+  check('F2 twin: a disabled button on that canvas draws the pair, not 0.5', tag(render([{ id: 'n', type: 'button', label: 'S', disabled: true }]), 'n').includes('opacity: 0.38'));
+
+  // F3: a disabled text-input's error message is content (on-surface), not the
+  // border's container share.
+  const ti = chunk(render([{ id: 'n', type: 'text-input', value: 'v', error: 'Bad', disabled: true }]), 'n');
+  check('F3: a disabled text-input error message takes the on-surface colour', ti.includes(`line-height: 16px; color: ${ON}`) && !/line-height: 16px; color: color-mix/.test(ti), ti.slice(0, 900));
+  const tiOn = chunk(render([{ id: 'n', type: 'text-input', value: 'v', error: 'Bad' }]), 'n');
+  check('F3 twin: an enabled error message keeps the danger colour', tiOn.includes(`line-height: 16px; color: ${C.danger}`), tiOn.slice(0, 900));
+
+  // F4: a disabled container that paints nothing stays clear, whatever its spelling.
+  for (const f of ['transparent', 'none', 'rgba(0,0,0,0)', 'rgba(0, 0, 0, 0.0)', '#00000000', '#0000', 'hsla(0,0%,0%,0)', 'rgb(0 0 0 / 0%)']) {
+    const t = tag(render([{ id: 'n', type: 'button', label: 'S', variant: 'ghost', fill: f, state: 'disabled' }]), 'n');
+    check(`F4: a disabled ghost with fill ${f} stays clear`, t.includes(`background-color: ${f}`), t);
+  }
+  for (const f of ['#2563EB1A', 'rgba(37,99,235,0.5)', 'rgb(10, 20, 30)', '#2563EB']) {
+    const t = tag(render([{ id: 'n', type: 'button', label: 'S', fill: f, state: 'disabled' }]), 'n');
+    check(`F4 twin: a disabled button with fill ${f} takes the on-surface share`, t.includes(`background-color: color-mix(in srgb, ${ON}`), t);
+  }
+
+  // F5: state is an enum, not a style value: it does not dilute token adoption.
+  const sheet = (st?: SceneNode['state']): Canvas => ({
+    id: 'c', name: 'c', projectId: 'p', components: {}, createdAt: '', lastModified: '', variables: SYSTEM,
+    root: { id: 'document', type: 'document', width: 1440, height: 900, fill: '$bg-primary', layout: 'vertical', padding: 40, gap: 16,
+      children: Array.from({ length: 10 }, (_, i) => ({ id: `b${i}`, type: 'button', label: 'B', size: 'sm', fill: '$accent', color: '#FFFFFF', stroke: '#EEEEEE', ...(st ? { state: st } : {}) })) },
+    metadata: { surface: { type: 'desktop-app', device: 'window-1440' } },
+  } as Canvas);
+  const tokenWarn = async (st?: SceneNode['state']) => (await evaluateCanvas(sheet(st), { mode: 'fast' })).issues.filter((i) => /use design tokens/.test(i.message)).length;
+  check('F5: a states sheet\'s state props do not count against token adoption', (await tokenWarn('hover')) === (await tokenWarn()));
+}
+
+// ── Verify round 1: mutation kills ──────────────────────────────────────
+{
+  const R = (n: SceneNode, v: DesignVariables = SYSTEM) => resolveVariables(n, v);
+  // A disabled node with no fill gains no background.
+  for (const type of ['menu-row', 'tree-row', 'nav-item', 'list-row'] as const) {
+    const t = tag(render([{ id: 'n', type, label: 'x', title: 'x', state: 'disabled' }]), 'n');
+    check(`M: a disabled ${type} with no fill draws no background`, !t.includes('background-color'), t);
+  }
+  // An authored opacity wins on every node type, with and without the pair.
+  const OWN: SceneNode[] = [
+    { id: 'n', type: 'button', label: 'S' }, { id: 'n', type: 'link', label: 'L' }, { id: 'n', type: 'nav-item', label: 'N' },
+    { id: 'n', type: 'tree-row', label: 'T' }, { id: 'n', type: 'menu-row', label: 'M' }, { id: 'n', type: 'list-row', title: 'R' },
+    { id: 'n', type: 'checkbox', checked: true }, { id: 'n', type: 'toggle' }, { id: 'n', type: 'radio' }, { id: 'n', type: 'select', value: 'A' },
+  ];
+  for (const n of OWN) for (const [vn, v] of [['pair', SYSTEM], ['no tokens', COLORS_ONLY]] as const) {
+    const t = tag(render([{ ...n, disabled: true, opacity: 0.7 }], v), 'n');
+    check(`M: an authored opacity wins on a disabled ${n.type} (${vn})`, t.includes('opacity: 0.7') && !t.includes('opacity: 0.38') && !t.includes('opacity: 0.5') && !t.includes('color-mix'), t);
+  }
+  {
+    const ti = chunk(render([{ id: 'n', type: 'text-input', value: 'v', disabled: true, opacity: 0.7 }]), 'n');
+    check('M: an authored opacity wins on a disabled text-input', ti.includes('opacity: 0.7') && !ti.includes('opacity: 0.38') && !ti.includes('color-mix'));
+  }
+  // Without tokens every disabled node and item dims to 0.5.
+  for (const n of OWN) {
+    const t = tag(render([{ ...n, state: 'disabled' }], COLORS_ONLY), 'n');
+    check(`M: a ${n.type} with state disabled dims to 0.5 without tokens`, t.includes('opacity: 0.5') && !t.includes('color-mix'), t);
+  }
+  check('M: a disabled nav-bar action dims to 0.5 without tokens', chunk(render([{ id: 'n', type: 'nav-bar', title: 'T', trailing: [{ icon: 'plus', disabled: true }] }], COLORS_ONLY), 'n').includes('opacity: 0.5'));
+  check('M: a disabled tab-bar item dims to 0.5 without tokens', chunk(render([{ id: 'n', type: 'tab-bar', items: [{ icon: 'house', label: 'A', state: 'disabled' }, { icon: 'user', label: 'B' }] }], COLORS_ONLY), 'n').includes('opacity: 0.5'));
+  check('M: a disabled toast action dims to 0.5 without tokens', /<div tabindex="-1"[^>]*opacity: 0\.5/.test(render([{ id: 'n', type: 'toast', text: 'x', action: { label: 'Undo', state: 'disabled' } }], COLORS_ONLY)));
+  // state disabled leaves the tab order on every type.
+  for (const n of [...OWN, { id: 'n', type: 'link', label: 'L' }] as SceneNode[]) {
+    if (n.type === 'list-row') continue; // never focusable
+    const t = tag(render([{ ...n, state: 'disabled' }]), 'n');
+    check(`M: a ${n.type} with state disabled leaves the tab order`, t.includes('tabindex="-1"') && t.includes('aria-disabled="true"') && !t.includes('data-focusable'), t);
+  }
+  {
+    const f = chunk(render([{ id: 'n', type: 'text-input', placeholder: 'x', state: 'disabled' }]), 'n').match(/<div[^>]*role="textbox"[^>]*>/)?.[0] ?? '';
+    check('M: a text-input with state disabled leaves the tab order', f.includes('tabindex="-1"') && !f.includes('data-focusable'), f);
+  }
+  // Disabled colours are the on-surface colour, per type.
+  for (const n of [{ id: 'n', type: 'link', label: 'L' }, { id: 'n', type: 'tree-row', label: 'T' }, { id: 'n', type: 'menu-row', label: 'M' }, { id: 'n', type: 'nav-item', label: 'N' }, { id: 'n', type: 'list-row', title: 'R' }] as SceneNode[]) {
+    const t = tag(render([{ ...n, state: 'disabled' }]), 'n');
+    check(`M: a disabled ${n.type} draws its content in the on-surface colour`, t.includes(`color: ${ON}`) && t.includes('opacity: 0.38'), t);
+  }
+  const radio = tag(render([{ id: 'n', type: 'radio', checked: true, state: 'disabled' }]), 'n');
+  check('M: a disabled radio draws its ring solid in the on-surface colour', radio.includes(`border: 1.5px solid ${ON}`) && !radio.includes('color-mix'), radio);
+  const dot = chunk(render([{ id: 'n', type: 'nav-item', label: 'N', dotColor: '#16A34A', state: 'disabled' }]), 'n');
+  check('M: a disabled nav-item dot is exactly the on-surface colour', dot.includes(`border-radius: 50%; background-color: ${ON}`), dot.slice(0, 700));
+  const shortcut = chunk(render([{ id: 'n', type: 'menu-row', label: 'Copy', shortcut: '⌘C', state: 'disabled' }]), 'n');
+  check('M: a disabled menu-row shortcut takes the on-surface colour', /<kbd[^>]*color: ([^;"]+)/.exec(shortcut)?.[1] === ON, shortcut.slice(0, 700));
+  const share = Math.round((0.12 / 0.38) * 10000) / 100;
+  const tabsOff = chunk(render([{ id: 'n', type: 'tabs', items: [{ label: 'A', active: true, count: 3 }], state: 'disabled' }]), 'n');
+  check('M: a disabled active tab draws label, indicator and badge in the on-surface colour', tabsOff.includes(`color: ${ON}`) && tabsOff.includes(`bottom: 0; height: 2px; border-radius: 1px; background-color: ${ON}`)
+    && tabsOff.includes(`border-radius: 8px; background-color: color-mix(in srgb, ${ON} ${share}%, transparent)`), tabsOff.slice(0, 900));
+  const contained = chunk(render([{ id: 'n', type: 'tabs', variant: 'contained', items: [{ label: 'A', active: true, disabled: true }] }]), 'n');
+  check('M: a disabled contained tab draws its fill in the on-surface share', contained.includes(`background-color: color-mix(in srgb, ${ON} ${share}%, transparent)`), contained.slice(0, 700));
+  const barOff = chunk(render([{ id: 'n', type: 'tab-bar', items: [{ icon: 'house', label: 'A', badge: 2, disabled: true }] }]), 'n');
+  check('M: a disabled tab-bar item draws its label and badge in the on-surface colour', barOff.includes(`gap: 2px; color: ${ON}`) && barOff.includes(`border-radius: 8px; background-color: ${ON}`), barOff.slice(0, 700));
+  const navOff = chunk(render([{ id: 'n', type: 'nav-bar', title: 'T', trailing: [{ label: 'Edit', state: 'disabled' }] }]), 'n');
+  check('M: a disabled nav-bar action draws in the on-surface colour', navOff.includes(`padding: 0 8px; color: ${ON}`), navOff.slice(0, 900));
+  // Inks, exactly.
+  const nb = R({ id: 'n', type: 'nav-bar', title: 'T' });
+  check('M: a hovered nav-bar action layers its own colour (iconColor)', chunk(render([{ id: 'n', type: 'nav-bar', title: 'T', trailing: [{ icon: 'plus', state: 'hover' }] }]), 'n').includes(layer(nb.iconColor!, 8)));
+  check('M: a hovered leading nav-bar action layers its own colour', chunk(render([{ id: 'n', type: 'nav-bar', title: 'T', leading: { icon: 'chevron-left', state: 'hover' } }]), 'n').includes(layer(nb.iconColor!, 8)));
+  const tbr = R({ id: 'n', type: 'tab-bar', items: [] });
+  const bar = chunk(render([{ id: 'n', type: 'tab-bar', items: [{ icon: 'house', label: 'A', active: true, state: 'pressed' }, { icon: 'user', label: 'B', state: 'hover' }] }]), 'n');
+  check('M: tab-bar items layer their own colour (active → iconColor, else color)', bar.includes(layer(tbr.iconColor!, 10)) && bar.includes(layer(tbr.color!, 8)), bar.slice(0, 900));
+  const tabsR = R({ id: 'n', type: 'tabs', items: [] });
+  const tb = chunk(render([{ id: 'n', type: 'tabs', items: [{ label: 'A', active: true, state: 'hover' }, { label: 'B', state: 'pressed' }] }]), 'n');
+  check('M: tabs layer the label colour (active → color, else secondaryColor)', tb.includes(layer(tabsR.color!, 8)) && tb.includes(layer(tabsR.secondaryColor!, 10)), tb.slice(0, 900));
+  const lk = R({ id: 'n', type: 'link', label: 'L' });
+  check('M: a hovered link layers its label colour', tag(render([{ id: 'n', type: 'link', label: 'L', iconColor: '#000000', state: 'hover' }]), 'n').includes(layer(lk.color!, 8)));
+  check('M: the link underline sits 2px under the text', chunk(render([{ id: 'n', type: 'link', label: 'L', state: 'hover' }]), 'n').includes('text-decoration: underline; text-underline-offset: 2px'));
+  // Token resolution.
+  check('M: the ring prefers $accent over $primary', tag(render([{ id: 'n', type: 'button', label: 'S', state: 'focus' }], { colors: { accent: '#111111', primary: '#222222' } }), 'n').includes(ringCss('#111111')));
+  check('M: a focus token of 0.2 layers at 20%', tag(render([{ id: 'n', type: 'button', label: 'S', state: 'focus' }], { ...SYSTEM, state: { focus: 0.2 } }), 'n').includes('#FFFFFF 20%'));
+  check('M: a hover token of exactly 1 layers at 100%', tag(render([{ id: 'n', type: 'button', label: 'S', state: 'hover' }], { ...SYSTEM, state: { hover: 1 } }), 'n').includes('#FFFFFF 100%'));
+  check('M: a lone out-of-range disabled token is no pair (0.5)', tag(render([{ id: 'n', type: 'button', label: 'S', disabled: true }], { ...SYSTEM, state: { disabledContent: 2 } }), 'n').includes('opacity: 0.5'));
+  const noText: DesignVariables = { colors: { accent: '#2563EB', 'bg-surface': '#FFFFFF' }, state: { disabledContent: 0.38, disabledContainer: 0.12 } };
+  check('M: without $text-primary the on-surface colour is #111827', tag(render([{ id: 'n', type: 'button', label: 'S', disabled: true }], noText), 'n').includes('color: #111827'));
+  const noSurface: DesignVariables = { colors: { accent: '#2563EB', 'text-primary': '#222222', surface: '#FAFAFA' }, state: { disabledContent: 0.38, disabledContainer: 0.12 } };
+  check('M: without $bg-surface the mark takes $surface', chunk(render([{ id: 'n', type: 'checkbox', checked: true, disabled: true }], noSurface), 'n').includes('stroke="#FAFAFA"'));
+  check('M: and with neither, #FFFFFF', chunk(render([{ id: 'n', type: 'checkbox', checked: true, disabled: true }], { colors: { 'text-primary': '#222222' }, state: { disabledContent: 0.38 } }), 'n').includes('stroke="#FFFFFF"'));
+  // Host styles reach the items (tuned tokens differ from the fallback).
+  const tuned: DesignVariables = { ...SYSTEM, colors: { ...C, 'focus-ring': '#B45309' }, state: { ...SYSTEM.state, hover: 0.2 } };
+  check('M: a tab carries the host ring colour', chunk(render([{ id: 'n', type: 'tabs', items: [{ label: 'A' }] }], tuned), 'n').includes('--fs-ring: #B45309'));
+  check('M: a tab-bar item takes the host hover token', chunk(render([{ id: 'n', type: 'tab-bar', items: [{ icon: 'house', label: 'A', state: 'hover' }] }], tuned), 'n').includes(' 20%, transparent'));
+  check('M: a modal action takes the host ring', /<div tabindex="0"[^>]*outline: 2px solid #B45309/.test(render([{ id: 'n', type: 'modal', title: 'M', actions: [{ label: 'OK', state: 'focus' }] }], tuned)));
+  check('M: a toast action takes the host hover token', render([{ id: 'n', type: 'toast', text: 'x', action: { label: 'Undo', state: 'hover' } }], tuned).includes(' 20%, transparent'));
+  // Fallbacks for an unresolved node.
+  check('M: an unresolved pressed node layers at 10%', tag(render([{ id: 'n', type: 'button', label: 'S', color: '#FFFFFF', fill: '#000000', state: 'pressed' }], {}, false), 'n').includes(layer('#FFFFFF', 10)));
+  check('M: an unresolved focused node layers at 10%', tag(render([{ id: 'n', type: 'button', label: 'S', color: '#FFFFFF', fill: '#000000', state: 'focus' }], {}, false), 'n').includes(layer('#FFFFFF', 10)));
+  check('M: an unresolved unchecked checkbox in hover draws no broken layer', !render([{ id: 'n', type: 'checkbox', state: 'hover' }], {}, false).includes('color-mix(in srgb, undefined'));
+}
+
+// The census keeps disabled === true: a truthy string is still measured (pre-slice).
+{
+  const r = await evaluateCanvas(canvasOf('desktop-app', [{ id: 'b', name: 'b', type: 'button', icon: 'x', ariaLabel: 'X', size: 'xs', width: 20, height: 20, disabled: 'true' as unknown as boolean }]), { mode: 'fast', categories: ['usability'] });
+  check('M: disabled "true" (a string) is still measured by the 24px census', r.issues.some((i) => /24px floor/.test(i.message)));
 }
 
 // ── P2: items ────────────────────────────────────────────────────────────

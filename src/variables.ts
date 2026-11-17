@@ -126,9 +126,6 @@ const CONTROL_FALLBACK = { accent: '#2563EB', border: '#D1D5DB', surface: '#FFFF
 // never reads tokens. Items of tabs / tab-bar / nav-bar / modal / toast use
 // their host's.
 const STATE_HOSTS = new Set([...STATEFUL_TYPES, 'tabs', 'tab-bar', 'nav-bar', 'modal', 'toast']);
-// The nodes whose own `state: "disabled"` disables them (a tabs node's
-// disables every tab).
-const STATE_ON_NODE = new Set([...STATEFUL_TYPES, 'tabs']);
 
 /** An opacity token: a number in [0, 1], else undefined. */
 function unit(x: unknown): number | undefined {
@@ -147,6 +144,7 @@ export function resolveStateStyle(v: DesignVariables): StateStyle {
     // FR-H1's chain: the renderer and the check never disagree.
     ring: c['focus-ring'] ?? c.accent ?? c.primary ?? CONTROL_FALLBACK.accent,
     onSurface: c['text-primary'] ?? CONTROL_FALLBACK.text,
+    surface: c['bg-surface'] ?? c.surface ?? CONTROL_FALLBACK.surface,
     hover: unit(s.hover) ?? STATE_LAYERS.hover,
     focus: unit(s.focus) ?? STATE_LAYERS.focus,
     pressed: unit(s.pressed) ?? STATE_LAYERS.pressed,
@@ -158,11 +156,14 @@ export function resolveStateStyle(v: DesignVariables): StateStyle {
   return out;
 }
 
-/** Without disabled tokens a disabled node renders at today's 0.5 opacity
- * (unless authored); with them the renderer draws the token pair (P4). */
+/** A disabled node renders at today's 0.5 opacity (unless authored), except
+ * where the renderer draws the token pair instead (P4): a type that takes
+ * `state` on a canvas with disabled tokens. Truthiness matches the pre-slice
+ * check, so `disabled: "true"` still dims (P5). */
 function legacyDisabled(node: SceneNode, v: DesignVariables): void {
-  const disabled = node.disabled === true || (STATE_ON_NODE.has(node.type) && node.state === 'disabled');
-  if (disabled && node.opacity === undefined && !hasDisabledTokens(v)) node.opacity = 0.5;
+  const stateful = STATEFUL_TYPES.has(node.type);
+  const disabled = !!node.disabled || (stateful && node.state === 'disabled');
+  if (disabled && node.opacity === undefined && !(stateful && hasDisabledTokens(v))) node.opacity = 0.5;
 }
 
 function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
