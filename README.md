@@ -358,10 +358,10 @@ Phone screens are built from seven primitives that carry their own sizes, 44px h
 |---|---|---|
 | `status-bar` | `time`, `appearance` | Device chrome pinned to the top, as tall as the root's `safeArea.top` (47 without one) |
 | `home-indicator` | `appearance` | The home pill pinned to the bottom, as tall as `safeArea.bottom` (34) |
-| `nav-bar` | `title`, `leading`, `trailing` (≤2), `largeTitle` | 44 tall (96 large), in flow; every action a 44×44 target |
-| `tab-bar` | `items: [{ icon, label, active?, badge? }]`, `variant` (`standard` / `floating` / `fab`), `fab` | Pinned to the bottom, 49 + the inset; 2–5 labeled tabs; `fab` adds a raised 56px centre action |
-| `button` | `label`, `icon`, `iconPosition`, `variant`, `size` (`xs` 24 / `sm` 32 / `md` 44 / `lg` 52), `ariaLabel`, `disabled` | `md` meets the phone floor; `sm` and `xs` are mobile errors by design. An icon-only button takes `ariaLabel` as its accessible name (`aria-label` and `title`, never drawn) |
-| `list-row` | `title`, `subtitle`, `leading`, `trailing` (`text` / `chevron` / `toggle` / `badge`), `divider` | 44 tall (56 with a subtitle); repeated rows count as reuse |
+| `nav-bar` | `title`, `leading`, `trailing` (≤2), `largeTitle`; each action takes `state` | 44 tall (96 large), in flow; every action a 44×44 target |
+| `tab-bar` | `items: [{ icon, label, active?, badge?, state? }]`, `variant` (`standard` / `floating` / `fab`), `fab` | Pinned to the bottom, 49 + the inset; 2–5 labeled tabs; `fab` adds a raised 56px centre action |
+| `button` | `label`, `icon`, `iconPosition`, `variant`, `size` (`xs` 24 / `sm` 32 / `md` 44 / `lg` 52), `ariaLabel`, `disabled`, `state` | `md` meets the phone floor; `sm` and `xs` are mobile errors by design. An icon-only button takes `ariaLabel` as its accessible name (`aria-label` and `title`, never drawn) |
+| `list-row` | `title`, `subtitle`, `leading`, `trailing` (`text` / `chevron` / `toggle` / `badge`), `divider`, `state` | 44 tall (56 with a subtitle); repeated rows count as reuse |
 | `sheet` | `detent`, `grabber`, children | A bottom sheet over a scrim, padded past the home indicator |
 
 `fill`, `stroke`, `color`, `iconColor`, `secondaryColor` (list-row subtitle and trailing) and `badgeColor` (badges) override the token defaults.
@@ -386,16 +386,18 @@ Application screens (`type: "desktop-app"`) are built from eight primitives on t
 
 | Type | Key props | What it is |
 |---|---|---|
-| `link` | `label`, `icon`, `iconPosition`, `external`, `ariaLabel` | A standalone text action, at least 24 tall. With no `label` it hugs its glyphs (14px wide, 30 with `external`) and needs an `ariaLabel` (rendered as `aria-label` and `title`). A `text` node can hold inline links instead: `links: [{ start, end }]` character ranges of its content, drawn underlined and exempt from the 24px floor |
-| `text-input` | `value`, `placeholder`, `icon`, `size` (`sm` 32 / `md` 40), `rows`, `error` (a message), `disabled` | A field whose border (`$border-strong` when the design system has it) is its only boundary; `error` draws an icon and the message below and turns the border `$danger` |
-| `nav-item` | `label`, `icon`, `count`, `dotColor`, `active`, `depth` (0 / 1), `collapsed` | A 32px sidebar row. `active` draws an `$accent-tint` fill, a 2px `$accent` bar and a heavier label; `collapsed` is the 32×32 rail form, with the label as its accessible name; `dotColor` is an identity dot, never counted as an accent |
-| `tabs` | `items: [{ label, count?, active?, disabled? }]`, `variant` (`line` / `contained`), `size` (`sm` 32 / `md` 40) | One tablist; each tab is its own target. The active tab gets an indicator (`line`) or an `$accent-tint` fill (`contained`) |
-| `tree-row` | `label`, `depth`, `expanded` (absent for a leaf), `icon`, `active` | A 32px row indented 16px per level, with a chevron when `expanded` is set |
-| `menu-row` | `label`, `icon`, `shortcut`, `checked`, `destructive`, `disabled`, `submenu` | A 32px menu item; the shortcut right-aligns in a muted `kbd` style, `destructive` uses `$danger` |
+| `link` | `label`, `icon`, `iconPosition`, `external`, `ariaLabel`, `state` | A standalone text action, at least 24 tall. With no `label` it hugs its glyphs (14px wide, 30 with `external`) and needs an `ariaLabel` (rendered as `aria-label` and `title`). A `text` node can hold inline links instead: `links: [{ start, end }]` character ranges of its content, drawn underlined and exempt from the 24px floor |
+| `text-input` | `value`, `placeholder`, `icon`, `size` (`sm` 32 / `md` 40), `rows`, `error` (a message), `disabled`, `state` | A field whose border (`$border-strong` when the design system has it) is its only boundary; `error` draws an icon and the message below and turns the border `$danger` |
+| `nav-item` | `label`, `icon`, `count`, `dotColor`, `active`, `depth` (0 / 1), `collapsed`, `state` | A 32px sidebar row. `active` draws an `$accent-tint` fill, a 2px `$accent` bar and a heavier label; `collapsed` is the 32×32 rail form, with the label as its accessible name; `dotColor` is an identity dot, never counted as an accent |
+| `tabs` | `items: [{ label, count?, active?, disabled?, state? }]`, `variant` (`line` / `contained`), `size` (`sm` 32 / `md` 40) | One tablist; each tab is its own target. The active tab gets an indicator (`line`) or an `$accent-tint` fill (`contained`) |
+| `tree-row` | `label`, `depth`, `expanded` (absent for a leaf), `icon`, `active`, `state` | A 32px row indented 16px per level, with a chevron when `expanded` is set |
+| `menu-row` | `label`, `icon`, `shortcut`, `checked`, `destructive`, `disabled`, `submenu`, `state` | A 32px menu item; the shortcut right-aligns in a muted `kbd` style, `destructive` uses `$danger` |
 | `property-row` | `label`, `labelWidth` (96), one child | An inspector row: a muted label column, then its value (a control, a `text-input`, a `button`, a text). A control that is its only target is measured by the row's box. The row's `label` names a control directly inside it; with a blank label only text inside the row itself does (a sibling row's text does not count). The other desktop-app primitives drop any children |
 | `divider` | `orientation` (`horizontal` / `vertical`), `inset` | A 1px `$border` hairline; vertical dividers separate panes |
 
 `fill`, `stroke`, `color`, `iconColor` and `secondaryColor` override the token defaults (`tabs.fill` is the contained variant's active background). A canvas that holds a `nav-item`, `tabs`, `tree-row`, `menu-row` or `property-row` must declare its type (`desktop-app-artboard`).
+
+**Element states.** `state: "hover" | "focus" | "pressed" | "disabled"` on a `button`, `link`, `text-input`, `nav-item`, `tree-row`, `menu-row`, `list-row` or control (`toggle`, `checkbox`, `radio`, `select`; on the item for `tabs`, `tab-bar`, `nav-bar` actions, `modal` actions and a `toast` action) draws that state from the design system's state tokens: hover, focus and pressed layer the label colour over the fill, or over what is behind a target with no fill (8 / 10 / 10%), focus adds a 2px `$focus-ring` at a 2px gap (inside the box for a tab and a tab-bar item), and disabled renders in `$text-primary` at `disabledContent` 38% (a drawn fill or border at `disabledContainer` 12%) when the `state` tokens set either disabled opacity (a lone one takes the other's Material value), else at 0.5 in the target's own colours. An authored `opacity` wins. It is for a states sheet or a screenshot; the evaluator never needs a state drawn. `state: "disabled"` counts as disabled wherever `disabled: true` does: it leaves the tab order, the 24px census and the primary count (the phone's 44px census still measures a disabled target). Other node types ignore it.
 
 #### Overlays
 
@@ -406,8 +408,8 @@ Six overlays draw screen states: an open menu, a comment popover, a confirm dial
 | `tooltip` | `text`, `x`, `y` | A short hint, inverted, wrapping at 240px; never renders children |
 | `popover` | `x`, `y`, `size` (`xs` 192 / `sm` 320 / `md` 480 / `lg` 640), children | A panel (vertical, 12px padding by default) for a comment box or a filter form |
 | `menu` | `x`, `y`, children (`menu-row`s, `divider`s) | A menu at least 192 wide, hugging its rows |
-| `modal` | `title`, `size` (`sm` 480 / `md` 640 / `lg` 960), `actions: [{ label, variant? }]`, `closeLabel`, children | Centred over its own full scrim, with a close button named "Close"; actions right-aligned, the filled one (`primary` or `destructive`) rightmost, an action with no variant `secondary` |
-| `toast` | `text`, `tone` (`neutral` / `success` / `warning` / `danger`), `action: { label }` | Bottom-centre, 24px above the artboard's edge; the tone colours a leading glyph |
+| `modal` | `title`, `size` (`sm` 480 / `md` 640 / `lg` 960), `actions: [{ label, variant?, state? }]`, `closeLabel`, children | Centred over its own full scrim, with a close button named "Close"; actions right-aligned, the filled one (`primary` or `destructive`) rightmost, an action with no variant `secondary` |
+| `toast` | `text`, `tone` (`neutral` / `success` / `warning` / `danger`), `action: { label, state? }` | Bottom-centre, 24px above the artboard's edge; the tone colours a leading glyph |
 | `drawer` | `size` (`sm` 320 / `md` 480), `scrim`, children | A panel pinned to the right edge at full height |
 
 ```
@@ -1219,12 +1221,12 @@ I("parent", { type: "checkbox", checked: true })
 I("parent", { type: "radio" })
 I("parent", { type: "select", value: "Administrator", width: 220 })
 I("parent", { type: "select" })                      # renders a muted "Select…" placeholder
-I("parent", { type: "toggle", checked: true, disabled: true })   # 50% opacity
+I("parent", { type: "toggle", checked: true, disabled: true })   # 38% in $text-primary with disabled state tokens, else 50%
 ```
 
 Colors default from the design system — `$accent` (falling back to `$primary`) for active states, `$border` for outlines, `$bg-surface` / `$text-primary` for the select — with neutral fallbacks on unthemed canvases. Explicit `fill` / `stroke` / `color` override. Defaults: toggle 44×24, checkbox/radio 18×18, select `fit-content` (give it a `width` for form layouts).
 
-All four controls are keyboard-focusable in the live viewer (`tabindex="0"`, an accent-derived `:focus-visible` ring) — that's a live-viewer-only affordance and never changes a screenshot, since nothing is focused in a static capture. `canvas_evaluate`'s `usability` category checks the things the renderer can't guarantee on its own: hit-target size, label association, and honest action copy — see the categories table below.
+All four controls are keyboard-focusable in the live viewer (`tabindex="0"`, a `:focus-visible` ring in `$focus-ring`, else `$accent`). A live focus never changes a capture, since nothing is focused in one; to draw the ring in a screenshot, set `state: "focus"` (see Element states above). `canvas_evaluate`'s `usability` category checks the things the renderer can't guarantee on its own: hit-target size, label association, and honest action copy — see the categories table below.
 
 ## SVG Paths
 
@@ -1256,7 +1258,7 @@ Built-in keyframe names: `fadeIn`, `slideUp`, `slideDown`, `scaleIn`. All end at
 
 `animation`: `{ name, duration?: 300ms, delay?: 0ms, easing?: "ease-out", iteration?: 1 | "infinite" }`. Easing is whitelisted: `ease`, `ease-in`, `ease-out`, `ease-in-out`, `linear` (anything else falls back to `ease-out`).
 
-`transition`: `{ property?: "all", duration, easing?: "ease", delay?: 0ms }`. Transitions only fire on state change, so they're inert until interactive states exist in the renderer — included today so a future hover/focus PR has a place to land.
+`transition`: `{ property?: "all", duration, easing?: "ease", delay?: 0ms }`. Transitions only fire on a live state change (hover or focus in the viewer); a static `state` render has nothing to animate.
 
 ## Components
 

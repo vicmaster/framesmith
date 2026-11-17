@@ -571,7 +571,8 @@ Run on its own viewer (2026-11-08), framesmith scored every page's usability 100
 - [ ] Follow-up — the web scaffolds' tint tokens (`success-tint` and the rest) are seeded dark and survive a later light `apply_preset`, as `accent-tint` did before Phase 31 slice D stopped seeding it; derive them from the applied palette instead
 - [x] Slice E — overlays: one overlay layer at the root with a fixed ladder, and the `tooltip`, `popover`, `menu`, `modal`, `toast` and `drawer` primitives, with overlay screen states as variants
 - [x] Slice F — overlay rules: one modal, text-only tooltips, no large tables in modals, overlays inside the viewport, nothing under a scrim, and advisories on stacked toasts, error toasts and dangling anchors
-- [ ] Slice G — element states: hover, focus, pressed and disabled as a primitive property, drawn from state tokens
+- [x] Slice G — element states: hover, focus, pressed and disabled as a primitive property (and on the items of tabs, tab-bar, nav-bar, modal and toast), drawn from state tokens; focus is a 2px ring at a 2px gap, disabled renders in the on-surface colour, and `state: "disabled"` counts as disabled in the 24px census and the primary count
+- [ ] Follow-up — a disabled control inside a component instance renders undimmed, because instances render after variable resolution (`resolveInstance`); resolve instance subtrees too, so `disabled` and `state` dim inside components as they do outside
 - [ ] Slice H — state checks: focus rings, active indicators, disabled renders and control boundaries checked analytically on every interactive primitive, without being drawn
 - [ ] Slice I — the acceptance re-run: the viewer's gallery, detail with inspector and archive rebuilt as canvases, with the comment popover and delete-confirm states
 

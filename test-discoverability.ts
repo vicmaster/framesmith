@@ -436,6 +436,34 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('the issue `rule` field is documented in src/index.ts and GUIDELINES', /"rule" field/.test(indexSrc) && /`rule` field/.test(guidelines));
 }
 
+// ── Phase 31 slice G: element states are surfaced where agents look ──────────
+// The state names and every node type that takes `state` (STATEFUL_TYPES,
+// live import) appear on each surface, so a new stateful type cannot ship
+// undocumented.
+{
+  const { ELEMENT_STATES, STATEFUL_TYPES } = await import('./src/primitives.js');
+  // Each surface's own element-states paragraph, up to its blank line.
+  const paragraph = (src: string, marker: string) => {
+    const at = src.indexOf(marker);
+    if (at < 0) return '';
+    const end = src.indexOf('\n\n', at);
+    return src.slice(at, end < 0 ? undefined : end);
+  };
+  for (const [label, src, marker] of [
+    ['src/index.ts', indexSrc, 'Element states (state?:'],
+    ['GUIDELINES', guidelines, '- **Who takes it.**'],
+    ['README', readme, '**Element states.**'],
+  ] as const) {
+    const para = paragraph(src, marker);
+    expect(`the element-states paragraph exists in ${label}`, para.length > 0);
+    const missing = ELEMENT_STATES.filter((st: string) => st !== 'rest' && !src.includes(`"${st}"`));
+    expect(`every element state named in ${label}`, missing.length === 0, missing.join(', '));
+    const untyped = [...STATEFUL_TYPES].filter((t) => !para.includes(t));
+    expect(`every stateful node type listed under element states in ${label}`, untyped.length === 0, untyped.join(', '));
+  }
+  expect('state is in batch_design\'s property list', /checked, disabled, state, value/.test(indexSrc));
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;
