@@ -1043,13 +1043,18 @@ function renderState(n: { state?: unknown; disabled?: unknown } | null | undefin
 }
 
 /** A colour that paints nothing: the keywords, and a zero alpha in hex, rgb()
- * or hsl() form. A disabled container keeps it clear. */
+ * or hsl() form (the fourth comma argument, or the value after a slash; a
+ * colour with no alpha is opaque). A disabled container keeps it clear. */
 function isClear(c: string | undefined): boolean {
   if (!c) return true;
   const v = c.trim().toLowerCase();
-  return v === 'transparent' || v === 'none'
-    || /^#(?:[0-9a-f]{3}0|[0-9a-f]{6}00)$/.test(v)
-    || /^(?:rgba?|hsla?)\(.*[,/]\s*0*\.?0+%?\s*\)$/.test(v);
+  if (v === 'transparent' || v === 'none' || /^#(?:[0-9a-f]{3}0|[0-9a-f]{6}00)$/.test(v)) return true;
+  const fn = /^(?:rgba?|hsla?)\((.*)\)$/.exec(v);
+  if (!fn) return false;
+  const slash = fn[1].split('/');
+  const parts = fn[1].split(',');
+  const alpha = slash.length === 2 ? slash[1] : parts.length === 4 ? parts[3] : undefined;
+  return alpha !== undefined && /^\s*[+-]?0*(?:\.0*)?%?\s*$/.test(alpha) && /\d/.test(alpha);
 }
 
 /** The disabled token pair, when the design system sets it (spec P3). */

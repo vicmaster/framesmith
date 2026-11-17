@@ -247,7 +247,8 @@ for (const s of ['rest', 'hover', 'focus', 'pressed'] as const) {
     const t = tag(render([{ id: 'n', type: 'button', label: 'S', variant: 'ghost', fill: f, state: 'disabled' }]), 'n');
     check(`F4: a disabled ghost with fill ${f} stays clear`, t.includes(`background-color: ${f}`), t);
   }
-  for (const f of ['#2563EB1A', 'rgba(37,99,235,0.5)', 'rgb(10, 20, 30)', '#2563EB']) {
+  // An opaque colour whose last channel is 0 is not clear (3b: the alpha is the fourth argument or after a slash).
+  for (const f of ['#2563EB1A', 'rgba(37,99,235,0.5)', 'rgb(10, 20, 30)', '#2563EB', 'rgb(0,0,0)', 'rgb(255, 165, 0)', 'hsl(40, 100%, 0%)', 'rgb(0 0 0 / 0.5)', 'rgba(0,0,0,1)']) {
     const t = tag(render([{ id: 'n', type: 'button', label: 'S', fill: f, state: 'disabled' }]), 'n');
     check(`F4 twin: a disabled button with fill ${f} takes the on-surface share`, t.includes(`background-color: color-mix(in srgb, ${ON}`), t);
   }
@@ -346,6 +347,7 @@ for (const s of ['rest', 'hover', 'focus', 'pressed'] as const) {
   check('M: without $text-primary the on-surface colour is #111827', tag(render([{ id: 'n', type: 'button', label: 'S', disabled: true }], noText), 'n').includes('color: #111827'));
   const noSurface: DesignVariables = { colors: { accent: '#2563EB', 'text-primary': '#222222', surface: '#FAFAFA' }, state: { disabledContent: 0.38, disabledContainer: 0.12 } };
   check('M: without $bg-surface the mark takes $surface', chunk(render([{ id: 'n', type: 'checkbox', checked: true, disabled: true }], noSurface), 'n').includes('stroke="#FAFAFA"'));
+  check('M: then $bg-primary / $background (a dark palette with no surface token keeps its mark visible)', chunk(render([{ id: 'n', type: 'checkbox', checked: true, disabled: true }], { colors: { 'text-primary': '#F3F7FE', background: '#111318' }, state: { disabledContent: 0.38, disabledContainer: 0.12 } }), 'n').includes('stroke="#111318"'));
   check('M: and with neither, #FFFFFF', chunk(render([{ id: 'n', type: 'checkbox', checked: true, disabled: true }], { colors: { 'text-primary': '#222222' }, state: { disabledContent: 0.38 } }), 'n').includes('stroke="#FFFFFF"'));
   // Host styles reach the items (tuned tokens differ from the fallback).
   const tuned: DesignVariables = { ...SYSTEM, colors: { ...C, 'focus-ring': '#B45309' }, state: { ...SYSTEM.state, hover: 0.2 } };
