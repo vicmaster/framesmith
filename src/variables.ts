@@ -137,7 +137,8 @@ function hasDisabledTokens(v: DesignVariables): boolean {
   return unit(v.state?.disabledContent) !== undefined || unit(v.state?.disabledContainer) !== undefined;
 }
 
-export function resolveStateStyle(v: DesignVariables): StateStyle {
+/** The ring, the colours and the opacities a stateful node renders with. */
+function resolveStateStyle(v: DesignVariables): StateStyle {
   const c = v.colors ?? {};
   const s = v.state ?? {};
   const out: StateStyle = {

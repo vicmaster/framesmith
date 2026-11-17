@@ -993,7 +993,8 @@ function renderSelect(node: SceneNode, dataAttr: string): string {
   const fontSize = typeof node.fontSize === 'number' ? node.fontSize : 14;
   const isPlaceholder = !node.value;
   const textColor = isPlaceholder ? '#9CA3AF' : node.color;
-  // A select's frame is a container: the disabled pair splits it from its text.
+  // A select's frame is a container: `neutralised` (not whole) gave it the
+  // container share and its text the on-surface colour.
   const st = controlState(node, node.color);
   const frame = [
     ringVar(node.stateStyle),
