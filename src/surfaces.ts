@@ -200,6 +200,11 @@ export const DESKTOP_APP_RULES: readonly string[] = [
   'desktop-app-truncation',
   'desktop-app-primary-count',
   'desktop-app-overlay',
+  // Phase 31 slice H — the element states, checked analytically (state-checks.ts).
+  'desktop-app-focus-visible',
+  'desktop-app-state-contrast',
+  'desktop-app-disabled',
+  'desktop-app-boundary',
 ];
 
 /** Phase 31: default rules — they run unless an active ruleset disables them.

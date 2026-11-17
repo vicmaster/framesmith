@@ -9,6 +9,8 @@ import {
 } from './desktop-app-rules.js';
 import { extractInventory, expandInstances, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
+import { backdropBehind, composite, contrastRatio, parseAlpha, parseColor, rgbToHex } from './color-math.js';
+import { checkStates, STATE_RULES } from './state-checks.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
@@ -172,34 +174,9 @@ interface CheckResult {
 
 // --- Color utilities ---
 
-export function parseColor(str: string): [number, number, number] | null {
-  if (!str || typeof str !== 'string') return null;
-  // #RGB
-  let m = str.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
-  if (m) return [parseInt(m[1] + m[1], 16), parseInt(m[2] + m[2], 16), parseInt(m[3] + m[3], 16)];
-  // #RRGGBB or #RRGGBBAA
-  m = str.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
-  if (m) return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
-  // rgb(r,g,b) / rgba(r,g,b,a)
-  m = str.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (m) return [+m[1], +m[2], +m[3]];
-  return null;
-}
-
-function relativeLuminance(r: number, g: number, b: number): number {
-  const [rs, gs, bs] = [r / 255, g / 255, b / 255].map(
-    (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)),
-  );
-  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
-}
-
-export function contrastRatio(fg: [number, number, number], bg: [number, number, number]): number {
-  const l1 = relativeLuminance(...fg);
-  const l2 = relativeLuminance(...bg);
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-}
+// Phase 31 slice H — the parsing, ratio and compositing helpers live in
+// color-math.ts (shared with the state checks); re-exported for callers.
+export { contrastRatio, parseAlpha, parseColor } from './color-math.js';
 
 // Phase 25 slice D — APCA (Accessible Perceptual Contrast Algorithm,
 // 0.0.98G-4g constants). ADVISORY ONLY: APCA sits outside the normative
@@ -244,23 +221,6 @@ export function rgbToHsl(rgb: [number, number, number]): { h: number; s: number;
   h = Math.round(h * 60);
   if (h < 0) h += 360;
   return { h, s, l };
-}
-
-// Phase 12 — alpha channel for glow detection (a low-alpha colored shadow reads
-// as a bloom). Handles #RRGGBBAA and rgba(); everything else is opaque.
-export function parseAlpha(str: string): number {
-  if (!str || typeof str !== 'string') return 1;
-  const hex8 = str.match(/^#[0-9a-f]{6}([0-9a-f]{2})$/i);
-  if (hex8) return parseInt(hex8[1], 16) / 255;
-  const rgba = str.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)/i);
-  if (rgba) return Math.max(0, Math.min(1, parseFloat(rgba[1])));
-  return 1;
-}
-
-/** Source-over blend of `top` at `alpha` onto an opaque `base`. */
-function composite(top: [number, number, number], alpha: number, base: [number, number, number]): [number, number, number] {
-  if (alpha >= 1) return top;
-  return [0, 1, 2].map((i) => Math.round(alpha * top[i] + (1 - alpha) * base[i])) as [number, number, number];
 }
 
 // --- Tree walking ---
@@ -421,6 +381,20 @@ function checkSpacing(entries: NodeEntry[], variables: DesignVariables): CheckRe
   return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
 }
 
+/** A node and its ancestors, nearest first. */
+function* ancestors(from: SceneNode | null, parentOf: Map<SceneNode, SceneNode | null>): Generator<SceneNode> {
+  for (let n = from; n; n = parentOf.get(n) ?? null) yield n;
+}
+
+/** Inside a clickable primitive that is disabled (a P2 node, or a `tabs`
+ * node, which disables every tab), as the census reads it. */
+function insideDisabledTarget(node: SceneNode, parentOf: Map<SceneNode, SceneNode | null>): boolean {
+  for (const n of ancestors(parentOf.get(node) ?? null, parentOf)) {
+    if ((STATEFUL_TYPES.has(n.type) || n.type === 'tabs') && isDisabled(n)) return true;
+  }
+  return false;
+}
+
 function checkColorContrast(entries: NodeEntry[], theme?: 'dark'): CheckResult {
   const issues: EvaluationIssue[] = [];
   const textNodes = entries.filter((e) => e.node.type === 'text');
@@ -428,41 +402,23 @@ function checkColorContrast(entries: NodeEntry[], theme?: 'dark'): CheckResult {
   if (textNodes.length === 0) return { score: 100, issues };
 
   let failCount = 0;
+  const parentOf = new Map(entries.map((e) => [e.node, e.parent] as const));
 
   for (const { node, parent } of textNodes) {
     const fgStr = node.color ?? '#000000';
     const fgRaw = parseColor(fgStr);
     if (!fgRaw) continue;
 
-    // Walk up collecting fills until an opaque one. Translucent fills
-    // (rgba / #RRGGBBAA) are layers the text sees THROUGH, so they composite
-    // over what is behind them instead of counting as solid paint.
-    const layers: string[] = [];
-    let onGradient = false;
-    let unreadable = false;
-    let current = parent;
-    while (current) {
-      if (current.gradient) {
-        onGradient = true;
-        break;
-      }
-      const see = current.fill === 'transparent' || current.fill === 'none';
-      if (current.fill && !see && !current.fill.startsWith('$')) {
-        // A fill we cannot parse (hsl(), a named color) still paints: stop
-        // here and skip the check rather than measure against what is behind.
-        if (!parseColor(current.fill)) {
-          unreadable = true;
-          break;
-        }
-        const alpha = parseAlpha(current.fill);
-        if (alpha > 0) layers.push(current.fill);
-        if (alpha >= 1) break;
-      }
-      const parentEntry = entries.find((e) => e.node.children?.includes(current!));
-      current = parentEntry?.node ?? null;
-    }
+    // Phase 31 FR-H3 (spec R6) — text inside a disabled clickable primitive
+    // is exempt from contrast, as WCAG exempts it, on every type.
+    if (insideDisabledTarget(node, parentOf)) continue;
 
-    if (onGradient) {
+    // Walk up collecting fills until an opaque one (color-math.ts). Translucent
+    // fills (rgba / #RRGGBBAA) are layers the text sees THROUGH, so they
+    // composite over what is behind them instead of counting as solid paint.
+    const backdrop = backdropBehind(ancestors(parent, parentOf));
+
+    if (backdrop.kind === 'gradient') {
       issues.push({
         category: 'color',
         severity: 'info',
@@ -472,14 +428,10 @@ function checkColorContrast(entries: NodeEntry[], theme?: 'dark'): CheckResult {
       });
       continue;
     }
-    if (unreadable || layers.length === 0) continue;
+    if (backdrop.kind === 'unreadable' || backdrop.layers.length === 0) continue;
 
-    // No opaque fill behind the layers: they sit on the page, which renders white.
-    const backmost = layers[layers.length - 1];
-    let bg: [number, number, number] = parseAlpha(backmost) >= 1 ? parseColor(backmost)! : [255, 255, 255];
-    for (let i = layers.length - 1; i >= 0; i--) {
-      if (parseAlpha(layers[i]) < 1) bg = composite(parseColor(layers[i])!, parseAlpha(layers[i]), bg);
-    }
+    const { layers } = backdrop;
+    const bg = backdrop.rgb;
     const fg = composite(fgRaw, parseAlpha(fgStr), bg);
     const composited = layers.length > 1 || parseAlpha(layers[0]) < 1;
     const bgStr = composited ? `${layers[0]} (composited: ${rgbToHex(bg)})` : layers[0];
@@ -1219,10 +1171,6 @@ const BRAND_WORDMARKS = [
   'techcrunch', 'forbes', 'the verge', 'wired', 'product hunt',
   'google', 'microsoft', 'apple', 'amazon', 'meta', 'netflix', 'stripe',
 ];
-
-function rgbToHex([r, g, b]: [number, number, number]): string {
-  return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('').toLowerCase();
-}
 
 // A hue in the indigo→violet→purple band with real saturation — the "AI purple"
 // tell. Floor 230 catches indigo-500 (#6366f1 ≈ h239); a considered blue like
@@ -2497,11 +2445,52 @@ function expandForRules(root: SceneNode, canvas: Canvas): { root: SceneNode; own
 
 /** Re-point findings on nodes inside an instance at the instance (the
  * component holds the node), naming the inner node. */
+/** Phase 31 slice H — the state checks' two themes, cleaned up. A dark
+ * finding that says what the light one says (the same colours: they come
+ * from literals, not tokens) is dropped, since the dark token layer cannot
+ * change it. A finding about targets inside a component instance says the
+ * design system never reaches them (instances render unresolved). */
+function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[], owners: Map<string, SceneNode>, instanceIds: Set<string>): EvaluationIssue[] {
+  const key = (i: EvaluationIssue) => `${i.rule}|${i.severity}|${(i.nodeIds ?? [i.nodeId]).join(',')}|${i.message}`;
+  const seen = new Set(light.map(key));
+  const kept = [...light, ...dark.filter((i) => !seen.has(key({ ...i, message: i.message.replace(' in the dark theme', '') })))];
+  const advice = 'These targets sit inside a component instance, which renders without the design system (its tokens and the dark layer never reach them): set the colours on the component\'s own nodes, or move the targets out of the component.';
+  return kept.map((i) => {
+    const ids = i.nodeIds ?? [i.nodeId];
+    // An instance whose component root is itself the target keeps its own id
+    // (owners maps only the nodes under it), so it is named here.
+    const roots = ids.filter((id) => instanceIds.has(id) && !owners.has(id));
+    if (!roots.length && !ids.some((id) => owners.has(id))) return i;
+    const note = roots.length && !ids.some((id) => owners.has(id)) ? ` (${roots.length === 1 ? 'an instance' : 'instances'} — fix ${roots.length === 1 ? 'it in its component' : 'them in their components'})` : '';
+    // An info keeps its own advice (a ring to check by eye) and gains this.
+    return { ...i, message: `${i.message}${note}`, suggestion: i.severity === 'info' && i.suggestion ? `${i.suggestion} ${advice}` : advice };
+  });
+}
+
+/** Every instance node's id in a tree (the ids an expanded instance root keeps). */
+function instanceIdsOf(root: SceneNode): Set<string> {
+  const out = new Set<string>();
+  (function walk(n: SceneNode) { if (n.type === 'instance') out.add(n.id); n.children?.forEach(walk); })(root);
+  return out;
+}
+
 function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
   return issues.map((i) => {
+    // A grouped finding (slice H) names several nodes: each maps to its owner.
+    const nodeIds = i.nodeIds ? [...new Set(i.nodeIds.map((id) => owners.get(id)?.id ?? id))] : undefined;
     const owner = i.nodeId ? owners.get(i.nodeId) : undefined;
-    if (!owner) return i;
-    return { ...i, nodeId: owner.id, nodeName: owner.name, message: `${i.message} (inside instance "${owner.name ?? owner.id}" — fix it in its component)` };
+    if (nodeIds && i.nodeIds!.length > 1) {
+      // Several members: say which ids are instances, not just the first's.
+      const inside = [...new Set(i.nodeIds!.flatMap((id) => { const o = owners.get(id); return o ? [o.name ?? o.id] : []; }))];
+      const names = inside.map((n) => `"${n}"`).join(', ');
+      const all = i.nodeIds!.every((id) => owners.has(id));
+      const suffix = !inside.length ? ''
+        : all ? (inside.length === 1 ? ` (inside instance ${names} — fix it in its component)` : ` (inside instances ${names} — fix them in their components)`)
+          : ` (some inside instances, listed by instance: ${names} — fix those in their components)`;
+      return { ...i, ...(owner ? { nodeId: owner.id, nodeName: owner.name } : {}), nodeIds, message: `${i.message}${suffix}` };
+    }
+    if (!owner) return nodeIds ? { ...i, nodeIds } : i;
+    return { ...i, nodeId: owner.id, nodeName: owner.name, ...(nodeIds ? { nodeIds } : {}), message: `${i.message} (inside instance "${owner.name ?? owner.id}" — fix it in its component)` };
   });
 }
 
@@ -2582,13 +2571,20 @@ export async function evaluateCanvas(
     // themes; contrast is checked in BOTH, dark issues tagged. Score takes
     // the worse theme: a dark-only failure must hurt.
     const darkLayer = mergedTokens.dark?.colors;
-    if (darkLayer && Object.keys(darkLayer).length > 0) {
-      const darkEntries = buildTreeContext(resolveVariables(canvas.root, mergedTokens, { theme: 'dark' }));
-      const dark = checkColorContrast(darkEntries, 'dark');
-      results.set('color', { score: Math.min(light.score, dark.score), issues: [...light.issues, ...dark.issues] });
-    } else {
-      results.set('color', light);
+    const hasDark = !!darkLayer && Object.keys(darkLayer).length > 0;
+    const darkRoot = hasDark ? resolveVariables(canvas.root, mergedTokens, { theme: 'dark' }) : undefined;
+    let color = light;
+    if (darkRoot) {
+      const dark = checkColorContrast(buildTreeContext(darkRoot), 'dark');
+      color = { score: Math.min(light.score, dark.score), issues: [...light.issues, ...dark.issues] };
     }
+    // Phase 31 slice H (FR-H1 to FR-H4) — the element states, checked from
+    // the tree the renderer draws (instances expanded), in each theme.
+    const stateOn = (id: string) => ruleOn.has(id);
+    const states = Object.values(STATE_RULES).some(stateOn)
+      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : [], owners, instanceIdsOf(canvas.root))
+      : [];
+    results.set('color', withRuleIssues(color, reportOnInstances(states, owners)));
   }
   // Phase 25 slice A — detailed-mode layout is computed ONCE and shared by
   // the consistency and typography (measure) checks.

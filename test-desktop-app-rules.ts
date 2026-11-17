@@ -292,20 +292,25 @@ const nav = (id: string, extra: Partial<SceneNode> = {}): SceneNode => ({ id, na
     frame('users', [frame('head', cells('h', { textOverflow: 'ellipsis' }), { layout: 'horizontal', height: 40 }), ...[0, 1, 2].map((i) => frame(`r${i}`, cells(`r${i}`), { layout: 'horizontal', height: 32 }))]),
     frame('bar', [{ id: 'p1', name: 'p1', type: 'button', label: 'Save', variant: 'primary' }, { id: 'p2', name: 'p2', type: 'button', label: 'Publish', variant: 'primary' }], { layout: 'horizontal' }),
     { id: 'oops', name: 'oops', type: 'toast', text: 'Could not save', tone: 'danger' },
+    // Slice H: a faint ring and border, a faint indicator, disabledContent 1.
+    { id: 'field', name: 'field', type: 'text-input', placeholder: 'Name' },
+    { id: 'faint', name: 'faint', type: 'nav-item', label: 'Faint', active: true, fill: '#FFFFFF', iconColor: '#EEEEEE' },
   ];
+  const vars: Canvas['variables'] = { colors: { 'focus-ring': '#EEEEEE', border: '#EEEEEE' }, state: { disabledContent: 1 } };
   const expected: Record<string, string> = {
     'desktop-app-target': 'usability', 'desktop-app-handbuilt-target': 'usability', 'desktop-app-icon-label': 'usability',
     'desktop-app-current': 'usability', 'desktop-app-type-ladder': 'typography', 'desktop-app-row-rhythm': 'consistency',
     'desktop-app-truncation': 'usability', 'desktop-app-primary-count': 'structure', 'desktop-app-overlay': 'usability',
+    'desktop-app-focus-visible': 'color', 'desktop-app-state-contrast': 'color', 'desktop-app-disabled': 'color', 'desktop-app-boundary': 'color',
   };
   check('the combined tree covers every registered desktop-app rule', JSON.stringify(Object.keys(expected).sort()) === JSON.stringify([...DESKTOP_APP_RULES].sort()));
-  const app = (await evaluateCanvas(canvasOf(everything), { mode: 'fast' })).issues;
+  const app = (await evaluateCanvas(canvasOf(everything, 'desktop-app', vars), { mode: 'fast' })).issues;
   for (const [rule, category] of Object.entries(expected)) {
     const f = app.filter((i) => i.rule === rule);
     check(`F9: ${rule} fires on desktop-app, under ${category}`, f.length > 0 && f.every((i) => i.category === category), show(f));
   }
   for (const type of ['web', 'mobile'] as const) {
-    const r = (await evaluateCanvas(canvasOf(everything, type), { mode: 'fast' })).issues;
+    const r = (await evaluateCanvas(canvasOf(everything, type, vars), { mode: 'fast' })).issues;
     const leaked = r.filter((i) => i.rule?.startsWith('desktop-app-') && i.rule !== 'desktop-app-artboard');
     check(`${type} runs none of the desktop-app rules but the artboard`, leaked.length === 0, show(leaked));
   }
