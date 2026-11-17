@@ -341,7 +341,7 @@ export function checkFocusVisible(targets: StateTarget[], theme?: 'dark'): Evalu
   if (skipped.length) {
     issues.push(grouped({
       category: 'color', rule: STATE_RULES.focus, severity: 'info', ...darkTag(theme),
-      message: `The focus ring of ${plural(skipped.length, 'target')} could not be measured${inTheme(theme)}: the backdrop is a gradient or a fill the checker cannot read, or the ring colour does not parse.`,
+      message: `The focus ring of ${plural(skipped.length, 'target')} could not be measured${inTheme(theme)}: the backdrop (or a tab's own fill) is a gradient or a fill the checker cannot read, or the ring colour does not parse.`,
       suggestion: 'Check these focus rings by eye in a focus state screenshot (state: "focus").',
     }, skipped.map((t) => t.node), skipped.length));
   }
@@ -387,7 +387,7 @@ export function checkBoundaries(root: SceneNode, theme?: 'dark'): EvaluationIssu
     const part = p.node.type === 'toggle' ? 'track' : p.node.type === 'text-input' ? 'border' : 'outline';
     return [{
       category: 'color', rule: STATE_RULES.boundary, severity: 'warning' as const, nodeId: p.node.id, nodeName: p.node.name, ...darkTag(theme),
-      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: nothing else shows the control's edge (its fill does not stand out either), and WCAG 1.4.11 needs 3:1.`,
+      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: nothing else shows the control's edge${p.node.type === 'text-input' || p.node.type === 'checkbox' ? ' (its fill does not stand out either)' : ''}, and WCAG 1.4.11 needs 3:1.`,
       suggestion: theme === 'dark'
         ? 'Fix it in the dark token layer: a dark $border-strong that clears 3:1 against the surface behind the control.'
         : 'Use $border-strong for the boundary (generate_design_system writes one at 3:1 against bg-primary and bg-surface), or set a stronger stroke.',

@@ -2450,13 +2450,28 @@ function expandForRules(root: SceneNode, canvas: Canvas): { root: SceneNode; own
  * from literals, not tokens) is dropped, since the dark token layer cannot
  * change it. A finding about targets inside a component instance says the
  * design system never reaches them (instances render unresolved). */
-function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
+function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[], owners: Map<string, SceneNode>, instanceIds: Set<string>): EvaluationIssue[] {
   const key = (i: EvaluationIssue) => `${i.rule}|${i.severity}|${(i.nodeIds ?? [i.nodeId]).join(',')}|${i.message}`;
   const seen = new Set(light.map(key));
   const kept = [...light, ...dark.filter((i) => !seen.has(key({ ...i, message: i.message.replace(' in the dark theme', '') })))];
-  return kept.map((i) => ((i.nodeIds ?? [i.nodeId]).some((id) => owners.has(id))
-    ? { ...i, suggestion: 'These targets sit inside a component instance, which renders without the design system (its tokens and the dark layer never reach them): set the colours on the component\'s own nodes, or move the targets out of the component.' }
-    : i));
+  const advice = 'These targets sit inside a component instance, which renders without the design system (its tokens and the dark layer never reach them): set the colours on the component\'s own nodes, or move the targets out of the component.';
+  return kept.map((i) => {
+    const ids = i.nodeIds ?? [i.nodeId];
+    // An instance whose component root is itself the target keeps its own id
+    // (owners maps only the nodes under it), so it is named here.
+    const roots = ids.filter((id) => instanceIds.has(id) && !owners.has(id));
+    if (!roots.length && !ids.some((id) => owners.has(id))) return i;
+    const note = roots.length && !ids.some((id) => owners.has(id)) ? ` (${roots.length === 1 ? 'an instance' : 'instances'} — fix ${roots.length === 1 ? 'it in its component' : 'them in their components'})` : '';
+    // An info keeps its own advice (a ring to check by eye) and gains this.
+    return { ...i, message: `${i.message}${note}`, suggestion: i.severity === 'info' && i.suggestion ? `${i.suggestion} ${advice}` : advice };
+  });
+}
+
+/** Every instance node's id in a tree (the ids an expanded instance root keeps). */
+function instanceIdsOf(root: SceneNode): Set<string> {
+  const out = new Set<string>();
+  (function walk(n: SceneNode) { if (n.type === 'instance') out.add(n.id); n.children?.forEach(walk); })(root);
+  return out;
 }
 
 function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
@@ -2567,7 +2582,7 @@ export async function evaluateCanvas(
     // the tree the renderer draws (instances expanded), in each theme.
     const stateOn = (id: string) => ruleOn.has(id);
     const states = Object.values(STATE_RULES).some(stateOn)
-      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : [], owners)
+      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : [], owners, instanceIdsOf(canvas.root))
       : [];
     results.set('color', withRuleIssues(color, reportOnInstances(states, owners)));
   }

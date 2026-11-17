@@ -540,5 +540,22 @@ for (const personality of PERSONALITY_NAMES) {
   check('M: an instance\'s grouped targets report the instance once, with its note', f.length === 1 && (f[0].nodeIds ?? []).join(',') === 'inst' && /inside instance "Bar"/.test(f[0].message), show(f));
 }
 
+
+// ── 3b fixes ─────────────────────────────────────────────────────────────
+{
+  const sysR = generateDesignSystem('#2563EB', 'technical', { surface: 'desktop-app' }).variables;
+  let f = of(await issues([panel([{ id: 'i1', name: 'Box', type: 'instance', componentId: 'cb' }])], sysR, 'desktop-app', { cb: { id: 'cb', type: 'checkbox' } }), BOUNDARY);
+  check('3b: an instance whose root is the target gets the instance advice and note', f.length > 0 && f.every((i) => /inside a component instance/.test(i.suggestion ?? '') && /\(an instance — fix it in its component\)/.test(i.message)), show(f));
+  f = of(await issues([panel([{ id: 'c1', type: 'checkbox', stroke: '$nope' }])], sysR), BOUNDARY);
+  check('3b twin: the same checkbox placed directly keeps the token advice', f.length > 0 && f.every((i) => /border-strong/.test(i.suggestion ?? '') && !/instance/.test(i.message)), show(f));
+  const grad = { gradient: { type: 'linear', angle: 90, stops: [{ color: '#000000', position: 0 }, { color: '#FFFFFF', position: 1 }] } as SceneNode['gradient'], fill: undefined };
+  f = of(await issues([panel([{ id: 'ig', name: 'G', type: 'instance', componentId: 'gb' }], grad)], {}, 'desktop-app', { gb: { id: 'gb', type: 'frame', children: [{ id: 'gbb', type: 'button', label: 'x' }] } }), FOCUS);
+  check('3b: an info inside an instance keeps its "check by eye" advice and adds the instance one', f.length === 1 && f[0].severity === 'info' && /by eye/.test(f[0].suggestion ?? '') && /inside a component instance/.test(f[0].suggestion ?? ''), show(f));
+  f = of(await issues([panel([{ id: 'rd', type: 'radio', stroke: 'none' }, { id: 'tg', type: 'toggle', fill: 'none' }, { id: 'cb', type: 'checkbox', stroke: 'none' }])]), BOUNDARY);
+  check('3b: a radio or toggle message never speaks of its fill; a checkbox does', f.filter((i) => /its fill/.test(i.message)).map((i) => i.nodeId).join(',') === 'cb' && f.length === 3, show(f));
+  f = of(await issues([panel([{ id: 'tb', type: 'tabs', variant: 'contained', fill: 'navy', items: [{ label: 'A', active: true }] }])]), FOCUS);
+  check('3b: the unmeasured info names a tab\'s own fill as a cause', /or a tab's own fill/.test(f[0]?.message ?? ''), show(f));
+}
+
 console.log(allPass ? '\nAll state-check tests passed.' : '\nSOME TESTS FAILED');
 process.exit(allPass ? 0 : 1);
