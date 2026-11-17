@@ -12,7 +12,7 @@ import { getIconSvg, parseIconRef } from './icons.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
+import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, isDisabled, STATEFUL_TYPES, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -1985,7 +1985,7 @@ function mobileTarget(
  * doesn't fix is left undefined and not judged. */
 function primitiveTargets(
   node: SceneNode, parentOf: Map<string, SceneNode | null>, rootWidth: number,
-): Array<{ what: string; w?: number; h: number; fix: string }> {
+): Array<{ what: string; w?: number; h: number; fix: string; disabled?: boolean }> {
   if (node.type === 'button') {
     const b = buttonBox(node);
     return [{ what: 'button', ...b, fix: 'Use size "md" (44px) or "lg" (52px) — "sm" is for pointer surfaces — and drop any smaller height.' }];
@@ -1996,11 +1996,13 @@ function primitiveTargets(
   }
   if (node.type === 'tab-bar') {
     const box = tabItemBox(node, rootWidth);
-    const items = tabItems(node).map((it, i) => ({ what: `tab "${it?.label ?? i + 1}"`, ...box, fix: 'Widen the tab bar (drop its width) or move a destination out of it.' }));
+    // Slice G (P6) — an item's own disabled state; the 24px census skips it,
+    // the mobile touch census (which never exempted disabled targets) does not.
+    const items = tabItems(node).map((it, i) => ({ what: `tab "${it?.label ?? i + 1}"`, ...box, fix: 'Widen the tab bar (drop its width) or move a destination out of it.', disabled: isDisabled(it) }));
     return node.variant === 'fab' ? [...items, { what: 'tab-bar FAB', w: FAB_SIZE, h: FAB_SIZE, fix: '' }] : items;
   }
   if (node.type === 'nav-bar') {
-    return navActions(node).map((a) => ({ what: `nav-bar action "${a.label ?? a.icon ?? 'back'}"`, w: NAV_ACTION, h: NAV_ACTION, fix: '' }));
+    return navActions(node).map((a) => ({ what: `nav-bar action "${a.label ?? a.icon ?? 'back'}"`, w: NAV_ACTION, h: NAV_ACTION, fix: '', disabled: isDisabled(a) }));
   }
   return [];
 }
@@ -2031,7 +2033,9 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
   };
   const targets: PointerTarget[] = [];
   for (const { node } of entries) {
-    const disabled = node.disabled === true;
+    // Slice G (P2) — `state` counts only on the types that take it: a
+    // tab-bar or nav-bar node ignores its own state (its items carry theirs).
+    const disabled = node.disabled === true || (STATEFUL_TYPES.has(node.type) && isDisabled(node));
     if (CONTROL_TYPES.has(node.type)) {
       const def = CONTROL_DEFAULT_SIZE[node.type];
       let w = typeof node.width === 'number' ? node.width : def.w;
@@ -2061,7 +2065,7 @@ export function pointerTargets(entries: NodeEntry[], rootWidth: number): Pointer
       targets.push({ node, what: node.type, w, h, disabled });
     } else if (TAPPABLE_PRIMITIVES.has(node.type)) {
       for (const t of primitiveTargets(node, parentOf, rootWidth)) {
-        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled });
+        targets.push({ node, what: t.what, w: t.w ?? Infinity, h: t.h, disabled: disabled || t.disabled === true });
       }
     } else if (CLICKABLE_PRIMITIVES.has(node.type)) {
       // Phase 31 slice B — the desktop-app vocabulary, each by its own box

@@ -2,7 +2,7 @@
 // renderer (which draws them) and the rules (which judge what it draws), so the
 // two can never disagree about a button's height or where a tab bar pins.
 
-import type { SceneNode, TabItem, TabsItem } from './types.js';
+import type { ElementState, SceneNode, TabItem, TabsItem } from './types.js';
 import { DEFAULT_DEVICE, DEVICE_PROFILES, usableSafeArea } from './surfaces.js';
 
 export const BUTTON_HEIGHT = { xs: 24, sm: 32, md: 44, lg: 52 } as const;
@@ -43,6 +43,34 @@ export const TEXT_INPUT_LINE = 20;
  * phone tappables plus the desktop-app vocabulary. `property-row` and
  * `divider` are not targets (a property-row's value is). */
 export const CLICKABLE_PRIMITIVES = new Set([...TAPPABLE_PRIMITIVES, 'link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row']);
+
+// Phase 31 slice G (FR-G1) — element states.
+/** Phase 31 FR-A8 — Material 3's current state-layer and disabled
+ * opacities (Flutter gen_defaults token files; an older M3 set used 0.12 for
+ * focus and pressed). */
+export const STATE_LAYERS = { hover: 0.08, focus: 0.10, pressed: 0.10, disabledContent: 0.38, disabledContainer: 0.12 } as const;
+
+export const ELEMENT_STATES: readonly ElementState[] = ['rest', 'hover', 'focus', 'pressed', 'disabled'];
+
+/** The nodes that take `state` themselves (spec P2). Items of tabs, tab-bar,
+ * nav-bar, modal and toast take it on the item instead. */
+export const STATEFUL_TYPES = new Set([
+  'button', 'link', 'text-input', 'nav-item', 'tree-row', 'menu-row', 'list-row',
+  'toggle', 'checkbox', 'radio', 'select',
+]);
+
+/** The effective state of a node or an item: `disabled: true` wins, then a
+ * known `state`, else rest (an unknown value is ignored). */
+export function elementState(n: { state?: unknown; disabled?: unknown } | null | undefined): ElementState {
+  if (!n) return 'rest';
+  if (n.disabled === true) return 'disabled';
+  return typeof n.state === 'string' && (ELEMENT_STATES as readonly string[]).includes(n.state) ? n.state as ElementState : 'rest';
+}
+
+/** Disabled by `disabled: true` or `state: "disabled"`. */
+export function isDisabled(n: { state?: unknown; disabled?: unknown } | null | undefined): boolean {
+  return elementState(n) === 'disabled';
+}
 
 /** Rows whose only target, a control directly inside them, is measured by
  * the row's box (no link, input or button beside it). */
@@ -95,11 +123,11 @@ export function overlayTargets(n: SceneNode): Array<{ what: string; w?: number; 
   if (n.type === 'modal') {
     return [
       { what: 'modal close button', w: MODAL_CONTROL, h: MODAL_CONTROL, disabled: false },
-      ...modalActions(n).map((a) => ({ what: `modal action "${String(a.label).trim()}"`, h: MODAL_CONTROL, disabled: false })),
+      ...modalActions(n).map((a) => ({ what: `modal action "${String(a.label).trim()}"`, h: MODAL_CONTROL, disabled: isDisabled(a) })),
     ];
   }
   if (n.type === 'toast' && n.action && typeof n.action === 'object' && hasText(n.action.label)) {
-    return [{ what: `toast action "${String(n.action.label).trim()}"`, h: TOAST_ACTION, disabled: false }];
+    return [{ what: `toast action "${String(n.action.label).trim()}"`, h: TOAST_ACTION, disabled: isDisabled(n.action) }];
   }
   return [];
 }
@@ -202,7 +230,7 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
   // The rendered height: these rows take an explicit `height` and ignore
   // `minHeight`, so the census does too (it must judge what renders).
   const h = (fallback: number) => (isNum(n.height) ? n.height : fallback);
-  const disabled = n.disabled === true;
+  const disabled = isDisabled(n);
   switch (n.type) {
     // A link never renders shorter than 24 (min-height), whatever its height.
     // A px width is its width; without a label and with no width (or "auto")
@@ -218,7 +246,7 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
       // The tablist's height comes from its size alone (the renderer ignores
       // `height`); a disabled tabs node disables every tab.
       const th = TABS_HEIGHT[n.size === 'sm' ? 'sm' : 'md'];
-      return tabsItems(n).map((it, i) => ({ what: `tab "${typeof it.label === 'string' ? it.label : i + 1}"`, h: th, disabled: disabled || it.disabled === true }));
+      return tabsItems(n).map((it, i) => ({ what: `tab "${typeof it.label === 'string' ? it.label : i + 1}"`, h: th, disabled: disabled || isDisabled(it) }));
     }
     default: return [];
   }
@@ -236,7 +264,7 @@ export function tabItemBox(n: SceneNode, rootWidth: number): { w: number; h: num
 }
 
 /** The nav-bar actions that render: the back action and up to two trailing. */
-export function navActions(n: SceneNode): { icon?: string; label?: string }[] {
+export function navActions(n: SceneNode): { icon?: string; label?: string; state?: ElementState; disabled?: boolean }[] {
   const trailing = Array.isArray(n.trailing) ? n.trailing.filter((a) => !!a && typeof a === 'object').slice(0, 2) : [];
   return [...(n.leading && typeof n.leading === 'object' ? [n.leading] : []), ...trailing];
 }

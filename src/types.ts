@@ -18,23 +18,43 @@ export type NodeType = 'frame' | 'text' | 'rectangle' | 'ellipse' | 'image' | 'i
   // tooltip), positioned by authored x/y in root coordinates.
   | 'tooltip' | 'popover' | 'menu' | 'modal' | 'toast' | 'drawer';
 
+/** Phase 31 slice G (FR-G1) — an element state, drawn by the renderer from
+ * the `state` tokens: rest (the default), hover, focus, pressed, disabled.
+ * `disabled: true` means "disabled" whatever `state` says. */
+export type ElementState = 'rest' | 'hover' | 'focus' | 'pressed' | 'disabled';
+
 /** Phase 30 slice D — one `nav-bar` action: an icon or a text label. */
-export interface NavAction { icon?: string; label?: string }
+export interface NavAction { icon?: string; label?: string; state?: ElementState; disabled?: boolean }
 
 /** Phase 30 slice D — one `tab-bar` item. */
-export interface TabItem { icon: string; label: string; active?: boolean; badge?: string | number }
+export interface TabItem { icon: string; label: string; active?: boolean; badge?: string | number; state?: ElementState; disabled?: boolean }
 
 /** Phase 31 slice B — one `tabs` item (its own type: unlike a tab-bar item
  * it has no icon). */
-export interface TabsItem { label: string; count?: string | number; active?: boolean; disabled?: boolean }
+export interface TabsItem { label: string; count?: string | number; active?: boolean; disabled?: boolean; state?: ElementState }
 
 /** Phase 31 slice E — one `modal` action. No variant renders "secondary";
  * the filled ones (primary, destructive) render rightmost. Colours default by
  * variant as a button's do; explicit ones win. */
-export interface ModalAction { label: string; variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'; fill?: string; color?: string; stroke?: string }
+export interface ModalAction { label: string; variant?: 'primary' | 'secondary' | 'ghost' | 'destructive'; fill?: string; color?: string; stroke?: string; state?: ElementState; disabled?: boolean }
 
 /** Phase 31 slice E — a `toast`'s action (a ghost text button). */
-export interface ToastAction { label: string; color?: string }
+export interface ToastAction { label: string; color?: string; state?: ElementState; disabled?: boolean }
+
+/** Phase 31 slice G — what resolution hands the renderer for an element
+ * state (spec P3). Internal: set on the resolved clone, never authored or
+ * stored. The disabled pair is present only when the design system sets it. */
+export interface StateStyle {
+  ring: string;
+  /** The on-surface colour a disabled target with the token pair renders in
+   * (spec change S10: `$text-primary`, Material's onSurface). */
+  onSurface: string;
+  hover: number;
+  focus: number;
+  pressed: number;
+  disabledContent?: number;
+  disabledContainer?: number;
+}
 
 /** Phase 31 slice B — an inline link inside a `text` node's content:
  * character offsets [start, end). */
@@ -231,6 +251,13 @@ export interface SceneNode {
   // fill / stroke / color override them.
   checked?: boolean;
   disabled?: boolean;
+  /** Phase 31 slice G (FR-G1) — the element state the renderer draws on a
+   * clickable primitive or control (a states sheet, a screenshot). The
+   * evaluator never needs it. Other node types ignore it. */
+  state?: ElementState;
+  /** Internal (slice G, P3): resolved state colours and opacities. Set by
+   * resolveVariables on its clone; never author it. */
+  stateStyle?: StateStyle;
   /** select only: the displayed value; absent renders a muted placeholder. */
   value?: string;
   /** skeleton only: set false to opt a block out of the live-viewer pulse.
@@ -308,7 +335,7 @@ export interface SceneNode {
   subtitle?: string;
   /** nav-bar: the back action `{ icon?, label? }`; list-row: `{ icon }` |
    * `{ initials }` | `{ image }`. */
-  leading?: { icon?: string; label?: string; initials?: string; image?: string };
+  leading?: { icon?: string; label?: string; initials?: string; image?: string; state?: ElementState; disabled?: boolean };
   /** nav-bar: up to two actions; list-row: one accessory. */
   trailing?: NavAction[] | ListRowTrailing;
   /** nav-bar: the 96px large-title form. */

@@ -1,4 +1,5 @@
-import type { Canvas, DesignVariables, SceneNode, ShadowSpec } from './types.js';
+import type { Canvas, DesignVariables, SceneNode, ShadowSpec, StateStyle } from './types.js';
+import { STATE_LAYERS, STATEFUL_TYPES } from './primitives.js';
 
 export function resolveVariables(node: SceneNode, variables: DesignVariables, opts?: { theme?: 'light' | 'dark' }): SceneNode {
   // Phase 25 slice D — dark is a sparse override layer: merge it over colors
@@ -120,8 +121,53 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
 // Explicit fill / stroke / color on the node always wins.
 const CONTROL_FALLBACK = { accent: '#2563EB', border: '#D1D5DB', surface: '#FFFFFF', text: '#111827' } as const;
 
+// Phase 31 slice G (spec P2, P3) — every node that draws an element state
+// gets its ring colour and layer opacities resolved here, so the renderer
+// never reads tokens. Items of tabs / tab-bar / nav-bar / modal / toast use
+// their host's.
+const STATE_HOSTS = new Set([...STATEFUL_TYPES, 'tabs', 'tab-bar', 'nav-bar', 'modal', 'toast']);
+// The nodes whose own `state: "disabled"` disables them (a tabs node's
+// disables every tab).
+const STATE_ON_NODE = new Set([...STATEFUL_TYPES, 'tabs']);
+
+/** An opacity token: a number in [0, 1], else undefined. */
+function unit(x: unknown): number | undefined {
+  return typeof x === 'number' && Number.isFinite(x) && x >= 0 && x <= 1 ? x : undefined;
+}
+
+/** Whether the design system sets either disabled opacity (spec P3). */
+function hasDisabledTokens(v: DesignVariables): boolean {
+  return unit(v.state?.disabledContent) !== undefined || unit(v.state?.disabledContainer) !== undefined;
+}
+
+export function resolveStateStyle(v: DesignVariables): StateStyle {
+  const c = v.colors ?? {};
+  const s = v.state ?? {};
+  const out: StateStyle = {
+    // FR-H1's chain: the renderer and the check never disagree.
+    ring: c['focus-ring'] ?? c.accent ?? c.primary ?? CONTROL_FALLBACK.accent,
+    onSurface: c['text-primary'] ?? CONTROL_FALLBACK.text,
+    hover: unit(s.hover) ?? STATE_LAYERS.hover,
+    focus: unit(s.focus) ?? STATE_LAYERS.focus,
+    pressed: unit(s.pressed) ?? STATE_LAYERS.pressed,
+  };
+  if (hasDisabledTokens(v)) {
+    out.disabledContent = unit(s.disabledContent) ?? STATE_LAYERS.disabledContent;
+    out.disabledContainer = unit(s.disabledContainer) ?? STATE_LAYERS.disabledContainer;
+  }
+  return out;
+}
+
+/** Without disabled tokens a disabled node renders at today's 0.5 opacity
+ * (unless authored); with them the renderer draws the token pair (P4). */
+function legacyDisabled(node: SceneNode, v: DesignVariables): void {
+  const disabled = node.disabled === true || (STATE_ON_NODE.has(node.type) && node.state === 'disabled');
+  if (disabled && node.opacity === undefined && !hasDisabledTokens(v)) node.opacity = 0.5;
+}
+
 function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
   const t = node.type;
+  if (STATE_HOSTS.has(t)) node.stateStyle = resolveStateStyle(v);
   if (t === 'skeleton') {
     // Phase 24 slice B — loading placeholder: a themed canvas picks up its
     // own border tone (or an explicit `skeleton` token); unthemed canvases
@@ -139,7 +185,7 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
   // Without the token the render is unchanged.
   const boundary = v.colors?.['border-strong'] ?? border;
 
-  if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
+  legacyDisabled(node, v);
 
   if (t === 'toggle') {
     // fill = track color; the knob is always white.
@@ -181,7 +227,7 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   // surface (12%), so it reads on a dark palette as well as a light one.
   const tint = c['accent-tint'] ?? mixHex(accent, surface, 0.12) ?? '#EFF4FF';
   const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
-  if (node.disabled && node.opacity === undefined) node.opacity = 0.5;
+  legacyDisabled(node, v);
 
   switch (node.type) {
     // Phase 31 slice B — the desktop-app vocabulary.

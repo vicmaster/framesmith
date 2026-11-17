@@ -4,7 +4,7 @@
 import type { EvaluationIssue } from './evaluate.js';
 import type { LayoutRect } from './screenshot.js';
 import type { SceneNode } from './types.js';
-import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, MENU_MIN_WIDTH, modalActions, modalWidth, tabsItems } from './primitives.js';
+import { CLICKABLE_PRIMITIVES, DESKTOP_APP_PRIMITIVES, OVERLAY_TYPES, MENU_MIN_WIDTH, isDisabled, modalActions, modalWidth, tabsItems } from './primitives.js';
 import { fontPx, paddingSides, proseWords } from './mobile-rules.js';
 import { extractInventory } from './drift.js';
 import { shapeHash } from './shape-hash.js';
@@ -593,10 +593,10 @@ export function checkPrimaryCount(ctx: DesktopContext): EvaluationIssue[] {
   const add = (pane: SceneNode, node: SceneNode, label: string) => byPane.set(pane, [...(byPane.get(pane) ?? []), { node, label }]);
   for (const n of parentOf.keys()) {
     if (n.type === 'modal') {
-      for (const a of modalActions(n)) if (a.variant === 'primary') add(n, n, String(a.label).trim());
+      for (const a of modalActions(n)) if (a.variant === 'primary' && !isDisabled(a)) add(n, n, String(a.label).trim());
       continue;
     }
-    if (!isPrimary(n) || n.disabled === true || repeated(n)) continue;
+    if (!isPrimary(n) || isDisabled(n) || repeated(n)) continue;
     add(paneOf(n, parentOf), n, String(n.label ?? n.ariaLabel ?? nameOf(n)));
   }
   for (const [pane, buttons] of byPane) {
