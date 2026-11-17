@@ -14,7 +14,7 @@ import { renderToHtml } from './src/renderer.js';
 import { resolveVariables } from './src/variables.js';
 import { generateDesignSystem } from './src/design-language.js';
 import { withPage, shutdown } from './src/screenshot.js';
-import { boundaryPairs, focusPairs, indicatorPairs, layerAlpha, paint, stateTargets } from './src/state-checks.js';
+import { boundaryPairs, disabledPairs, focusPairs, indicatorPairs, layerAlpha, paint, stateTargets } from './src/state-checks.js';
 import type { Rgb } from './src/color-math.js';
 import type { DesignVariables, ElementState, SceneNode } from './src/types.js';
 
@@ -25,7 +25,7 @@ function check(name: string, cond: boolean, extra?: string) {
 }
 
 const W = 640;
-const H = 420;
+const H = 720;
 const TOLERANCE = 2;
 
 interface Rect { left: number; top: number; right: number; bottom: number }
@@ -41,6 +41,7 @@ async function sample(html: string, points: (rects: Record<string, Rect>) => Arr
       document.querySelectorAll('[data-node-id]').forEach((el) => put(el.getAttribute('data-node-id'), el));
       document.querySelectorAll('[role=tab]').forEach((el, i) => put('tab' + i, el));
       document.querySelectorAll('[role=textbox]').forEach((el, i) => put('field' + i, el));
+      document.querySelectorAll('[data-node-id="m"] [data-focusable]').forEach((el, i) => put('m' + i, el));
       return out;
     })()`);
     const png = Buffer.from(await page.screenshot({ type: 'png' })).toString('base64');
@@ -85,6 +86,10 @@ function scene(state: ElementState, opts: { panelFill?: string; navInk?: string 
         { id: 'ti', type: 'text-input', placeholder: 'Search', width: 200 },
         { id: 'cb', type: 'checkbox' },
         { id: 'tg', type: 'toggle', state },
+        { id: 'b2', type: 'button', label: 'Cancel', size: 'sm', variant: 'secondary', state },
+        { id: 'b3', type: 'button', label: 'More', size: 'sm', variant: 'ghost', state },
+        { id: 'b4', type: 'button', label: 'Delete', size: 'sm', variant: 'destructive', state },
+        { id: 'bo', type: 'button', label: 'Faded', size: 'sm', opacity: 0.5, state },
       ],
     }],
   };
@@ -129,20 +134,24 @@ for (const t of THEMES) {
   ] as Array<[number, number]>;
   for (const state of ['rest', 'hover'] as const) {
     const px = await sample(htmlOf(resolved(state, t.vars, t.theme)), marks);
-    same(`${t.name} ${state}: the nav-item bar`, nav[state].indicator, px[0]);
-    same(`${t.name} ${state}: the nav-item fill beside it`, nav[state].fill, px[1]);
-    same(`${t.name} ${state}: the line tab underline`, tab[state].indicator, px[2]);
-    same(`${t.name} ${state}: the line tab fill above it`, tab[state].fill, px[3]);
+    same(`${t.name} ${state}: the nav-item bar`, nav[state]!.indicator, px[0]);
+    same(`${t.name} ${state}: the nav-item fill beside it`, nav[state]!.fill, px[1]);
+    same(`${t.name} ${state}: the line tab underline`, tab[state]!.indicator, px[2]);
+    same(`${t.name} ${state}: the line tab fill above it`, tab[state]!.fill, px[3]);
   }
 
-  // ── a button's layer in hover, focus and pressed ──
-  const btn = find('b');
-  const bd = btn.backdrop.kind === 'color' ? btn.backdrop.rgb : ([255, 255, 255] as Rgb);
+  // ── every button variant: its layer in hover, focus and pressed, its ring ──
+  const BUTTONS = ['b', 'b2', 'b3', 'b4'] as const;
   for (const state of ['hover', 'focus', 'pressed'] as const) {
-    const [px] = await sample(htmlOf(resolved(state, t.vars, t.theme)), (r) => [[r.b.left + 4, mid(r.b)]]);
-    const p = layerAlpha(btn.style?.[state] ?? 0);
-    same(`${t.name}: a button's ${state} fill`, paint(btn.ink, paint(btn.fill, bd), p), px);
+    const px = await sample(htmlOf(resolved(state, t.vars, t.theme)), (r) => BUTTONS.map((id) => [r[id].left + 4, mid(r[id])] as [number, number]));
+    BUTTONS.forEach((id, i) => {
+      const btn = find(id);
+      const bd = btn.backdrop.kind === 'color' ? btn.backdrop.rgb : ([255, 255, 255] as Rgb);
+      same(`${t.name}: button ${btn.node.variant ?? 'primary'}'s ${state} fill`, paint(btn.ink, paint(btn.fill, bd), layerAlpha(btn.style?.[state] ?? 0)), px[i]);
+    });
   }
+  const rings = await sample(htmlOf(resolved('focus', t.vars, t.theme)), (r) => [...BUTTONS, 'bo'].map((id) => [r[id].right + 3, mid(r[id])] as [number, number]));
+  [...BUTTONS, 'bo'].forEach((id, i) => same(`${t.name}: ${id}'s ring${id === 'bo' ? ' at its own opacity 0.5' : ''}`, ringOf(id).ringPx, rings[i]));
 
   // ── the boundary and the backdrop outside it ──
   const bounds = boundaryPairs(rest);
@@ -165,10 +174,35 @@ for (const theme of [undefined, 'dark'] as const) {
   const s = tg.style!;
   const bdOf = (x: typeof tg) => (x.backdrop.kind === 'color' ? x.backdrop.rgb : ([255, 255, 255] as Rgb));
   const [trackPx, containerPx] = await sample(htmlOf(root), (r) => [[r.tg.right - 4, mid(r.tg)], [r.b.left + 4, mid(r.b)]]);
+  const pair = disabledPairs(stateTargets(resolved('rest', SYSTEM, theme))).find((p) => p.target.node.id === 'tg')!;
+  same(`${name}: a disabled toggle track is disabledPairs' disabled content`, pair.disabled, trackPx);
+  const [restTrack] = await sample(htmlOf(resolved('rest', SYSTEM, theme)), (r) => [[r.tg.right - 4, mid(r.tg)]]);
+  same(`${name}: the rest track is disabledPairs' rest content`, pair.rest, restTrack);
   same(`${name}: a disabled toggle track (on-surface at disabledContent)`, paint(s.onSurface, bdOf(tg), s.disabledContent!), trackPx);
   // The container takes the on-surface colour at its share, inside the group.
   const share = Math.min(100, Math.round((s.disabledContainer! / s.disabledContent!) * 10000) / 100);
   same(`${name}: a disabled button container (on-surface at disabledContainer)`, paint(s.onSurface, bdOf(b), (share / 100) * s.disabledContent!), containerPx);
+}
+
+// ── a modal's close button and actions (items reported by the modal) ──
+for (const t of THEMES) {
+  const modal = (state: ElementState): SceneNode => ({
+    id: 'root', type: 'frame', width: W, height: H, fill: '#FFFFFF',
+    children: [{ id: 'm', type: 'modal', title: 'Delete project?', size: 'sm', actions: [{ label: 'Cancel', state }, { label: 'Delete', variant: 'destructive', state }] }],
+  });
+  const root = (state: ElementState) => resolveVariables(modal(state), t.vars, t.theme ? { theme: t.theme } : {});
+  const targets = stateTargets(root('rest'));
+  const ring = focusPairs(targets);
+  const close = ring.find((p) => p.target.kind === 'modal close')!;
+  const cancel = ring.find((p) => p.target.what === 'modal action "Cancel"')!;
+  const del = targets.find((x) => x.what === 'modal action "Delete"')!;
+  // The close button takes no state, so its ring is checked on the actions.
+  const focused = await sample(htmlOf(root('focus')), (r) => [[r.m1.left - 3, mid(r.m1)], [r.m2.left + 4, mid(r.m2)]]);
+  same(`${t.name}: a modal action's ring meets the modal fill`, cancel.ringPx, focused[0]);
+  const bd = del.backdrop.kind === 'color' ? del.backdrop.rgb : ([255, 255, 255] as Rgb);
+  same(`${t.name}: a destructive modal action's focus fill`, paint(del.ink, paint(del.fill, bd), layerAlpha(del.style?.focus ?? 0)), focused[1]);
+  const [restClose] = await sample(htmlOf(root('rest')), (r) => [[r.m0.right + 3, mid(r.m0)]]);
+  same(`${t.name}: what the close button's ring covers (the modal fill)`, close.reference, restClose);
 }
 
 // ── the dark preset's translucent ink, and the twin ──
@@ -176,7 +210,7 @@ for (const theme of [undefined, 'dark'] as const) {
   const root = resolveVariables(scene('hover', { panelFill: '#121212', navInk: '#ffffffde' }), {});
   const nav = indicatorPairs(root).find((p) => p.node.id === 'nv')!;
   const [px] = await sample(htmlOf(root), (r) => [[r.nv.right - 8, r.nv.top + 3]]);
-  same('a #ffffffde ink\'s hover layer (alpha × percent)', nav.hover.fill, px);
+  same('a #ffffffde ink\'s hover layer (alpha × percent)', nav.hover!.fill, px);
 
   const light = resolveVariables(scene('hover'), {});
   const target = stateTargets(light).find((x) => x.node.id === 'nv')!;

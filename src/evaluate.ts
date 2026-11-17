@@ -2445,11 +2445,35 @@ function expandForRules(root: SceneNode, canvas: Canvas): { root: SceneNode; own
 
 /** Re-point findings on nodes inside an instance at the instance (the
  * component holds the node), naming the inner node. */
+/** Phase 31 slice H — the state checks' two themes, cleaned up. A dark
+ * finding that says what the light one says (the same colours: they come
+ * from literals, not tokens) is dropped, since the dark token layer cannot
+ * change it. A finding about targets inside a component instance says the
+ * design system never reaches them (instances render unresolved). */
+function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
+  const key = (i: EvaluationIssue) => `${i.rule}|${i.severity}|${(i.nodeIds ?? [i.nodeId]).join(',')}|${i.message}`;
+  const seen = new Set(light.map(key));
+  const kept = [...light, ...dark.filter((i) => !seen.has(key({ ...i, message: i.message.replace(' in the dark theme', '') })))];
+  return kept.map((i) => ((i.nodeIds ?? [i.nodeId]).some((id) => owners.has(id))
+    ? { ...i, suggestion: 'These targets sit inside a component instance, which renders without the design system (its tokens and the dark layer never reach them): set the colours on the component\'s own nodes, or move the targets out of the component.' }
+    : i));
+}
+
 function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
   return issues.map((i) => {
     // A grouped finding (slice H) names several nodes: each maps to its owner.
     const nodeIds = i.nodeIds ? [...new Set(i.nodeIds.map((id) => owners.get(id)?.id ?? id))] : undefined;
     const owner = i.nodeId ? owners.get(i.nodeId) : undefined;
+    if (nodeIds && i.nodeIds!.length > 1) {
+      // Several members: say which ids are instances, not just the first's.
+      const inside = [...new Set(i.nodeIds!.flatMap((id) => { const o = owners.get(id); return o ? [o.name ?? o.id] : []; }))];
+      const names = inside.map((n) => `"${n}"`).join(', ');
+      const all = i.nodeIds!.every((id) => owners.has(id));
+      const suffix = !inside.length ? ''
+        : all ? (inside.length === 1 ? ` (inside instance ${names} — fix it in its component)` : ` (inside instances ${names} — fix them in their components)`)
+          : ` (some inside instances, listed by instance: ${names} — fix those in their components)`;
+      return { ...i, ...(owner ? { nodeId: owner.id, nodeName: owner.name } : {}), nodeIds, message: `${i.message}${suffix}` };
+    }
     if (!owner) return nodeIds ? { ...i, nodeIds } : i;
     return { ...i, nodeId: owner.id, nodeName: owner.name, ...(nodeIds ? { nodeIds } : {}), message: `${i.message} (inside instance "${owner.name ?? owner.id}" — fix it in its component)` };
   });
@@ -2543,10 +2567,7 @@ export async function evaluateCanvas(
     // the tree the renderer draws (instances expanded), in each theme.
     const stateOn = (id: string) => ruleOn.has(id);
     const states = Object.values(STATE_RULES).some(stateOn)
-      ? [
-        ...checkStates(mobileRoot, stateOn),
-        ...(darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : []),
-      ]
+      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : [], owners)
       : [];
     results.set('color', withRuleIssues(color, reportOnInstances(states, owners)));
   }

@@ -71,11 +71,17 @@ export type Backdrop =
   | { kind: 'gradient' }
   | { kind: 'unreadable' };
 
-/** A fill that paints nothing: unset, the keywords, or an unresolved $token
- * (the renderer emits it as invalid CSS, so the browser draws nothing). */
-export function paintsNothing(fill: string | undefined): boolean {
-  return !fill || fill === 'transparent' || fill === 'none' || fill.startsWith('$');
+/** A fill that paints nothing: unset, the keywords, an unresolved $token or
+ * a value that is not a string (the renderer emits those as invalid CSS, so
+ * the browser draws nothing). */
+export function paintsNothing(fill: unknown): boolean {
+  return typeof fill !== 'string' || !fill || fill === 'transparent' || fill === 'none' || fill.startsWith('$');
 }
+
+/** A colour the model can draw: one that paints nothing, or one that parses.
+ * Anything else (a named colour, hsl()) still paints, so it cannot be skipped
+ * as transparent. */
+export const readable = (color: unknown): boolean => paintsNothing(color) || parseColor(color as string) !== null;
 
 /**
  * The backdrop behind a node, from its ancestors nearest first. A gradient

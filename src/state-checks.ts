@@ -7,7 +7,7 @@
 
 import type { EvaluationIssue } from './evaluate.js';
 import type { SceneNode, StateStyle } from './types.js';
-import { backdropBehind, composite, paintsNothing, parseAlpha, parseColor, rgbToHex, roundedRatio, type Backdrop, type Rgb } from './color-math.js';
+import { backdropBehind, composite, paintsNothing, parseAlpha, parseColor, readable, rgbToHex, roundedRatio, type Backdrop, type Rgb } from './color-math.js';
 import { OVERLAY_TYPES, STATE_LAYERS, STATEFUL_TYPES, isDisabled, modalActions, navActions, tabItems, tabsItems } from './primitives.js';
 
 /** The renderer's fallbacks (renderer.ts FALLBACK), for props the resolver
@@ -63,7 +63,8 @@ export const layerAlpha = (x: number): number => Math.round(x * 10000) / 100 / 1
 
 /** `color` painted over an opaque `base`, its own alpha times `alpha`
  * (`color-mix` with transparent multiplies them). A colour that paints
- * nothing, or that does not parse, leaves the base. */
+ * nothing leaves the base; callers check `readable` first, since a colour
+ * that does not parse still paints. */
 export function paint(color: string | undefined, base: Rgb, alpha = 1): Rgb {
   const rgb = color && !paintsNothing(color) ? parseColor(color) : null;
   return rgb ? composite(rgb, alpha * parseAlpha(color!), base) : base;
@@ -186,7 +187,8 @@ export interface FocusPair { target: StateTarget; ring: string; ringPx?: Rgb; re
 export function focusPairs(targets: StateTarget[]): FocusPair[] {
   return targets.filter((t) => !t.disabled).map((t) => {
     const ring = t.style?.ring ?? FALLBACK.accent;
-    if (t.backdrop.kind !== 'color' || paintsNothing(ring) || !parseColor(ring)) return { target: t, ring };
+    // An inset ring covers the item's own fill, which must be readable too.
+    if (t.backdrop.kind !== 'color' || paintsNothing(ring) || !parseColor(ring) || (t.inset && !readable(t.fill))) return { target: t, ring };
     // Outset: the ring sits in the gap past the box, over the backdrop.
     // Inset: over the item's own rest fill (S9, Q3). Either way the reference
     // is what those pixels show when the target is not focused.
@@ -202,20 +204,20 @@ export interface IndicatorPair {
   what: string;
   indicator: string;
   rest: { indicator: Rgb; fill: Rgb };
-  hover: { indicator: Rgb; fill: Rgb };
+  /** Absent when the ink does not parse (its layer cannot be modelled). */
+  hover?: { indicator: Rgb; fill: Rgb };
 }
 
 export function indicatorPairs(root: SceneNode): IndicatorPair[] {
   const parentOf = parentsOf(root);
   const out: IndicatorPair[] = [];
   const pair = (node: SceneNode, what: string, indicator: string, fill: string | undefined, ink: string, opacity: number | undefined, backdrop: Backdrop) => {
-    if (backdrop.kind !== 'color' || paintsNothing(indicator) || !parseColor(indicator)) return;
+    if (backdrop.kind !== 'color' || paintsNothing(indicator) || !parseColor(indicator) || !readable(fill)) return;
     const bd = backdrop.rgb;
     const hover = layerAlpha(node.stateStyle?.hover ?? STATE_LAYERS.hover);
     const rest = paint(fill, bd);
-    const hovered = paint(ink, rest, hover);
     const at = (under: Rgb) => ({ indicator: group(paint(indicator, under), opacity, bd), fill: group(under, opacity, bd) });
-    out.push({ node, what, indicator, rest: at(rest), hover: at(hovered) });
+    out.push({ node, what, indicator, rest: at(rest), ...(readable(ink) ? { hover: at(paint(ink, rest, hover)) } : {}) });
   };
   (function walk(n: SceneNode) {
     if (n.type === 'nav-item' && n.active && !isDisabled(n)) {
@@ -246,7 +248,7 @@ export function disabledPairs(targets: StateTarget[]): DisabledPair[] {
     const n = t.node;
     // A control is its own content: the track, the box or the ring.
     const content = WHOLE.has(t.kind) ? (t.kind === 'toggle' || (t.kind === 'checkbox' && n.checked) ? n.fill : n.stroke) : t.ink;
-    if (!content || paintsNothing(content) || !parseColor(content)) continue;
+    if (paintsNothing(content) || !parseColor(content!) || !readable(t.fill) || !readable(s.onSurface)) continue;
     const rest = WHOLE.has(t.kind) ? paint(content, bd) : paint(content, paint(t.fill, bd));
     out.push({ target: t, rest, disabled: paint(s.onSurface, bd, s.disabledContent) });
   }
@@ -254,7 +256,14 @@ export function disabledPairs(targets: StateTarget[]): DisabledPair[] {
 }
 
 /** R7 — a boundary that is a control's only cue, and what is outside it. */
-export interface BoundaryPair { node: SceneNode; color: string; boundary: Rgb; backdrop: Rgb }
+export interface BoundaryPair {
+  node: SceneNode;
+  color: string;
+  boundary: Rgb;
+  /** The control's own fill as drawn, when it paints one. */
+  field?: Rgb;
+  backdrop: Rgb;
+}
 
 export function boundaryPairs(root: SceneNode): BoundaryPair[] {
   const parentOf = parentsOf(root);
@@ -262,15 +271,27 @@ export function boundaryPairs(root: SceneNode): BoundaryPair[] {
   (function walk(n: SceneNode) {
     const measured = !isDisabled(n) && (n.type === 'text-input' || ((n.type === 'checkbox' || n.type === 'toggle' || n.type === 'radio') && !n.checked));
     if (measured) {
-      // An unset text-input stroke draws its fallback; the controls draw nothing.
+      // An unset text-input stroke draws its fallback; the controls' unset
+      // boundary is invalid CSS, which draws nothing.
       const color = n.type === 'text-input' ? n.stroke ?? (typeof n.error === 'string' && n.error.trim() ? FALLBACK.danger : FALLBACK.border) : n.type === 'toggle' ? n.fill : n.stroke;
       const backdrop = behind(n, parentOf);
-      if (color && !paintsNothing(color) && parseColor(color) && backdrop.kind === 'color') {
+      // The field's own fill (a radio draws none; a toggle's fill is its track).
+      const fill = n.type === 'text-input' ? n.fill ?? FALLBACK.surface : n.type === 'checkbox' ? n.fill : undefined;
+      // A boundary that draws nothing (unset, an unresolved $token,
+      // transparent, none) is measured as what shows there: an invisible
+      // outline is the worst boundary, not one to skip.
+      if ((paintsNothing(color) || parseColor(color as string)) && backdrop.kind === 'color' && readable(fill)) {
         const bd = backdrop.rgb;
-        // A border is painted over the control's own fill (R7); a toggle's
-        // track is the fill itself.
-        const under = n.type === 'toggle' || n.type === 'radio' ? bd : paint(n.type === 'text-input' ? n.fill ?? FALLBACK.surface : n.fill, bd);
-        out.push({ node: n, color, boundary: group(paint(color, under), ownOpacity(n), bd), backdrop: bd });
+        const under = paint(fill, bd);
+        out.push({
+          node: n, color: typeof color === 'string' && color ? color : 'none',
+          // A border is painted over the control's own fill (R7).
+          boundary: group(paint(color as string, under), ownOpacity(n), bd),
+          // WCAG 1.4.11 asks the border for 3:1 only when nothing else shows
+          // the field: a fill that clears the backdrop does.
+          ...(fill !== undefined && !paintsNothing(fill) ? { field: group(under, ownOpacity(n), bd) } : {}),
+          backdrop: bd,
+        });
       }
     }
     n.children?.forEach(walk);
@@ -297,11 +318,16 @@ export function checkFocusVisible(targets: StateTarget[], theme?: 'dark'): Evalu
     if (!p.ringPx || !p.reference) { skipped.push(p.target); continue; }
     if (roundedRatio(p.ringPx, p.reference) >= NON_TEXT_MIN) continue;
     const key = `${rgbToHex(p.ringPx)}|${rgbToHex(p.reference)}`;
-    groups.set(key, [...(groups.get(key) ?? []), p]);
+    const members = groups.get(key);
+    if (members) members.push(p);
+    else groups.set(key, [p]);
   }
   const issues: EvaluationIssue[] = [];
   for (const members of groups.values()) {
-    const { ring, ringPx, reference } = members[0];
+    const { ringPx, reference } = members[0];
+    // Members share the drawn ring; name the authored one when they agree.
+    const authored = new Set(members.map((m) => m.ring));
+    const ring = authored.size === 1 ? members[0].ring : rgbToHex(ringPx!);
     const ratio = roundedRatio(ringPx!, reference!);
     const whats = [...new Set(members.map((m) => m.target.what))];
     issues.push(grouped({
@@ -326,8 +352,8 @@ export function checkFocusVisible(targets: StateTarget[], theme?: 'dark'): Evalu
 export function checkStateContrast(root: SceneNode, theme?: 'dark'): EvaluationIssue[] {
   return indicatorPairs(root).flatMap((p) => {
     const rest = roundedRatio(p.rest.indicator, p.rest.fill);
-    const hover = roundedRatio(p.hover.indicator, p.hover.fill);
-    const failing = [rest < NON_TEXT_MIN ? `${rest.toFixed(2)}:1 at rest` : '', hover < NON_TEXT_MIN ? `${hover.toFixed(2)}:1 in hover` : ''].filter(Boolean);
+    const hover = p.hover ? roundedRatio(p.hover.indicator, p.hover.fill) : undefined;
+    const failing = [rest < NON_TEXT_MIN ? `${rest.toFixed(2)}:1 at rest` : '', hover !== undefined && hover < NON_TEXT_MIN ? `${hover.toFixed(2)}:1 in hover` : ''].filter(Boolean);
     if (!failing.length) return [];
     return [{
       category: 'color', rule: STATE_RULES.active, severity: 'warning' as const, nodeId: p.node.id, nodeName: p.node.name, ...darkTag(theme),
@@ -357,10 +383,11 @@ export function checkBoundaries(root: SceneNode, theme?: 'dark'): EvaluationIssu
   return boundaryPairs(root).flatMap((p) => {
     const ratio = roundedRatio(p.boundary, p.backdrop);
     if (ratio >= NON_TEXT_MIN) return [];
+    if (p.field && roundedRatio(p.field, p.backdrop) >= NON_TEXT_MIN) return [];
     const part = p.node.type === 'toggle' ? 'track' : p.node.type === 'text-input' ? 'border' : 'outline';
     return [{
       category: 'color', rule: STATE_RULES.boundary, severity: 'warning' as const, nodeId: p.node.id, nodeName: p.node.name, ...darkTag(theme),
-      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: it is the control's only boundary, and WCAG 1.4.11 needs 3:1.`,
+      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: nothing else shows the control's edge (its fill does not stand out either), and WCAG 1.4.11 needs 3:1.`,
       suggestion: theme === 'dark'
         ? 'Fix it in the dark token layer: a dark $border-strong that clears 3:1 against the surface behind the control.'
         : 'Use $border-strong for the boundary (generate_design_system writes one at 3:1 against bg-primary and bg-surface), or set a stronger stroke.',
