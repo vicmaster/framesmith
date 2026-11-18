@@ -435,7 +435,15 @@ export async function ensureFontsForRender(
   const warnings: string[] = [];
 
   const declared = new Set((canvas.fonts ?? []).map((f) => f.family.toLowerCase()));
-  for (const family of collectReferencedFamilies(resolvedRoot, merged)) {
+  // An instance has no children of its own: a family used only inside a
+  // component is found in the component's definition.
+  const families = [...collectReferencedFamilies(resolvedRoot, merged)];
+  for (const component of Object.values(canvas.components ?? {})) {
+    for (const family of collectReferencedFamilies(component)) {
+      if (!families.some((f) => f.toLowerCase() === family.toLowerCase())) families.push(family);
+    }
+  }
+  for (const family of families) {
     if (declared.has(family.toLowerCase())) continue;
     try {
       await resolveFamily(family, opts); // cache hit or one network resolve

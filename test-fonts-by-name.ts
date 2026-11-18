@@ -210,6 +210,16 @@ const fontsDir = join(process.env.FRAMESMITH_HOME!, 'fonts');
   const { fetchImpl: failFetch } = makeStubFetch({ failAll: true });
   const warned = await ensureFontsForRender(badRoot, canvas, undefined, { fetchImpl: failFetch });
   expect('failure degrades to a warning', warned.extraFonts.length === 0 && warned.warnings.length === 1 && warned.warnings[0].includes('set_fonts'), warned.warnings.join(' | '));
+
+  // Phase 31 slice I — a family used only inside a component: the instance
+  // has no children, so the definition is where the backstop finds it.
+  const instanceRoot: SceneNode = { id: 'doc', type: 'document', children: [{ id: 'i1', type: 'instance', componentId: 'card' }] };
+  const withComponent = { ...canvas, components: { card: { id: 'card', type: 'component', children: [{ id: 'ct', type: 'text', content: 'x', fontFamily: 'Inter' }] } } } as unknown as Canvas;
+  const { fetchImpl: compFetch } = makeStubFetch();
+  const fromComponent = await ensureFontsForRender(instanceRoot, withComponent, undefined, { fetchImpl: compFetch });
+  expect('a family used only inside a component is loaded', fromComponent.extraFonts.length === 2, `${fromComponent.extraFonts.length} faces`);
+  const noComponent = await ensureFontsForRender(instanceRoot, canvas, undefined, { fetchImpl: compFetch });
+  expect('twin: the same instance with no such component loads nothing', noComponent.extraFonts.length === 0);
 }
 
 // ── 8. stylesheet-URL registration ───────────────────────────────────────────

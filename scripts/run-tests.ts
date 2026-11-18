@@ -40,6 +40,8 @@ const CHROME_ANYWAY = new Set([
   'test-ridgeline.ts',
   // Phase 31's acceptance re-run, the same shape as test-ridgeline.ts.
   'test-viewer-rebuild.ts',
+  // Drives canvas_evaluate's detailed mode over MCP (S11's font path).
+  'test-evaluate-fonts.ts',
 ]);
 
 /** Direct use of the browser is the honest signal — these are the entry points

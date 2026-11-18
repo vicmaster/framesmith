@@ -261,7 +261,7 @@ type Verdict = { name: string; id: string; scores: Record<string, number>; trunc
 const verdicts: Verdict[] = [];
 
 /** V3 on one canvas: stress, then fast, then detailed. */
-async function judge(name: string, id: string, opts: { base: boolean; bigNumbers: boolean }) {
+async function judge(name: string, id: string, projectId: string, opts: { base: boolean; bigNumbers: boolean }) {
   const shot = await call('screenshot', { canvasId: id });
   const fontWarnings = shot.filter((x) => x.type === 'text' && x.text?.startsWith('Font warnings'));
   check(`${name}: the design system's fonts load (no Font warnings)`, fontWarnings.length === 0, fontWarnings.map((x) => x.text).join(' '));
@@ -276,14 +276,22 @@ async function judge(name: string, id: string, opts: { base: boolean; bigNumbers
   const touched = (n: string) => runs.find((p) => p.name === n)?.touchedCount ?? 0;
   const must = STRESS_DEFAULTS.filter((n) => n !== 'big-numbers' || opts.bigNumbers);
   check(`${name}: every perturbation it must run touched a node (${must.join(', ')})`, must.every((n) => touched(n) > 0), runs.map((p) => `${p.name}:${p.touchedCount ?? 'skipped'}`).join(' '));
+  const skipped = runs.filter((p) => p.skipped).map((p) => p.name);
+  check(`${name}: no perturbation skipped${opts.bigNumbers ? '' : ' but big-numbers (no figures to widen)'}`, JSON.stringify(skipped) === JSON.stringify(opts.bigNumbers ? [] : ['big-numbers']), skipped.join(', '));
   const truncations = runs.flatMap((p) => p.findings ?? []).filter((f) => f.severity === 'info').length;
 
   const canvas = readCanvas(id);
+  check(`${name}: the canvas sits in the viewer project`, canvas.projectId === projectId, canvas.projectId);
   check(`${name}: the canvas's own variables are empty (all tokens from the project)`, JSON.stringify(canvas.variables ?? {}) === '{}', JSON.stringify(canvas.variables).slice(0, 120));
 
   const scores: Record<string, number> = {};
   for (const mode of ['fast', 'detailed'] as const) {
-    const ev = await tool('canvas_evaluate', { canvasId: id, mode });
+    const content = await call('canvas_evaluate', { canvasId: id, mode });
+    const ev = JSON.parse(content[0]?.text ?? '{}');
+    // Detailed mode lays out in the design system's faces (S11) and says so
+    // when one cannot load; fast mode renders nothing.
+    const evalFonts = content.filter((x) => x.type === 'text' && x.text?.startsWith('Font warnings'));
+    check(`${name} ${mode}: no Font warnings from evaluate`, evalFonts.length === 0, evalFonts.map((x) => x.text).join(' ').slice(0, 160));
     if (out) writeFileSync(join(out, `${slug(name)}-evaluate-${mode}.json`), JSON.stringify(ev, null, 2));
     const issues = ev.issues as Issue[];
     scores[mode] = ev.overallScore;
@@ -302,7 +310,10 @@ async function judge(name: string, id: string, opts: { base: boolean; bigNumbers
       ev.surface?.type === 'desktop-app' && missing.length === 0 && (ev.surface?.rulesOff ?? []).includes('type-scale-ratio'),
       missing.length ? `missing ${missing.join(', ')}` : '');
     if (mode === 'fast' && opts.base) {
-      check(`${name}: coverage asks for no state variant`, JSON.stringify(ev.coverage?.missing ?? []) === '[]', JSON.stringify(ev.coverage?.missing));
+      // None of the bases is data-bearing (no detected table, fewer than
+      // three form controls), so coverage has nothing to demand: the check
+      // says so rather than passing on an empty list by accident.
+      check(`${name}: coverage asks for no state variant (not data-bearing)`, ev.coverage?.dataBearing === false && JSON.stringify(ev.coverage?.missing ?? []) === '[]', JSON.stringify(ev.coverage));
     }
     console.log(`      ${mode} score ${ev.overallScore}/100 · ${issues.length} findings (${issues.filter((i) => i.severity === 'info').length} info)`);
   }
@@ -381,7 +392,7 @@ I(row, { type: "button", label: "Post", size: "sm", maxWidth: "100%" })
     ['Archive empty', emptyVariant.id, { base: false, bigNumbers: false }],
   ];
   const canvases: Record<string, { root: Node }> = {};
-  for (const [name, id, opts] of six) canvases[name] = await judge(name, id, opts);
+  for (const [name, id, opts] of six) canvases[name] = await judge(name, id, projectId, opts);
 
   // ── the six defects (V4) ──────────────────────────────────────────────────
   const detailRoot = canvases['Canvas detail'].root;
@@ -396,6 +407,8 @@ I(row, { type: "button", label: "Post", size: "sm", maxWidth: "100%" })
   check('E3 Back: it renders at least 24 tall', backRect.height >= 24, `${backRect.height}px (the baseline's was 17)`);
   // (2) Inspector tabs
   const tabs = byName(detailRoot, 'Inspector tabs');
+  const inspector = walk(detailRoot).find((n) => n.id === 'eia-inspector')!;
+  check('E4 Inspector tabs: the inspector holds exactly one tabs node', walk(inspector).filter((n) => n.type === 'tabs').length === 1);
   const labels = tabs[0]?.items?.map((t) => t.label) ?? [];
   check('E4 Inspector tabs: one tabs node with Quality, Design system and Feedback, exactly one active',
     tabs.length === 1 && tabs[0].type === 'tabs' && JSON.stringify(labels) === JSON.stringify(['Quality', 'Design system', 'Feedback']) && tabs[0].items!.filter((t) => t.active).length === 1,
@@ -413,7 +426,7 @@ I(row, { type: "button", label: "Post", size: "sm", maxWidth: "100%" })
   const tokens = (system.designSystem ?? system.variables ?? system) as { colors?: Record<string, string>; dark?: { colors?: Record<string, string> } };
   const colors = tokens.colors ?? {};
   const darkColors = { ...colors, ...(tokens.dark?.colors ?? {}) };
-  check('the project design system carries a dark colour layer', Object.keys(tokens.dark?.colors ?? {}).length > 0);
+  check('the project design system carries a dark colour layer that restates $text-secondary', Object.keys(tokens.dark?.colors ?? {}).length > 0 && !!tokens.dark?.colors?.['text-secondary'] && tokens.dark.colors['text-secondary'] !== colors['text-secondary']);
   for (const [theme, c] of [['light', colors], ['dark', darkColors]] as const) {
     for (const bg of ['bg-primary', 'bg-surface', 'bg-elevated']) {
       const fg = parseColor(c['text-secondary']);
@@ -460,6 +473,8 @@ I(row, { type: "button", label: "Post", size: "sm", maxWidth: "100%" })
     del.type === 'button' && del.variant === 'destructive' && arc.type === 'button' && typeof arc.variant === 'string' && !['destructive', 'primary'].includes(arc.variant as string),
     `${del.variant} / ${arc.variant}`);
   check('E6 Delete: set apart from Archive (another group, or a divider between them)', apart);
+  const confirmIssues = (await tool('canvas_evaluate', { canvasId: confirmVariant.id, mode: 'fast' })).issues as Issue[];
+  check('Confirm delete: the dialog\'s one filled action raises no primary-count info', !confirmIssues.some((i) => i.rule === 'desktop-app-primary-count'));
   const archiveRoot = canvases['Archive'].root;
   const permanent = byName(archiveRoot, 'Delete permanently button')[0];
   const panel = walk(archiveRoot).find((n) => n.id === 'swa-panel')!;
@@ -535,6 +550,24 @@ I("${v('eia-actions')}", { type: "popover", name: "Off-window popover", x: 1300,
   });
   const ring = (await fastIssues(ringTwin.id)).filter((i) => i.rule === 'desktop-app-focus-visible' && i.severity === 'error');
   check('twin (g): a focus ring the colour of the inspector panel raises desktop-app-focus-visible', ring.length > 0, describe(ring.slice(0, 1)));
+
+  // (h) a clone never stressed carries no stress record, so the judge's
+  // "stress field present" check is live; (i) a clone stressed CLEAN and then
+  // edited reads current: false.
+  const freshTwin = await twin('never-stressed', () => '');
+  const fresh = await tool('canvas_evaluate', { canvasId: freshTwin.id, mode: 'fast' });
+  check('twin (h): a canvas never stressed has no stress field', fresh.stress === undefined, JSON.stringify(fresh.stress));
+  const staleTwin = await twin('stale-stress', () => '');
+  const staleRun = await tool('canvas_stress', { canvasId: staleTwin.id });
+  await tool('batch_design', { canvasId: staleTwin.id, operations: `U("${staleTwin.v('eia-canvas-label')}", { content: "Canvas preview" })` });
+  const stale = await tool('canvas_evaluate', { canvasId: staleTwin.id, mode: 'fast' });
+  check('twin (i): an edit after a CLEAN stress run reads current: false', /^CLEAN\b/.test(staleRun.verdict) && stale.stress?.verdict === 'CLEAN' && stale.stress?.current === false, JSON.stringify(stale.stress));
+  // (j) a dialog with two filled primaries raises the primary-count info that
+  // Confirm delete must not.
+  const primaryTwin = await twin('two-primaries', (v) => `
+I("${v('eia-shell')}", { type: "modal", size: "sm", title: "Delete canvas?", actions: [{ label: "Keep", variant: "primary" }, { label: "Delete", variant: "primary" }], children: [{ type: "text", content: "This cannot be undone.", fontSize: "$label", color: "$text-primary" }] })
+`);
+  check('twin (j): two primary actions in one dialog raise desktop-app-primary-count', ((await fastIssues(primaryTwin.id)).some((i) => i.rule === 'desktop-app-primary-count')));
 
   // The judged canvases were not touched by the twins.
   for (const [name, id] of six) {

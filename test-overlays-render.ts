@@ -224,6 +224,23 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
     && /data-node-id="pop" data-fs-overlay="popover" data-fs-scroll/.test(htmlOf(canvasOf([pop('auto')], tech)))
     && !/data-fs-overlay="popover" data-fs-scroll/.test(htmlOf(canvasOf([pop('hidden')], tech)))
     && !/data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([{ id: 'mn', name: 'mn', type: 'menu', x: 10, y: 10, children: [] }], tech))));
+  const menuOf = (overflow: 'auto' | 'hidden'): SceneNode => ({ id: 'mn', name: 'mn', type: 'menu', x: 10, y: 10, height: 120, overflow, children: [] });
+  check('a menu with overflow auto carries data-fs-scroll; one with overflow hidden does not',
+    /data-node-id="mn" data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([menuOf('auto')], tech)))
+    && !/data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([menuOf('hidden')], tech))));
+  // A scroller that overflows sideways still clips, and says it is the width.
+  const wideDrawer: SceneNode = { id: 'dw', name: 'dw', type: 'drawer', children: [
+    { id: 'dwt', name: 'dwt', type: 'text', content: 'Filters', fontSize: 14 },
+    ...Array.from({ length: 60 }, (_, i) => ({ id: `dwl${i}`, name: `dwl${i}`, type: 'text' as const, content: `Option ${i + 1}`, fontSize: 14 })),
+  ] };
+  const wideRoot = canvasOf([wideDrawer], tech).root;
+  const resolveTech = (r: SceneNode) => resolveVariables(r, tech);
+  const wideBase = await computeLayout(renderToHtml(resolveTech(wideRoot), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const widened: SceneNode = structuredClone(wideRoot);
+  widened.children![0].children![0] = { id: 'dwt', name: 'dwt', type: 'frame', width: 600, minWidth: 600, height: 20 };
+  const wideAfter = await computeLayout(renderToHtml(resolveTech(widened), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const sideways = compareLayouts(wideBase, wideAfter, ['dwt'], 1440).filter((f) => f.nodeId === 'dw' && f.kind === 'clip');
+  check('a drawer that overflows sideways still clips, reported as width', sideways.length === 1 && sideways[0].severity === 'warning' && /\(width \d+px vs box \d+px\)/.test(sideways[0].detail), JSON.stringify(sideways));
 }
 
 // ── Round 1 fixes: neighbours and phones ────────────────────────────────────
