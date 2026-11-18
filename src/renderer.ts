@@ -1732,7 +1732,11 @@ function scrimHtml(node: SceneNode): string {
 }
 
 function renderOverlay(node: SceneNode, rc: RenderCtx): string {
-  const dataAttr = ` data-node-id="${node.id}" data-fs-overlay="${node.type}"`;
+  // A drawer always scrolls its content, a popover or menu when it authors
+  // overflow "auto": marked like any scrolling pane (S4), so stress reads
+  // their vertical overflow as scrolling, not a clip (Phase 31 slice I).
+  const scrolls = node.type === 'drawer' || ((node.type === 'popover' || node.type === 'menu') && node.overflow === 'auto');
+  const dataAttr = ` data-node-id="${node.id}" data-fs-overlay="${node.type}"${scrolls ? ' data-fs-scroll' : ''}`;
   switch (node.type) {
     case 'tooltip': return renderTooltip(node, `${dataAttr} data-fs-primitive role="tooltip"`);
     case 'modal': return renderModal(node, rc, `${dataAttr} data-fs-primitive role="dialog" aria-modal="true"`);

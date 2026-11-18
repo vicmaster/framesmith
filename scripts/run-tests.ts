@@ -38,6 +38,8 @@ const CHROME_ANYWAY = new Set([
   // Drives the MCP server over stdio, and the server renders in Chrome for
   // detailed evaluate, canvas_stress and screenshots.
   'test-ridgeline.ts',
+  // Phase 31's acceptance re-run, the same shape as test-ridgeline.ts.
+  'test-viewer-rebuild.ts',
 ]);
 
 /** Direct use of the browser is the honest signal — these are the entry points

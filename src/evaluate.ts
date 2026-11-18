@@ -1,7 +1,7 @@
 import type { Canvas, SceneNode, DesignVariables, TabItem } from './types.js';
 import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
-import { renderToHtml, resolveInstance } from './renderer.js';
+import { renderToHtml, resolveInstance, type RenderOptions } from './renderer.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import {
   checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkOverlays, checkPrimaryCount, checkRowRhythm, checkTruncation,
@@ -2496,7 +2496,13 @@ function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneN
 
 export async function evaluateCanvas(
   canvas: Canvas,
-  options: { mode: 'fast' | 'detailed' | 'llm'; categories?: string[]; genre?: string; designedStates?: string[] },
+  options: {
+    mode: 'fast' | 'detailed' | 'llm'; categories?: string[]; genre?: string; designedStates?: string[];
+    /** Phase 31 S11 — the fonts the detailed renders use (`prepareRender`'s
+     * options), so detailed layout is measured in the faces the screen shows.
+     * Without it the renders fall back to the system stack. */
+    renderOpts?: RenderOptions;
+  },
 ): Promise<EvaluationResult> {
   // Resolve variables so $tokens become actual values for contrast checks.
   // Tokens flow through workspace → project → canvas inheritance (Phase 9),
@@ -2598,7 +2604,7 @@ export async function evaluateCanvas(
     // On a mobile canvas render the tree the mobile rules read: the same
     // pixels as the canvas render, with every node inside an instance under
     // its own id, so the rects are unambiguous. Web keeps the canvas render.
-    const html = expandedRules ? renderToHtml(mobileRoot, w, h, canvas) : renderToHtml(resolvedRoot, w, h, canvas);
+    const html = renderToHtml(expandedRules ? mobileRoot : resolvedRoot, w, h, canvas, options.renderOpts);
     detailedLayout = await computeLayout(html, undefined, expandedRules ? 25 : 10, { width: w, height: h });
   }
   // Phase 31 slice C — the desktop-app rules' view of the canvas.
@@ -2659,7 +2665,7 @@ export async function evaluateCanvas(
       const targets = pointerTargets(targetEntries, mobile.width);
       let rects: Map<string, LayoutRect> | undefined;
       if (options.mode === 'detailed' && undersizedTargets(targets).length > 0) {
-        const layout = await computeLayout(renderToHtml(mobileRoot, mobile.width, mobile.height, canvas), undefined, 25, { width: mobile.width, height: mobile.height });
+        const layout = await computeLayout(renderToHtml(mobileRoot, mobile.width, mobile.height, canvas, options.renderOpts), undefined, 25, { width: mobile.width, height: mobile.height });
         // computeLayout returns a tree (each rect nests its children).
         rects = new Map();
         const index = (r: LayoutRect) => { rects!.set(r.nodeId, r); r.children?.forEach(index); };
