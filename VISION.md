@@ -575,7 +575,11 @@ Run on its own viewer (2026-11-08), framesmith scored every page's usability 100
 - [ ] Follow-up — a disabled control inside a component instance renders undimmed, because instances render after variable resolution (`resolveInstance`); resolve instance subtrees too, so `disabled` and `state` dim inside components as they do outside
 - [x] Slice H — state checks: focus rings, active indicators, disabled renders and control boundaries checked analytically on every interactive primitive, without being drawn, in each theme; text inside a disabled target is exempt from text contrast on every type
 - [ ] Follow-up — `select` is not in the boundary check, though its `$border` is its only boundary too; and `tree-row` and the contained `tabs` draw no indicator mark when active (a tint and a heavier weight only), so the active-indicator check has nothing to measure on them
-- [ ] Slice I — the acceptance re-run: the viewer's gallery, detail with inspector and archive rebuilt as canvases, with the comment popover and delete-confirm states
+- [x] Slice I — the acceptance re-run: the viewer's gallery, detail with inspector and archive rebuilt as canvases, with the comment popover and delete-confirm states and the empty archive, all six CLEAN in fast and detailed mode in both themes with a CLEAN stress run, and the six baseline defects fixed (`test-viewer-rebuild.ts`); detailed evaluate now lays out in the design system's own fonts, and a drawer or a scrolling popover reads as scrolling under stress
+- [ ] Follow-up — a misspelt `$token` in a non-colour prop (`gap: "$space-xxs"`, which does not exist) resolves to nothing and evaluate says nothing; the slice I rebuild caught one only through its own resolved-tree check. Warn on any `$ref` the merged tokens do not define
+- [ ] Follow-up — `nav-item.count` is not a stress slot, so a sidebar count of "999+" is never exercised; add it (and `tabs.items[].count`) to the big-numbers perturbation
+
+All nine slices are merged and the acceptance re-run passed. The phase is closed.
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-31-SPEC.md`](docs/specs/PHASE-31-SPEC.md). Deliberately out of scope: porting the viewer's code, anchored overlay rendering, keyboard behaviour, narrow-window collapse, the command palette and bulk-selection variants, importer work, and desktop-app rules on web._
 

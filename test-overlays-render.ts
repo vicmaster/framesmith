@@ -195,6 +195,65 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
   }
 }
 
+// ── Slice I (V7): a scrolling popover and a drawer read as scrolling ────────
+// The comment popover of the viewer rebuild has a fixed height and scrolls its
+// body; a drawer always scrolls. Overlays build their own attributes, so they
+// missed S4's data-fs-scroll marker and stress read their growth as a clip.
+{
+  const pop = (overflow: 'auto' | 'hidden'): SceneNode => ({
+    id: 'pop', name: 'pop', type: 'popover', x: 600, y: 100, width: 320, height: 170, overflow, children: [
+      { id: 'pt', name: 'pt', type: 'text', content: 'Comment on dashboard before it ships to the team', fontSize: 14 },
+      { id: 'pi', name: 'pi', type: 'text-input', placeholder: 'Add a comment', rows: 3, width: '100%' },
+    ],
+  });
+  const drawer: SceneNode = { id: 'dr', name: 'dr', type: 'drawer', children: Array.from({ length: 30 }, (_, i) => ({ id: `dl${i}`, name: `dl${i}`, type: 'text' as const, content: `Filter option number ${i + 1}`, fontSize: 14 })) };
+  const warningsOn = async (children: SceneNode[], id: string) => {
+    const root = canvasOf(children, tech).root;
+    const resolve = (r: SceneNode) => resolveVariables(r, tech);
+    const baseline = await computeLayout(renderToHtml(resolve(root), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+    const { root: pert, touched } = applyPerturbation('long-text', root, { type: 'desktop-app' });
+    const after = await computeLayout(renderToHtml(resolve(pert), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+    return compareLayouts(baseline, after, touched, 1440).filter((f) => f.severity === 'warning' && f.nodeId === id);
+  };
+  check('a fixed-height popover with overflow auto scrolls under long-text (no clip)', (await warningsOn([pop('auto')], 'pop')).length === 0);
+  const twin = await warningsOn([pop('hidden')], 'pop');
+  check('twin: the same popover with overflow hidden still clips', twin.some((f) => f.kind === 'clip'), JSON.stringify(twin));
+  check('a drawer scrolls its content under long-text (no clip)', (await warningsOn([drawer], 'dr')).length === 0);
+  check('the drawer and a scrolling popover carry data-fs-scroll; a plain popover and a menu do not',
+    /data-node-id="dr" data-fs-overlay="drawer" data-fs-scroll/.test(htmlOf(canvasOf([drawer], tech)))
+    && /data-node-id="pop" data-fs-overlay="popover" data-fs-scroll/.test(htmlOf(canvasOf([pop('auto')], tech)))
+    && !/data-fs-overlay="popover" data-fs-scroll/.test(htmlOf(canvasOf([pop('hidden')], tech)))
+    && !/data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([{ id: 'mn', name: 'mn', type: 'menu', x: 10, y: 10, children: [] }], tech))));
+  const menuOf = (overflow: 'auto' | 'hidden'): SceneNode => ({ id: 'mn', name: 'mn', type: 'menu', x: 10, y: 10, height: 120, overflow, children: [] });
+  check('a menu with overflow auto carries data-fs-scroll; one with overflow hidden does not',
+    /data-node-id="mn" data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([menuOf('auto')], tech)))
+    && !/data-fs-overlay="menu" data-fs-scroll/.test(htmlOf(canvasOf([menuOf('hidden')], tech))));
+  // A scroller that overflows sideways still clips, and says it is the width.
+  const wideDrawer: SceneNode = { id: 'dw', name: 'dw', type: 'drawer', children: [
+    { id: 'dwt', name: 'dwt', type: 'text', content: 'Filters', fontSize: 14 },
+    ...Array.from({ length: 60 }, (_, i) => ({ id: `dwl${i}`, name: `dwl${i}`, type: 'text' as const, content: `Option ${i + 1}`, fontSize: 14 })),
+  ] };
+  const wideRoot = canvasOf([wideDrawer], tech).root;
+  const resolveTech = (r: SceneNode) => resolveVariables(r, tech);
+  const wideBase = await computeLayout(renderToHtml(resolveTech(wideRoot), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const widened: SceneNode = structuredClone(wideRoot);
+  widened.children![0].children![0] = { id: 'dwt', name: 'dwt', type: 'frame', width: 600, minWidth: 600, height: 20 };
+  const wideAfter = await computeLayout(renderToHtml(resolveTech(widened), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const sideways = compareLayouts(wideBase, wideAfter, ['dwt'], 1440).filter((f) => f.nodeId === 'dw' && f.kind === 'clip');
+  // A scrolling root that also overflows sideways: its vertical overflow is
+  // scrolling, so the width clip is a warning, not the "page grows taller"
+  // info its height used to earn it.
+  const rootOf = (wide: number): SceneNode => canvasOf([
+    { id: 'wide', name: 'wide', type: 'frame', width: wide, minWidth: wide, height: 20 },
+    ...Array.from({ length: 60 }, (_, i) => ({ id: `rl${i}`, name: `rl${i}`, type: 'text' as const, content: `Row ${i + 1}`, fontSize: 14 })),
+  ], tech, { overflow: 'auto' }).root;
+  const rootBase = await computeLayout(renderToHtml(resolveTech(rootOf(1000)), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const rootAfter = await computeLayout(renderToHtml(resolveTech(rootOf(2000)), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const rootClip = compareLayouts(rootBase, rootAfter, ['wide'], 1440).filter((f) => f.nodeId === 'document' && f.kind === 'clip');
+  check('a scrolling root that overflows sideways is a width warning', rootClip.length === 1 && rootClip[0].severity === 'warning' && /\(width \d+px vs box \d+px\)/.test(rootClip[0].detail), JSON.stringify(rootClip));
+  check('a drawer that overflows sideways still clips, reported as width', sideways.length === 1 && sideways[0].severity === 'warning' && /\(width \d+px vs box \d+px\)/.test(sideways[0].detail), JSON.stringify(sideways));
+}
+
 // ── Round 1 fixes: neighbours and phones ────────────────────────────────────
 {
   // A modal's box is never a 24px-circle neighbour (its scrim covers what is outside).

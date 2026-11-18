@@ -317,7 +317,8 @@ export function compareLayouts(
     if (clips(r) && !(b && clips(b as FlatRect))) {
       // Report the axis that actually overflows (vertical clip on a fixed-
       // height box is the common wrap case).
-      const vertical = r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1;
+      // A scroller's vertical overflow is scrolling, so its clip is the width.
+      const vertical = !r.scrolls && r.scrollHeight !== undefined && r.clientHeight !== undefined && r.scrollHeight > r.clientHeight + 1;
       const scroll = vertical ? r.scrollHeight : r.scrollWidth;
       const box = vertical ? r.clientHeight : r.clientWidth;
       // The page outgrowing its fixed artboard vertically is scrolling, not
