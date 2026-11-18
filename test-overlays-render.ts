@@ -240,6 +240,17 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
   widened.children![0].children![0] = { id: 'dwt', name: 'dwt', type: 'frame', width: 600, minWidth: 600, height: 20 };
   const wideAfter = await computeLayout(renderToHtml(resolveTech(widened), 1440, 900), undefined, 25, { width: 1440, height: 900 });
   const sideways = compareLayouts(wideBase, wideAfter, ['dwt'], 1440).filter((f) => f.nodeId === 'dw' && f.kind === 'clip');
+  // A scrolling root that also overflows sideways: its vertical overflow is
+  // scrolling, so the width clip is a warning, not the "page grows taller"
+  // info its height used to earn it.
+  const rootOf = (wide: number): SceneNode => canvasOf([
+    { id: 'wide', name: 'wide', type: 'frame', width: wide, minWidth: wide, height: 20 },
+    ...Array.from({ length: 60 }, (_, i) => ({ id: `rl${i}`, name: `rl${i}`, type: 'text' as const, content: `Row ${i + 1}`, fontSize: 14 })),
+  ], tech, { overflow: 'auto' }).root;
+  const rootBase = await computeLayout(renderToHtml(resolveTech(rootOf(1000)), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const rootAfter = await computeLayout(renderToHtml(resolveTech(rootOf(2000)), 1440, 900), undefined, 25, { width: 1440, height: 900 });
+  const rootClip = compareLayouts(rootBase, rootAfter, ['wide'], 1440).filter((f) => f.nodeId === 'document' && f.kind === 'clip');
+  check('a scrolling root that overflows sideways is a width warning', rootClip.length === 1 && rootClip[0].severity === 'warning' && /\(width \d+px vs box \d+px\)/.test(rootClip[0].detail), JSON.stringify(rootClip));
   check('a drawer that overflows sideways still clips, reported as width', sideways.length === 1 && sideways[0].severity === 'warning' && /\(width \d+px vs box \d+px\)/.test(sideways[0].detail), JSON.stringify(sideways));
 }
 
