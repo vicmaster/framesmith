@@ -2505,14 +2505,13 @@ export async function evaluateCanvas(
   const rules = composeRulesets(activeRulesets({ type: declared.type, genre: resolvedGenre.genre, preset }));
   const surface: SurfaceReport = { ...declared, rulesOn: rules.on, rulesOff: rules.off, conflicts: rules.conflicts };
   const ruleOn = new Set(rules.on);
-  const mobileRoot = resolvedRoot;
   const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
   // Phase 31 slice C — the desktop-app rules read the expanded tree too, and
   // in detailed mode the rects of that tree.
   const desktopTypeRules = DESKTOP_APP_RULES.some((id) => ruleOn.has(id));
   const expandedRules = mobileTypeRules || desktopTypeRules;
   const mobile: MobileContext = {
-    root: mobileRoot,
+    root: resolvedRoot,
     profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
     width: typeof resolvedRoot.width === 'number' ? resolvedRoot.width : 1440,
     height: typeof resolvedRoot.height === 'number' ? resolvedRoot.height : 900,
@@ -2571,7 +2570,7 @@ export async function evaluateCanvas(
     // the tree the renderer draws, in each theme.
     const stateOn = (id: string) => ruleOn.has(id);
     const states = Object.values(STATE_RULES).some(stateOn)
-      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(darkRoot, stateOn, 'dark') : [])
+      ? stateFindings(checkStates(resolvedRoot, stateOn), darkRoot ? checkStates(darkRoot, stateOn, 'dark') : [])
       : [];
     results.set('color', withRuleIssues(color, states));
   }
@@ -2597,11 +2596,11 @@ export async function evaluateCanvas(
     const index = (r: LayoutRect) => { rects.set(r.nodeId, r); r.children?.forEach(index); };
     detailedLayout?.forEach(index);
     desktop = {
-      root: mobileRoot,
+      root: resolvedRoot,
       profile: windowProfile(declared.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW],
       ...(detailedLayout ? { rects } : {}),
     };
-    desktopTables = new Set(extractInventory(mobileRoot).tables.map((t) => t.nodeId));
+    desktopTables = new Set(extractInventory(resolvedRoot).tables.map((t) => t.nodeId));
   }
   if (activeCategories.includes('typography')) {
     const typography = checkTypography(entries, mergedTokens, {
@@ -2620,7 +2619,7 @@ export async function evaluateCanvas(
   if (activeCategories.includes('structure')) {
     results.set('structure', withRuleIssues(checkStructure(storedEntries, canvas), [
       ...(ruleOn.has('mobile-artboard') ? checkArtboard(mobile, declared) : []),
-      ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(mobileRoot, declared) : []),
+      ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(resolvedRoot, declared) : []),
       ...(desktop && ruleOn.has('desktop-app-primary-count') ? checkPrimaryCount(desktop) : []),
     ]));
   }
@@ -2643,7 +2642,7 @@ export async function evaluateCanvas(
       const targets = pointerTargets(targetEntries, mobile.width);
       let rects: Map<string, LayoutRect> | undefined;
       if (options.mode === 'detailed' && undersizedTargets(targets).length > 0) {
-        const layout = await computeLayout(renderToHtml(mobileRoot, mobile.width, mobile.height, canvas, options.renderOpts), undefined, 25, { width: mobile.width, height: mobile.height });
+        const layout = await computeLayout(renderToHtml(resolvedRoot, mobile.width, mobile.height, canvas, options.renderOpts), undefined, 25, { width: mobile.width, height: mobile.height });
         // computeLayout returns a tree (each rect nests its children).
         rects = new Map();
         const index = (r: LayoutRect) => { rects!.set(r.nodeId, r); r.children?.forEach(index); };
