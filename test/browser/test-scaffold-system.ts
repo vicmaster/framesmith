@@ -25,7 +25,7 @@ import { createCanvas, getCanvas } from '../../src/scene-graph.js';
 import { generateDesignSystem } from '../../src/design-language.js';
 import { setVariables, resolveVariables, getVariables } from '../../src/variables.js';
 import { renderToHtml } from '../../src/renderer.js';
-import { expandInstances } from '../../src/drift.js';
+import { expandTree } from '../../src/expand.js';
 import { computeLayout, takeScreenshot, shutdown } from '../../src/screenshot.js';
 import { applyPerturbation, compareLayouts, PERTURBATION_NAMES, type PerturbationName } from '../../src/stress.js';
 import type { Canvas, SceneNode } from '../../src/types.js';
@@ -104,7 +104,7 @@ for (const { name, kind, surface } of structures) {
   const w = typeof cv.root.width === 'number' ? cv.root.width : 1440;
   const h = typeof cv.root.height === 'number' ? cv.root.height : 900;
   const merged = getVariables(cv);
-  const base = expandInstances(cv.root, cv);
+  const base = expandTree(cv.root, cv).root;
   const baseline = await computeLayout(
     renderToHtml(resolveVariables(structuredClone(base), merged), w, h, cv), undefined, 25, { width: w, height: h });
 

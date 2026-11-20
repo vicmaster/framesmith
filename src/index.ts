@@ -24,7 +24,8 @@ import { listStructures, applyStructure, computeDiversificationHint } from './st
 import { parseDesignMd } from './design-md-parser.js';
 import { listFeedback, resolveFeedback, openFeedbackCount, appendFeedbackDirective } from './feedback.js';
 import { importHtml, importUrl, renderImportedTree, snapToTokens, summarizeImportReport } from './import.js';
-import { computeStructuralDrift, expandInstances } from './drift.js';
+import { computeStructuralDrift } from './drift.js';
+import { expandTree } from './expand.js';
 import { applyPerturbation, compareLayouts, lastStressRun, PERTURBATION_NAMES, recordStressRun, type PerturbationName } from './stress.js';
 import { buildEvaluateDirective } from './directive.js';
 import { generateTypeScale, generateSpaceScale, resolveRatio, type RatioName } from './scales.js';
@@ -815,7 +816,8 @@ The shared-app-shell workflow: build the shell once, create_component it, then c
  * the fallback stack + a warning, never a render failure). */
 async function prepareRender(canvas: Canvas, theme?: 'light' | 'dark'): Promise<{ resolved: SceneNode; renderOpts: RenderOptions; fontWarnings: string[] }> {
   const merged = getCanvasTokens(canvas);
-  const resolved = resolveVariables(canvas.root, merged, { theme });
+  // Phase 32 slice B — instances expanded, then resolved: one tree.
+  const resolved = expandTree(canvas.root, canvas, merged, { theme }).root;
   const { extraFonts, warnings } = await ensureFontsForRender(resolved, canvas, merged);
   return { resolved, renderOpts: { extraFonts, bodyFontFamily: bodyFontFamilyFromTokens(merged) }, fontWarnings: warnings };
 }
@@ -1905,7 +1907,7 @@ Run this when PICKING UP a canvas that describes a shipped view — designing on
 
       const imported = await importUrl(url, { viewport: { width: w, height: h }, selector, waitFor, auth });
       // Instance-expanded so stamped components (app shells) are inventoried.
-      const drift = computeStructuralDrift(expandInstances(canvas.root, canvas), imported.root);
+      const drift = computeStructuralDrift(expandTree(canvas.root, canvas).root, imported.root);
 
       const blocking = drift.findings.filter((f) => f.severity !== 'info').length;
       return {
@@ -2321,7 +2323,7 @@ Finding kinds: clip (content cut off — INFO when a designed text-overflow elli
       const { renderOpts, fontWarnings } = await prepareRender(canvas);
       // Instance-expanded so stamped components stress like everything else;
       // the expanded tree is the base for BOTH sides so node ids align.
-      const expandedBase = expandInstances(canvas.root, canvas);
+      const expandedBase = expandTree(canvas.root, canvas).root;
       const { type } = resolveSurface(canvas);
       const baselineHtml = renderToHtml(resolveVariables(structuredClone(expandedBase), merged), w, h, canvas, renderOpts);
       const baselineLayout = await computeLayout(baselineHtml, undefined, 25, { width: w, height: h });

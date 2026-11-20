@@ -111,7 +111,8 @@ expect('material:a/b rejected', getIconSvg('material:a/b') === null);
     { id: 'i2', type: 'instance', componentId: 'btn' },
   ], components);
   expect('component icon reported once', issues.length === 1, JSON.stringify(issues));
-  expect('message points at the component definition', !!issues[0]?.message.includes('component definition'));
+  expect('message points at the component', !!issues[0]?.message.includes('of component "Btn": fix it in the component'), issues[0]?.message);
+  expect('…reported on the first instance, naming the inner node', issues[0]?.nodeId === 'i1' && issues[0]?.innerNodeId === 'i1/btn-icon', JSON.stringify(issues[0]));
   expect('no fix op for an id outside the canvas tree', !issues[0]?.fix);
 }
 
