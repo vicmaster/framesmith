@@ -23,7 +23,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Canvas, DesignVariables, FontFace, SceneNode } from './types.js';
 
-// Same env contract as scene-graph.ts/workspaces.ts so test-env.ts redirects
+// Same env contract as scene-graph.ts/workspaces.ts so test/env.ts redirects
 // the font cache along with everything else.
 function fontsDir(): string {
   const home = process.env.FRAMESMITH_HOME ?? process.env.CANVAS_MCP_HOME ?? join(homedir(), '.framesmith');

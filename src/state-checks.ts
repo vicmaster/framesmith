@@ -2,7 +2,7 @@
 // checked without being drawn. The model computes, from the resolved tree with
 // instances expanded, the colours the renderer draws for a target's focus
 // ring, active indicator, disabled content and boundary (slice G P4, S9, S10,
-// Q6); the four rules judge them, and test-state-model-render.ts holds the
+// Q6); the four rules judge them, and test/browser/test-state-model-render.ts holds the
 // model to the pixels of a real render so the two cannot drift apart.
 
 import type { EvaluationIssue } from './evaluate.js';

@@ -2,70 +2,65 @@
 //
 // Every test in this repo is a plain script: it prints PASS/FAIL lines and
 // exits 0 or 1. That convention works and this runner does not change it — it
-// just discovers the scripts, runs them, and reports. Before it existed the 102
+// just discovers the scripts, runs them, and reports. Before it existed the
 // test files could only be run one at a time by hand, which is how two of them
 // came to be failing at the v2.0.0 tag without anyone noticing.
 //
-// Tiers exist so the common case is fast. Roughly a third of the suite drives a
-// real browser; those tests are worth having but they should not stand between
-// you and finding out that a pure-logic change broke something.
+// The folder a test lives in sets its tier:
 //
-//   npm run test:fast   — everything that needs nothing but Node
-//   npm run test:full   — the above plus the browser tests
+//   test/unit     Node only. Run with Chrome made unlaunchable, so a unit test
+//                 that reaches for a browser fails instead of passing quietly.
+//   test/browser  launches Chrome
+//   test/e2e      spawns the MCP server or the CLI
+//   test/manual   needs a human or a running viewer; never run here
+//
+//   npm run test:fast   — test/unit
+//   npm run test:full   — test/unit, test/browser and test/e2e
 //   npm test            — test:fast
 //
-// Pass names or substrings to run a subset: `npx tsx scripts/run-tests.ts cliche`
-import { readdirSync, readFileSync } from 'node:fs';
+// Pass substrings of a test's path to run a subset: `npx tsx scripts/run-tests.ts cliche`
+// or `unit/` for a folder. `--root <dir>` reads the folders from another directory
+// (the runner's own tests use it).
+import { existsSync, readdirSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawn, type ChildProcess } from 'node:child_process';
 
-/** Tests that never terminate on their own and are not batch-runnable. */
-const INTERACTIVE = new Set([
-  // Starts a viewer server and waits for a human to look at it. Running it
-  // here would hang the suite forever, and it also collides with a live viewer
-  // on the same port.
-  'test-viewer.ts',
-  // Expects a viewer already serving on a port passed as argv (its header says
-  // `npx tsx test-viewer-navbar.ts <port>`) and writes screenshots for a human
-  // to look at. Nothing here can supply that, so it stays a manual check.
-  'test-viewer-navbar.ts',
-]);
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Tests that need a browser but don't say so in their imports. */
-const CHROME_ANYWAY = new Set([
-  // Shells out to the CLI, whose check-drift path launches Chrome. Nothing in
-  // this file's own imports reveals that.
-  'test-cli.ts',
-  // Drives the MCP server over stdio, and the server renders in Chrome for
-  // detailed evaluate, canvas_stress and screenshots.
-  'test-ridgeline.ts',
-  // Phase 31's acceptance re-run, the same shape as test-ridgeline.ts.
-  'test-viewer-rebuild.ts',
-  // Drives canvas_evaluate's detailed mode over MCP (S11's font path).
-  'test-evaluate-fonts.ts',
-]);
-
-/** Direct use of the browser is the honest signal — these are the entry points
- * in screenshot.ts that every browser-driven test reaches for. */
-const CHROME_MARKERS = /takeScreenshot|computeLayout|withPage|withIsolatedPage|puppeteer|from '\.\/src\/screenshot\.js'/;
-
-// FRAMESMITH_TEST_TIMEOUT_MS overrides it (test-runner-timeout.ts uses 3s).
+// FRAMESMITH_TEST_TIMEOUT_MS overrides it (test/unit/test-runner-timeout.ts uses 3s).
 const TIMEOUT_MS = Number(process.env.FRAMESMITH_TEST_TIMEOUT_MS) || 180_000;
 
+/** A Chrome path that does not exist. A unit test that launches Chrome, through
+ * src/screenshot.ts or puppeteer.launch directly, fails on it. */
+const NO_CHROME = join(REPO, 'no-chrome-in-unit-tests');
+
+/** What a failed launch prints: src/screenshot.ts's message, then Puppeteer's own. */
+const LAUNCH_FAILURE = /Failed to launch Chrome for rendering|Tried to find the browser at the configured path/;
+
 type Tier = 'fast' | 'full';
-const tier: Tier = process.argv.includes('--full') ? 'full' : 'fast';
-const filters = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const TIER_FOLDERS: Record<Tier, string[]> = { fast: ['unit'], full: ['unit', 'browser', 'e2e'] };
 
-const needsChrome = (file: string): boolean =>
-  CHROME_ANYWAY.has(file) || CHROME_MARKERS.test(readFileSync(file, 'utf-8'));
+const args = process.argv.slice(2);
+const rootAt = args.indexOf('--root');
+const root = rootAt >= 0 ? resolve(args[rootAt + 1]) : join(REPO, 'test');
+if (rootAt >= 0) args.splice(rootAt, 2);
+const tier: Tier = args.includes('--full') ? 'full' : 'fast';
+const filters = args.filter((a) => !a.startsWith('--'));
 
-const all = readdirSync('.')
-  .filter((f) => f.startsWith('test-') && f.endsWith('.ts') && f !== 'test-env.ts')
-  .filter((f) => !INTERACTIVE.has(f))
-  .sort();
+// Tests read paths relative to the repo root (`resolve('src/index.ts')`).
+process.chdir(REPO);
 
-const selected = all
-  .filter((f) => tier === 'full' || !needsChrome(f))
-  .filter((f) => filters.length === 0 || filters.some((q) => f.includes(q)));
+/** Test paths under the root, as `<folder>/<file>`. */
+const discover = (folder: string): string[] => {
+  const dir = join(root, folder);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((f) => f.endsWith('.ts')).sort().map((f) => `${folder}/${f}`);
+};
+
+const selected = TIER_FOLDERS[tier]
+  .flatMap(discover)
+  .filter((t) => filters.length === 0 || filters.some((q) => t.includes(q)));
 
 /** The test running now. Its own process group doesn't get the terminal's
  * Ctrl-C, so the runner passes an interrupt on before exiting. */
@@ -77,13 +72,19 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   });
 }
 
-function run(file: string): Promise<{ file: string; ok: boolean; why: string; ms: number }> {
-  return new Promise((resolve) => {
+type Result = { test: string; ok: boolean; why: string; ms: number };
+
+function run(test: string): Promise<Result> {
+  const unit = test.startsWith('unit/');
+  const env = unit
+    ? { ...process.env, FRAMESMITH_CHROME_PATH: NO_CHROME, PUPPETEER_EXECUTABLE_PATH: NO_CHROME }
+    : process.env;
+  return new Promise((done) => {
     const started = Date.now();
     // Its own process group, so a timeout kills npx AND the tsx under it.
     // Killing npx alone orphaned tsx, which kept the pipes open, and 'close'
     // never fired: one hung test stalled the whole run.
-    const child = spawn('npx', ['tsx', file], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    const child = spawn('npx', ['tsx', join(root, test)], { stdio: ['ignore', 'pipe', 'pipe'], detached: true, env });
     current = child;
     let out = '';
     child.stdout.on('data', (d) => { out += d; });
@@ -92,33 +93,36 @@ function run(file: string): Promise<{ file: string; ok: boolean; why: string; ms
     child.on('close', (code, signal) => {
       clearTimeout(timer);
       const ms = Date.now() - started;
-      if (signal === 'SIGKILL') return resolve({ file, ok: false, why: `timed out after ${TIMEOUT_MS / 1000}s`, ms });
-      if (code === 0) return resolve({ file, ok: true, why: '', ms });
+      if (signal === 'SIGKILL') return done({ test, ok: false, why: `timed out after ${TIMEOUT_MS / 1000}s`, ms });
+      if (code === 0) return done({ test, ok: true, why: '', ms });
+
       const first = out.split('\n').filter((l) => /^FAIL|Error|error TS/.test(l))[0] ?? `exit ${code}`;
-      resolve({ file, ok: false, why: first.trim().slice(0, 160), ms });
+      const launched = unit && LAUNCH_FAILURE.test(out)
+        ? '\n        this test launches Chrome: move it to test/browser'
+        : '';
+      done({ test, ok: false, why: first.trim().slice(0, 160) + launched, ms });
     });
   });
 }
 
 console.log(`${selected.length} tests (${tier} tier)${filters.length ? ` matching ${filters.join(', ')}` : ''}\n`);
 
-const failures: { file: string; why: string }[] = [];
+const failures: Result[] = [];
 let passed = 0;
-for (const file of selected) {
-  const r = await run(file);
-  if (r.ok) { passed++; console.log(`  ok    ${file}  ${(r.ms / 1000).toFixed(1)}s`); }
-  else { failures.push(r); console.log(`  FAIL  ${file}  ${r.why}`); }
+for (const test of selected) {
+  const r = await run(test);
+  if (r.ok) { passed++; console.log(`  ok    ${test}  ${(r.ms / 1000).toFixed(1)}s`); }
+  else { failures.push(r); console.log(`  FAIL  ${test}  ${r.why}`); }
 }
 
 console.log(`\n${passed}/${selected.length} passed`);
 if (tier === 'fast') {
-  const skipped = all.filter(needsChrome).length;
-  console.log(`${skipped} browser tests not run in this tier — use npm run test:full`);
+  const skipped = discover('browser').length + discover('e2e').length;
+  if (skipped) console.log(`${skipped} browser and e2e tests not run in this tier — use npm run test:full`);
 }
-if (INTERACTIVE.size) console.log(`${[...INTERACTIVE].join(', ')} excluded (interactive)`);
 
 if (failures.length) {
   console.log(`\n${failures.length} failing:`);
-  for (const f of failures) console.log(`  ${f.file}  ${f.why}`);
+  for (const f of failures) console.log(`  ${f.test}  ${f.why}`);
   process.exit(1);
 }

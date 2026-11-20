@@ -2,7 +2,7 @@
 // perceptual ramps, a matched neutral, status colors, and a dual-theme
 // semantic mapping. Hand-rolled conversions (Björn Ottosson's OKLab math,
 // zero dependencies — validated against Chrome's own oklch() parsing in
-// test-color-system-readback.ts). Pure: token WRITING is the tool's job.
+// test/browser/test-color-system-readback.ts). Pure: token WRITING is the tool's job.
 //
 // Gamut policy (spec ANALYZE): out-of-gamut colors clip toward LOWER CHROMA
 // at fixed lightness and hue — never hue-shift, never lightness-shift.
