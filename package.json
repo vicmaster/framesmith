@@ -24,7 +24,8 @@
     "bench": "tsx benchmark/run.ts",
     "test": "npm run test:fast",
     "test:fast": "tsx scripts/run-tests.ts",
-    "test:full": "tsx scripts/run-tests.ts --full"
+    "test:full": "tsx scripts/run-tests.ts --full",
+    "typecheck:tests": "tsc -p tsconfig.test.json"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.96.0",

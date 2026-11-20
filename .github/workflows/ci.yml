@@ -2,8 +2,9 @@
 #
 # Two jobs, split by cost. Roughly a third of the suite drives a real browser,
 # and downloading Chrome dominates that job's runtime — so the Node-only tests
-# run on their own and report in a couple of minutes, which is the feedback
-# that matters for almost every change. See docs/specs/CI-SPEC.md.
+# (test/unit) run on their own and report in a couple of minutes, which is the
+# feedback that matters for almost every change. test/browser and test/e2e run
+# in the browser job. See docs/specs/CI-SPEC.md.
 #
 # No secrets are needed. The tests that would use an LLM API key skip when one
 # is absent, so this stays useful on pull requests from forks.
@@ -43,6 +44,8 @@ jobs:
       # `tsc` with noEmit off is the type check — it is the same compile the
       # published package depends on, so a separate lint step would be noise.
       - run: npm run build
+      # tsx runs the tests without checking their types; this does.
+      - run: npm run typecheck:tests
       - run: npm run test:fast
 
   browser:

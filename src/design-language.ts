@@ -9,7 +9,7 @@
 //
 // Personalities are CURATED, not computed (the pattern-library philosophy:
 // taste is hand-built, gates verify it). Every choice below is a reviewed
-// design decision with its intent stated; test-design-language.ts locks every
+// design decision with its intent stated; test/unit/test-design-language.ts locks every
 // personality's output against the evaluator and the cliché tells.
 
 import { generateColorSystem } from './color-system.js';

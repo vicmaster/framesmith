@@ -1,0 +1,250 @@
+// T2a runtime smoke test: registry behavior + structure invariants.
+// Run: npx tsx test/unit/test-structures.ts
+import '../env.js';
+import { listStructures, getStructure, registerStructure, resolveStructure, applyStructure } from '../../src/structures.js';
+import { createCanvas, setCanvasType } from '../../src/scene-graph.js';
+import type { SceneNode, Structure } from '../../src/types.js';
+
+let failures = 0;
+const check = (cond: boolean, msg: string, detail?: string) => {
+  if (cond) { console.log(`  ✓ ${msg}`); } else { console.error(`  ✗ ${msg}${detail ? ` — ${detail}` : ''}`); failures++; };
+};
+
+const AXES = {
+  heroTreatment: ['none', 'marquee', 'split', 'stat-led', 'editorial'],
+  density: ['airy', 'balanced', 'dense'],
+  rhythm: ['uniform', 'alternating', 'asymmetric'],
+  alignment: ['centered', 'left', 'split'],
+} as const;
+
+// Only these fields may carry a `$token` ref; everything else must be literal
+// (the A-P4 theming split — geometry stays crash-safe on unthemed canvases).
+const COLOR_FIELDS = new Set(['fill', 'color', 'stroke', 'iconColor']);
+// Phase 27 slice B — density/depth/type live on tokens too. These fields may
+// carry $refs ('$space-*', '$radius-*', '$elevation.*', '$title'); anything
+// else stringly-$ is still a violation.
+const TOKEN_FIELDS = new Set(['gap', 'rowGap', 'padding', 'cornerRadius', 'shadow', 'fontSize']);
+
+function walk(node: SceneNode, visit: (n: SceneNode) => void): void {
+  visit(node);
+  node.children?.forEach((c) => walk(c, visit));
+}
+
+// Count-independent: the live catalogue is the source of truth (the roster
+// grew far past the Phase 11 six this file used to hard-code).
+const PAGES = listStructures().filter((s) => s.kind === 'page').map((s) => s.name);
+const NAMES = PAGES;
+
+console.log('listStructures()');
+const list = listStructures();
+check(list.length >= 12, `catalogue holds pages + components (got ${list.length})`);
+check(PAGES.length >= 6, `at least the original six page structures (got ${PAGES.length})`);
+check(list.filter((s) => s.kind === 'page').every((s) => !!s.name && !!s.description && !!s.axes), 'each page entry has name + description + axes');
+
+console.log('getStructure()');
+for (const name of NAMES) check(!!getStructure(name), `resolves '${name}'`);
+check(getStructure('does-not-exist') === undefined, 'unknown name → undefined');
+
+console.log('taxonomy — every structure tagged on all 4 axes with valid values');
+for (const name of NAMES) {
+  const s = getStructure(name)!;
+  for (const axis of Object.keys(AXES) as (keyof typeof AXES)[]) {
+    const v = s.axes?.[axis];
+    check(v !== undefined && (AXES[axis] as readonly string[]).includes(v), `${name}.${axis} = '${v}' is valid`);
+  }
+}
+
+console.log('structure has placeholder nodes');
+for (const name of NAMES) {
+  const s = getStructure(name)!;
+  check(Array.isArray(s.nodes) && s.nodes.length > 0, `${name} has nodes`);
+}
+
+console.log('theming split — $tokens only in color or token-bearing fields (A-P4 + Phase 27B)');
+for (const name of NAMES) {
+  const s = getStructure(name)!;
+  const violations: string[] = [];
+  s.nodes.forEach((root) => walk(root, (n) => {
+    for (const [k, val] of Object.entries(n)) {
+      const holds = (v: unknown): boolean => typeof v === 'string' && v.startsWith('$');
+      if ((holds(val) || (Array.isArray(val) && val.some(holds))) && !COLOR_FIELDS.has(k) && !TOKEN_FIELDS.has(k)) {
+        violations.push(`${n.id}.${k}=${JSON.stringify(val)}`);
+      }
+    }
+  }));
+  check(violations.length === 0, `${name} keeps $tokens in sanctioned fields${violations.length ? ` (offenders: ${violations.join(', ')})` : ''}`);
+}
+
+console.log('all node ids are unique within a structure');
+for (const name of NAMES) {
+  const s = getStructure(name)!;
+  const ids: string[] = [];
+  s.nodes.forEach((root) => walk(root, (n) => ids.push(n.id)));
+  check(new Set(ids).size === ids.length, `${name} has ${ids.length} unique ids`);
+}
+
+console.log('registerStructure() adds a new entry');
+const stub: Structure = {
+  name: 'test-stub', description: 'temp', axes: { heroTreatment: 'none', density: 'balanced', rhythm: 'uniform', alignment: 'left' }, nodes: [{ id: 't', type: 'frame' }],
+};
+registerStructure(stub);
+check(getStructure('test-stub')?.description === 'temp', 'registered stub is retrievable');
+check(listStructures().length === list.length + 1, `list grows by one after registration`);
+
+// ── Phase 30 slice E — anatomy and realisation ─────────────────────────────
+const throws = (fn: () => unknown, pattern: RegExp): boolean => {
+  try { fn(); return false; } catch (e) { return pattern.test((e as Error).message); }
+};
+const page = (name: string, extra: Partial<Structure> = {}): Structure => ({
+  name, description: 'temp', axes: stub.axes, nodes: [{ id: `${name}-n`, type: 'frame' }], ...extra,
+});
+
+console.log('anatomy and surface — defaults and the six mobile realisations');
+const all = listStructures();
+const byName = new Map(all.map((s) => [s.name, s]));
+check(byName.get('pricing')?.anatomy === 'pricing' && byName.get('pricing')?.surface === 'web', 'an unmarked structure defaults to anatomy = name, surface web');
+for (const anatomy of ['dashboard', 'settings', 'auth', 'onboarding', 'feed', 'detail']) {
+  const s = getStructure(`${anatomy}-mobile`)!;
+  const nodes = s?.nodes ?? [];
+  check(s?.anatomy === anatomy && s?.surface === 'mobile' && s?.kind === undefined, `${anatomy}-mobile realises ${anatomy} on mobile as a page`);
+  const last = nodes[nodes.length - 1]?.type;
+  check(nodes[0]?.type === 'status-bar' && (last === 'home-indicator' || last === 'tab-bar'), `${anatomy}-mobile starts with status-bar, ends with home-indicator or tab-bar (${last})`);
+}
+check(JSON.stringify(byName.get('dashboard')?.surfaces) === '["web","mobile","desktop-app"]', 'dashboard is realised on web, mobile and desktop-app');
+check(JSON.stringify(byName.get('feed-mobile')?.surfaces) === '["mobile"]', 'feed is realised on mobile only');
+check(JSON.stringify(byName.get('empty-state')?.surfaces) === '["web","mobile","desktop-app"]' && byName.get('empty-state')?.surface === 'any', 'an any component counts for every type');
+
+const ANY = ['form-field', 'stat-card', 'empty-state', 'skeleton-card', 'skeleton-stat-card', 'kpi-card', 'status-chip', 'initials-avatar'];
+check(JSON.stringify(all.filter((s) => s.surface === 'any').map((s) => s.name).sort()) === JSON.stringify([...ANY].sort()), 'exactly the eight documented components stamp on every type');
+const nodeOf = (structure: string, id: string): SceneNode | undefined => {
+  let hit: SceneNode | undefined;
+  getStructure(structure)!.nodes.forEach((root) => walk(root, (n) => { if (n.id === id) hit = n; }));
+  return hit;
+};
+check(nodeOf('detail-mobile', 'dtm-bar')?.position === 'fixed' && nodeOf('detail-mobile', 'dtm-bar')?.bottom === 0, 'detail-mobile pins its action bar to the bottom');
+check(nodeOf('auth-mobile', 'amb-content')?.justifyContent === 'space-between' && nodeOf('auth-mobile', 'amb-content')?.height === '100%', 'auth-mobile holds its actions at the bottom of the screen');
+check(nodeOf('empty-state', 'es-cta')?.type === 'button', 'empty-state\'s action is a button primitive');
+
+console.log('listStructures({ type }) filters by the surface that covers the type');
+const mobileList = listStructures({ type: 'mobile' }).map((s) => s.name);
+const webList = listStructures({ type: 'web' }).map((s) => s.name);
+const appList = listStructures({ type: 'desktop-app' }).map((s) => s.name);
+check(mobileList.includes('dashboard-mobile') && !mobileList.includes('dashboard') && !mobileList.includes('data-table'), 'mobile listing: realisations, no web-only structures');
+check(mobileList.includes('empty-state') && webList.includes('empty-state'), 'an any component is listed for both');
+check(webList.includes('dashboard') && !webList.includes('dashboard-mobile'), 'web listing: no mobile realisations');
+check(all.length === new Set([...mobileList, ...webList, ...appList]).size, 'every structure is listed for some type');
+
+console.log('resolveStructure — every branch');
+check(resolveStructure('dashboard', 'mobile').name === 'dashboard-mobile', 'anatomy name → the mobile realisation on mobile');
+check(resolveStructure('dashboard', 'web').name === 'dashboard', 'anatomy name → the web realisation on web');
+check(resolveStructure('empty-state', 'mobile').name === 'empty-state', 'an any component resolves on mobile');
+check(throws(() => resolveStructure('pricing', 'mobile'), /^"pricing" has no mobile realisation\. Page anatomies with a mobile realisation: dashboard, settings, auth, onboarding, feed, detail\. Pass realisation: "web"/), 'pricing on mobile refuses, naming the mobile page anatomies and realisation: "web"');
+check(throws(() => resolveStructure('feed', 'web'), /"feed" has no web realisation\..*Pass realisation: "mobile"/), 'feed on web refuses and names realisation: "mobile"');
+check(throws(() => resolveStructure('data-table', 'mobile'), /Component anatomies with a mobile realisation: .*empty-state/), 'a web-only component on mobile refuses, listing component anatomies');
+check(throws(() => resolveStructure('dashboard-mobile', 'web'), /mobile realisation of "dashboard", not a web one.*Pass realisation: "mobile"/), 'a realisation name on the wrong type refuses with its force hint');
+check(resolveStructure('dashboard-mobile', 'mobile').name === 'dashboard-mobile', 'a realisation name on its own type is used as is');
+check(throws(() => resolveStructure('nope', 'web'), /not found/), 'unknown name → not found');
+
+console.log('Phase 31 slice D — desktop-app realisations, N-type resolution (FR-D1, G1, G6)');
+const APP_PAGES = ['split-workbench-app', 'list-detail-app', 'editor-inspector-app', 'browser-app', 'dashboard-app', 'settings-app'];
+const APP_ANATOMY: Record<string, string> = {
+  'split-workbench-app': 'split-workbench', 'list-detail-app': 'list-detail', 'editor-inspector-app': 'editor-inspector',
+  'browser-app': 'browser', 'dashboard-app': 'dashboard', 'settings-app': 'settings',
+};
+for (const name of APP_PAGES) {
+  const s = getStructure(name)!;
+  check(s?.surface === 'desktop-app' && s.anatomy === APP_ANATOMY[name] && s.kind === undefined && s.axes !== undefined, `${name} realises ${APP_ANATOMY[name]} on desktop-app as a page with axes`);
+  check(s?.root?.overflow === 'hidden', `${name} keeps the root at the window height (root overflow hidden)`);
+  check(resolveStructure(APP_ANATOMY[name], 'desktop-app').name === name, `${APP_ANATOMY[name]} on desktop-app resolves to ${name}`);
+}
+check(getStructure('data-table-app')?.kind === 'component' && getStructure('data-table-app')?.anatomy === 'data-table' && resolveStructure('data-table', 'desktop-app').name === 'data-table-app', 'data-table on desktop-app resolves to data-table-app');
+check(getStructure('skeleton-table-app')?.anatomy === 'skeleton-table' && resolveStructure('skeleton-table', 'desktop-app').name === 'skeleton-table-app', 'skeleton-table on desktop-app resolves to skeleton-table-app');
+check(resolveStructure('data-table', 'web').name === 'data-table' && resolveStructure('dashboard', 'web').name === 'dashboard', 'web keeps its own realisations');
+check(throws(() => resolveStructure('pricing', 'desktop-app'), /^"pricing" has no desktop-app realisation\. Page anatomies with a desktop-app realisation: split-workbench, list-detail, editor-inspector, browser, dashboard, settings\. Pass realisation: "web"/), 'pricing on desktop-app refuses, naming the desktop-app anatomies and realisation: "web"');
+check(throws(() => resolveStructure('feed', 'desktop-app'), /"feed" has no desktop-app realisation\..*Pass realisation: "mobile" to stamp/), 'feed on desktop-app refuses and names realisation: "mobile"');
+for (const anatomy of ['list-detail', 'editor-inspector', 'browser']) {
+  for (const type of ['web', 'mobile'] as const) {
+    check(throws(() => resolveStructure(anatomy, type), new RegExp(`"${anatomy}" has no ${type} realisation\\..*Pass realisation: "desktop-app" to stamp`)), `${anatomy} on ${type} refuses and names realisation: "desktop-app"`);
+  }
+}
+check(throws(() => resolveStructure('dashboard-app', 'web'), /desktop-app realisation of "dashboard", not a web one/), 'a desktop-app realisation name on web refuses with its force hint');
+check(throws(() => resolveStructure('toolbar', 'desktop-app'), /Component anatomies with a desktop-app realisation: .*data-table/), 'a web-only component on desktop-app refuses, listing data-table among the component anatomies');
+check(APP_PAGES.every((n) => appList.includes(n)) && appList.includes('data-table-app') && appList.includes('skeleton-table-app') && appList.includes('empty-state'), 'the desktop-app listing holds the six realisations, both components and the any components');
+check(!appList.includes('dashboard') && !appList.includes('dashboard-mobile') && !webList.includes('dashboard-app') && !mobileList.includes('dashboard-app'), 'no type lists another type\'s realisation');
+check(JSON.stringify(byName.get('browser-app')?.surfaces) === '["desktop-app"]', 'browser is realised on desktop-app only');
+
+const walkAll = (n: SceneNode): SceneNode[] => [n, ...(n.children ?? []).flatMap(walkAll)];
+for (const name of [...APP_PAGES, 'data-table-app', 'skeleton-table-app']) {
+  const nodes = getStructure(name)!.nodes.flatMap(walkAll);
+  const panes = nodes.filter((n) => n.overflow === 'auto');
+  const unfloored = panes.filter((p) => typeof p.width === 'number' && !(typeof p.minWidth === 'number' && p.minWidth >= p.width));
+  check(unfloored.length === 0, `${name}: every fixed-width pane has a matching minWidth${unfloored.length ? ' — ' + unfloored.map((p) => p.id).join(', ') : ''}`);
+  const icons = nodes.filter((n) => n.type === 'button' && !n.label && n.icon);
+  check(icons.every((b) => b.ariaLabel && b.color === '$text-secondary'), `${name}: icon-only buttons are named and in $text-secondary`);
+  const rows = nodes.filter((n) => n.name === 'Row' || n.name === 'Skeleton row' || n.name === 'Toolbar' || n.name === 'Pagination');
+  check(rows.every((r) => r.height === 32), `${name}: table toolbar, rows and pager are 32 tall`);
+}
+check(walkAll(getStructure('editor-inspector-app')!.nodes[0]).find((n) => n.id === 'eia-inspector')?.minWidth === 280, 'the editor inspector keeps a 280px floor beside its 30% width');
+check(walkAll(getStructure('browser-app')!.nodes[0]).find((n) => n.id === 'bra-grid')?.gridColumns === 'repeat(auto-fill, minmax(240px, 1fr))', 'the browser grid\'s columns are at least 240px wide');
+
+console.log('Phase 31 slice D — root props on a page stamp (G5)');
+const win = createCanvas('e-win', undefined, {}, { type: 'desktop-app' });
+const stampApp = applyStructure(win, 'dashboard');
+check(stampApp.applied === 'dashboard-app' && win.root.overflow === 'hidden', 'dashboard on a desktop-app canvas stamps dashboard-app and sets root overflow hidden');
+applyStructure(win, 'dashboard', { replace: true, realisation: 'web' });
+check(win.root.overflow === undefined, 'stamping a web page over it with replace removes the root overflow the app stamp set');
+const kept = createCanvas('e-kept', undefined, {}, { type: 'desktop-app' });
+applyStructure(kept, 'settings');
+kept.root.overflow = 'auto';
+applyStructure(kept, 'settings', { replace: true, realisation: 'web' });
+check(kept.root.overflow === 'auto', 'a root overflow the author changed survives the next page stamp');
+const comp = createCanvas('e-comp', undefined, {}, { type: 'desktop-app' });
+applyStructure(comp, 'data-table');
+check(comp.root.overflow === undefined, 'a component stamp writes no root props');
+
+console.log('applyStructure resolves by the canvas type and realisation forces');
+const phone = createCanvas('e-phone', undefined, {}, { type: 'mobile' });
+const r1 = applyStructure(phone, 'dashboard');
+check(r1.applied === 'dashboard-mobile' && r1.anatomy === 'dashboard' && r1.surface === 'mobile', 'dashboard on a mobile canvas stamps dashboard-mobile');
+check(phone.metadata?.provenance?.structure === 'dashboard-mobile', 'provenance records the realisation name');
+const props = new Set(r1.placeholders.filter((p) => p.prop).map((p) => `${p.id}:${p.prop}`));
+check(['dm-row-1:title', 'dm-row-1:subtitle', 'dm-row-1:trailing.text', 'dm-nav:title', 'dm-recent-head-action:label', 'dm-tabs:items[0].label', 'dm-tabs:items[3].label'].every((k) => props.has(k)),
+  'every primitive copy field is a placeholder with its path', [...props].join(', '));
+const feedPh = applyStructure(createCanvas('e-feed-ph', undefined, {}, { type: 'mobile' }), 'feed').placeholders;
+check(feedPh.some((p) => p.id === 'fm-row-1' && p.prop === 'leading.initials' && p.role === 'AB'), 'list-row initials are a placeholder');
+const detailPh = applyStructure(createCanvas('e-detail-ph', undefined, {}, { type: 'mobile' }), 'detail').placeholders;
+check(detailPh.some((p) => p.id === 'dtm-nav' && p.prop === 'leading.label' && p.role === 'Back'), 'a nav-bar back label is a placeholder');
+const fallbacks = applyStructure(createCanvas('e-fallback', undefined, {}, { type: 'mobile' }), 'feed', { existingColors: new Set(['primary', 'surface', 'error']) });
+check(!['accent', 'bg-surface', 'danger'].some((t) => fallbacks.seededColors.includes(t)) && fallbacks.seededColors.includes('text-primary'),
+  'a canvas resolving primary / surface / error keeps them: the primitives\' accent / bg-surface / danger are not seeded over them', fallbacks.seededColors.join(', '));
+check(['text-primary', 'text-secondary', 'border', 'bg-surface', 'danger', 'accent'].every((t) => r1.seededColors.includes(t)), 'the colour tokens primitives read are seeded');
+const plain = applyStructure(createCanvas('e-plain', undefined, {}, { type: 'mobile' }), 'feed');
+check(plain.seededColors.includes('text-primary'), 'a stamp that references no $text-primary still seeds it for its primitives');
+for (const type of ['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet'] as const) {
+  registerStructure(page(`seed-${type}`, { surface: 'any', nodes: [{ id: `seed-${type}-n`, type }] }));
+  const seeded = applyStructure(createCanvas(`e-seed-${type}`), `seed-${type}`).seededColors;
+  const want = ['accent', 'bg-surface', 'border', 'danger', 'text-primary', 'text-secondary'];
+  check(want.every((t) => seeded.includes(t)), `a lone ${type} seeds all six colours the primitives read`, seeded.join(', '));
+}
+const forced = applyStructure(createCanvas('e-forced', undefined, {}, { type: 'mobile' }), 'dashboard', { realisation: 'web' });
+check(forced.applied === 'dashboard' && forced.surface === 'web', 'realisation: "web" stamps the web dashboard on a mobile canvas');
+const toWeb = applyStructure(createCanvas('e-web'), 'feed', { realisation: 'mobile' });
+check(toWeb.applied === 'feed-mobile', 'realisation: "mobile" stamps a mobile realisation on a web canvas');
+const retyped = createCanvas('e-retyped');
+setCanvasType(retyped.id, { type: 'mobile' });
+check(applyStructure(retyped, 'settings').applied === 'settings-mobile', 'a canvas re-declared mobile resolves to the mobile realisation');
+check(throws(() => applyStructure(createCanvas('e-refuse', undefined, {}, { type: 'mobile' }), 'pricing'), /no mobile realisation/), 'pricing on a mobile canvas refuses');
+
+console.log('registry invariant — (anatomy, surface) unique, no shadowing names');
+const before = listStructures().length;
+check(throws(() => registerStructure(page('dash-2', { anatomy: 'dashboard' })), /both realise anatomy "dashboard"/), 'a second web realisation of dashboard is rejected');
+check(throws(() => registerStructure(page('dash-any', { anatomy: 'dashboard', surface: 'any' })), /both realise anatomy "dashboard"/), 'an any realisation collides with the web and mobile ones');
+check(throws(() => registerStructure(page('feed', { anatomy: 'stream', surface: 'web' })), /named after the anatomy of "feed-mobile"/), 'a name that is another structure\'s anatomy is rejected');
+check(listStructures().length === before, 'rejected registrations leave the registry unchanged');
+registerStructure(page('feed-web', { anatomy: 'feed', surface: 'web' }));
+check(resolveStructure('feed', 'web').name === 'feed-web', 'a web realisation of a new anatomy registers and resolves');
+registerStructure(page('feed-web', { anatomy: 'feed', surface: 'web', description: 'replaced' }));
+check(getStructure('feed-web')?.description === 'replaced', 're-registering a name replaces it without colliding with itself');
+
+console.log(failures === 0 ? '\nT2a SMOKE TEST PASSED ✅' : `\nT2a SMOKE TEST FAILED ✗ (${failures})`);
+process.exit(failures === 0 ? 0 : 1);
