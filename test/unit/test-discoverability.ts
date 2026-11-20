@@ -464,6 +464,15 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   expect('state is in batch_design\'s property list', /checked, disabled, state, value/.test(indexSrc));
 }
 
+// ── Phase 32 slice B: findings inside a component instance ─────────────────
+{
+  // A finding there names the instance in nodeId and the inner node here.
+  for (const [label, src] of [['src/index.ts', indexSrc], ['README', readme], ['GUIDELINES', guidelines]] as const) {
+    expect(`innerNodeId documented in ${label}`, src.includes('innerNodeId'));
+    expect(`the expanded id form "<instanceId>/<childId>" documented in ${label}`, src.includes('<instanceId>/<childId>'));
+  }
+}
+
 let allPass = true;
 for (const c of checks) {
   if (!c.ok) allPass = false;
