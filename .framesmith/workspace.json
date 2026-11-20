@@ -93,6 +93,21 @@
       "dir": "pattern-library",
       "id": "QTrOgC44pt",
       "name": "Pattern library"
+    },
+    {
+      "dir": "foundations",
+      "id": "090c-g5kLV",
+      "name": "Foundations"
+    },
+    {
+      "dir": "mobile-surface-attempt",
+      "id": "ygWBwEipEr",
+      "name": "Mobile surface attempt"
+    },
+    {
+      "dir": "viewer-baseline",
+      "id": "k-xpq3R1Bl",
+      "name": "Viewer baseline"
     }
   ],
   "schemaVersion": 1,
