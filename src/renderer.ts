@@ -68,7 +68,8 @@ export interface RenderOptions {
    * flicker). */
   skeletonPulse?: boolean;
   /** Phase 32 slice B — the theme a tree that still holds instances is
-   * resolved in when the renderer expands it (light when unset). */
+   * resolved in when the renderer expands it (light when unset). A caller
+   * rendering dark should expand first (expandTree), or pass this. */
   theme?: 'light' | 'dark';
 }
 

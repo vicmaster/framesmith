@@ -1405,7 +1405,7 @@ server.tool(
 
     if (nodeIds?.length) {
       for (const nodeId of nodeIds) {
-        const filePath = await exportToFile(html, { width: w, height: h, scale, format, outputPath, nodeId, fileName: nodeId });
+        const filePath = await exportToFile(html, { width: w, height: h, scale, format, outputPath, nodeId, fileName: nodeId.replace(/\//g, '-') });
         exportedFiles.push(filePath);
       }
     } else {

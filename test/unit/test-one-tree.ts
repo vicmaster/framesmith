@@ -122,9 +122,36 @@ t=I(page, {type: "text", content: "A faint note", color: "#EEEEEE", fontSize: 14
   const entry = addFeedback(canvas, { nodeId: `${inst}/${note}`, comment: 'too faint' });
   check('feedback on an expanded id is stored on the instance', entry.nodeId === inst, entry.nodeId);
   check('…with the instance\'s snapshot', entry.node?.type === 'instance', JSON.stringify(entry.node));
-  let threw = false;
-  try { addFeedback(canvas, { nodeId: 'nope/x', comment: 'x' }); } catch { threw = true; }
-  check('an expanded id whose instance does not exist still throws', threw);
+  const throws = (nodeId: string) => { try { addFeedback(canvas, { nodeId, comment: 'x' }); return false; } catch { return true; } };
+  check('an expanded id whose instance does not exist still throws', throws('nope/x'));
+  check('an id under a real instance that is not in its expansion throws', throws(`${inst}/ghost`));
+  check('an id under a stored node that is not an instance throws', throws(`${canvas.root.children![0].id}/${note}`));
+}
+
+// ── edges the verify round found ────────────────────────────────────────────
+{
+  // A stored icon whose id matches a component child's: each is its own origin,
+  // so the stored one keeps its autofix.
+  const canvas: Canvas = createCanvas('icon origins');
+  canvas.components = { cmp: { id: 'cmp', type: 'component', name: 'Cmp', children: [{ id: 'ic', type: 'icon', icon: 'material:arrow-back' }] } };
+  canvas.root.children = [
+    { id: 'i1', name: 'i1', type: 'instance', componentId: 'cmp' },
+    { id: 'ic', type: 'icon', icon: 'material:arrow-back' },
+  ];
+  const icons = (await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] })).issues.filter((i) => i.message.includes('Unknown icon'));
+  check('a stored icon and a component icon with one id are two findings', icons.length === 2, JSON.stringify(icons.map((i) => i.nodeId)));
+  check('…the stored one keeps its fix', icons.some((i) => i.nodeId === 'ic' && !!i.fix), JSON.stringify(icons));
+}
+{
+  // A component holding an instance of itself expands once and stops.
+  const canvas: Canvas = createCanvas('recursive');
+  canvas.components = { loop: { id: 'loop', type: 'component', name: 'Loop', children: [{ id: 't', type: 'text', content: 'Hi', color: '#111111' }, { id: 'again', type: 'instance', componentId: 'loop' }] } };
+  canvas.root.children = [{ id: 'i1', name: 'i1', type: 'instance', componentId: 'loop' }];
+  const { root } = expandTree(canvas.root, canvas);
+  const ids: string[] = [];
+  (function walk(n: typeof root) { ids.push(n.id); n.children?.forEach(walk); })(root);
+  check('a self-nesting component expands one level', ids.includes('i1/t') && ids.includes('i1/again') && !ids.some((id) => id.startsWith('i1/again/')), ids.join(', '));
+  check('…and renders and evaluates without overflowing', renderToHtml(canvas.root, 400, 300, canvas).includes('i1/t') && (await evaluateCanvas(canvas, { mode: 'fast' })).overallScore >= 0);
 }
 
 console.log(allPass ? '\nAll one-tree checks passed.' : '\nSome one-tree checks FAILED.');

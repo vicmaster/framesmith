@@ -864,7 +864,9 @@ function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
   for (const { node, path, ref: rawRef, flat, required } of icons) {
     // One finding per origin: the same icon in a component, seen through two
     // instances (expanded ids <instance>/<node>), is one defect with one fix.
-    const key = `${node.id.slice(node.id.lastIndexOf('/') + 1)}\u0000${path}\u0000${rawRef}`;
+    // A stored node is its own origin, so it never hides behind an instance.
+    const origin = node.id.includes('/') ? `component:${node.id.slice(node.id.lastIndexOf('/') + 1)}` : node.id;
+    const key = `${origin}\u0000${path}\u0000${rawRef}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const ref = rawRef.trim();

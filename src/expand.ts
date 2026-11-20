@@ -30,16 +30,22 @@ export function expandTree(
   opts?: { theme?: 'light' | 'dark' },
 ): ExpandedTree {
   const owners = new Map<string, SceneNode>();
+  // Components being expanded on the current path: an instance of one of them
+  // inside itself stays unexpanded instead of recursing forever.
+  const open = new Set<string>();
   const walk = (node: SceneNode, owner: SceneNode | undefined, prefix: string): SceneNode => {
     const id = owner ? prefix + node.id : node.id;
     if (owner) owners.set(id, owner);
-    const resolved = node.type === 'instance' && node.componentId ? resolveInstance(node, canvas) : null;
+    const cid = node.type === 'instance' ? node.componentId : undefined;
+    const resolved = cid && !open.has(cid) ? resolveInstance(node, canvas) : null;
     const source = resolved ?? node;
     const out: SceneNode = { ...source, id };
     if (source.children) {
       // Inside an instance, children take its path; elsewhere the current one.
       const [childOwner, childPrefix] = resolved ? [owner ?? node, `${prefix}${node.id}/`] : [owner, prefix];
+      if (resolved) open.add(cid!);
       out.children = source.children.map((c) => walk(c, childOwner, childPrefix));
+      if (resolved) open.delete(cid!);
     }
     return out;
   };
