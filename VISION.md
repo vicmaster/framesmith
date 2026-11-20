@@ -583,6 +583,18 @@ All nine slices are merged and the acceptance re-run passed. The phase is closed
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-31-SPEC.md`](docs/specs/PHASE-31-SPEC.md). Deliberately out of scope: porting the viewer's code, anchored overlay rendering, keyboard behaviour, narrow-window collapse, the command palette and bulk-selection variants, importer work, and desktop-app rules on web._
 
+### Phase 32 — Follow-ups (v2.5)
+
+Phases 30 and 31 closed with seven follow-ups open, and five of them are quiet false passes: evaluate says READY on a disabled button that renders undimmed inside a component, on a misspelt `$token` the renderer drops, on a `select` border at 1.46:1, and on a phone screen whose links, text inputs and dialogs are never measured. Reproducing them found more: contrast and spacing never look inside a component instance at all, and seeded dark tints and `danger` survive a light preset. This phase clears every follow-up, and first moves the 140 root-level tests into folders that set their tier, so the fixes land in the new layout.
+
+- [ ] Slice A — tests in folders: `test/unit`, `test/browser`, `test/e2e` and `test/manual` set the tier, a Chrome guard on `test/unit` proves it at run time, tests are type-checked under `strict`, and files are named by subject, not phase or issue
+- [ ] Slice B — one tree: instances expanded and resolved once, so the renderer and every rule (contrast, spacing and cliché included) see the same thing inside a component, and findings there name the instance
+- [ ] Slice C — tokens: an `unknown-token` warning for any `$ref` the merged tokens do not define or that is the wrong kind, with a rename autofix when only one name is close; copy props never resolve; tints and `danger` derive from the applied palette, on new stamps and on canvases holding the old seeds
+- [ ] Slice D — desktop-app checks: `select` gets a `$border-strong` boundary and joins the boundary check, an active `tree-row` draws a bar the indicator check measures, and stress widens `nav-item` and `tabs` counts
+- [ ] Slice E — phone targets: `link` and `text-input` (with a new 44px `size: "lg"`) join the 44px census, and `modal` and `toast` take a `controlSize` the census measures
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-32-SPEC.md`](docs/specs/PHASE-32-SPEC.md). Deliberately out of scope: a test framework, splitting `src/index.ts` and `src/evaluate.ts`, rewriting "Phase N" comments in `src/`, cross-instance autofix, and an indicator bar on contained tabs._
+
 ### Continuous integration (infrastructure)
 
 Nothing runs on a pull request today: no workflow, no branch protection, no checks. That held because a single disciplined maintainer ran things by hand, but it has already failed silently — the repository has 102 test files and no `test` script to run them as a suite, and two tests were found failing at the v2.0.0 tag itself. The missing runner is the root cause; a pipeline that is red on its first run only teaches you to ignore the red X. Running the suite together for the first time turned up three failing tests, two of them red at the v2.0.0 tag itself; all three are fixed.
