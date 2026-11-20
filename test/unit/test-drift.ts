@@ -6,7 +6,8 @@
 // Usage: npx tsx test/unit/test-drift.ts
 
 import '../env.js';
-import { computeStructuralDrift, extractInventory, expandInstances, isDataLike } from '../../src/drift.js';
+import { computeStructuralDrift, extractInventory, isDataLike } from '../../src/drift.js';
+import { expandTree } from '../../src/expand.js';
 import type { Canvas, SceneNode } from '../../src/types.js';
 
 let allPass = true;
@@ -188,14 +189,14 @@ check('structural: words survive', !isDataLike('STATUS') && !isDataLike('Rename'
   check('missing-text findings capped at 20 + summary', perString.length === 20 && !!summary && summary.detail.includes('10 more'), summary?.detail);
 }
 
-// ── expandInstances sees through components ─────────────────────────────────
+// ── expandTree sees through components ─────────────────────────────────
 {
   const shell: SceneNode = frame([text('Dashboard'), control('toggle')], { name: 'Shell' });
   const canvas = {
     components: { 'cmp-shell': shell },
     root: doc([{ id: 'inst-1', type: 'instance', componentId: 'cmp-shell' } as SceneNode]),
   } as unknown as Canvas;
-  const inv = extractInventory(expandInstances(canvas.root, canvas));
+  const inv = extractInventory(expandTree(canvas.root, canvas).root);
   check('instance expanded into inventory', inv.texts.some((t) => t.display === 'Dashboard') && inv.controls.length === 1, JSON.stringify(inv.counts));
 }
 

@@ -20,7 +20,8 @@ import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, migr
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, loadRepoWorkspace } from './workspaces.js';
 import { loadPersistedCanvases, listCanvases, getCanvas } from './scene-graph.js';
 import { canvasVersionHash, checkVersionHash } from './version.js';
-import { computeStructuralDrift, expandInstances } from './drift.js';
+import { computeStructuralDrift } from './drift.js';
+import { expandTree } from './expand.js';
 import type { Canvas } from './types.js';
 
 interface CliFlags {
@@ -170,7 +171,7 @@ export async function runCli(argv: string[]): Promise<number> {
       const w = flags.viewport?.width ?? (typeof canvas.root.width === 'number' ? canvas.root.width : 1440);
       const h = flags.viewport?.height ?? (typeof canvas.root.height === 'number' ? canvas.root.height : 900);
       const imported = await importUrl(flags.url, { viewport: { width: w, height: h }, selector: flags.selector, waitFor: flags.waitFor });
-      const drift = computeStructuralDrift(expandInstances(canvas.root, canvas), imported.root);
+      const drift = computeStructuralDrift(expandTree(canvas.root, canvas).root, imported.root);
       const versionHash = canvasVersionHash(canvas);
       if (flags.json) {
         process.stdout.write(JSON.stringify({ canvasId: canvas.id, name: canvas.name, versionHash, url: flags.url, ...drift }, null, 2) + '\n');

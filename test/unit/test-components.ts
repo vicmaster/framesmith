@@ -41,7 +41,9 @@ function buildShell(canvas: Canvas): SceneNode {
     result.overridableChildren.join(',') === 'Sidebar,Logo,ActiveNav', result.overridableChildren.join(','));
   check('def registered on the canvas', !!canvas.components['cmp-shell'] && canvas.components['cmp-shell'].type === 'frame');
   check('tree now holds an instance node', findNode(canvas.root, shell.id)?.node.type === 'instance');
-  check('render is identical after promotion', render(canvas) === before);
+  // Inside the instance a node renders under its expanded id, "<instance>/<node>"
+  // (Phase 32 slice B); with that prefix removed the markup is the same.
+  check('render is identical after promotion, ids aside', render(canvas).split(`"${shell.id}/`).join('"') === before);
 
   // Second instance with an override by child name.
   insertNode(canvas.root, canvas.root.id, { type: 'instance', componentId: 'cmp-shell', overrides: { ActiveNav: { content: 'Settings' } } });

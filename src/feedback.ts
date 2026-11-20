@@ -10,6 +10,7 @@
 
 import { nanoid } from 'nanoid';
 import { findNode } from './scene-graph.js';
+import { expandTree, storedId } from './expand.js';
 import type { Canvas, FeedbackEntry } from './types.js';
 
 /** Max characters of node text captured into the comment-time snapshot. */
@@ -41,9 +42,13 @@ export function addFeedback(canvas: Canvas, input: { nodeId?: string; comment: s
     at: new Date().toISOString(),
   };
   if (input.nodeId) {
-    const found = findNode(canvas.root, input.nodeId);
-    if (!found) throw new Error(`Node "${input.nodeId}" not found in canvas "${canvas.id}"`);
-    entry.nodeId = input.nodeId;
+    // Phase 32 slice B — a node inside an instance (an expanded id, as the
+    // render and snapshot_layout name it) is anchored on its instance.
+    const nodeId = findNode(canvas.root, input.nodeId) ? input.nodeId
+      : findNode(expandTree(canvas.root, canvas).root, input.nodeId) ? storedId(input.nodeId) : undefined;
+    const found = nodeId ? findNode(canvas.root, nodeId) : null;
+    if (!nodeId || !found) throw new Error(`Node "${input.nodeId}" not found in canvas "${canvas.id}"`);
+    entry.nodeId = nodeId;
     entry.node = {
       type: found.node.type,
       ...(found.node.name ? { name: found.node.name } : {}),

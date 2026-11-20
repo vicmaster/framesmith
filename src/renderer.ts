@@ -2,6 +2,8 @@ import type { Canvas, ElementState, FontFace, SceneNode, StateStyle } from './ty
 import { getIconSvg } from './icons.js';
 import { aliasFamilyStack } from './fonts.js';
 import { usableSafeArea } from './surfaces.js';
+import { expandTree, hasInstances } from './expand.js';
+import { getCanvasTokens } from './workspaces.js';
 import {
   BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
@@ -65,6 +67,10 @@ export interface RenderOptions {
    * renders are byte-comparable (canvas_diff / visual baselines never
    * flicker). */
   skeletonPulse?: boolean;
+  /** Phase 32 slice B — the theme a tree that still holds instances is
+   * resolved in when the renderer expands it (light when unset). A caller
+   * rendering dark should expand first (expandTree), or pass this. */
+  theme?: 'light' | 'dark';
 }
 
 // Registered canvas.fonts family names (lowercased) — a generic shorthand
@@ -108,17 +114,21 @@ interface RenderCtx {
 }
 
 export function renderToHtml(root: SceneNode, width = 1440, height = 900, canvas?: Canvas, opts?: RenderOptions): string {
+  // Phase 32 slice B — instances render as the one tree every rule reads:
+  // expanded, then resolved. Callers that already expanded pass through.
+  if (canvas && hasInstances(root, canvas)) {
+    root = expandTree(root, canvas, getCanvasTokens(canvas), { theme: opts?.theme }).root;
+  }
   const registered = registeredFamilies(canvas);
-  const expand = (n: SceneNode) => (n.type === 'instance' && n.componentId && canvas ? resolveInstance(n, canvas) ?? n : n);
   const columnWidth = Math.min(typeof root.width === 'number' ? root.width : width, width);
   const designWidth = typeof root.width === 'number' && root.width > 0 ? root.width : DESIGN_WIDTH;
   const overlays: SceneNode[] = [];
-  const reservation = chromeReservation(root, expand);
+  const reservation = chromeReservation(root);
   const safe = root.type === 'document' ? usableSafeArea(root.safeArea) : {};
   const clear = { top: Math.max(safe.top ?? 0, reservation.top), bottom: Math.max(safe.bottom ?? 0, reservation.bottom) };
   const rc: RenderCtx = { canvas, registered, bodyWidth: width, columnWidth, insets: rootInsets(root), reservation, designWidth, overlays, clear };
   const body = renderNode(root, rc) + overlayLayer(rc, height);
-  const responsiveCss = buildRendererStylesheet(root, canvas);
+  const responsiveCss = buildRendererStylesheet(root);
   // Phase 24 slice B — the pulse keyframes exist ONLY when the caller opts in
   // (the live viewer). Without them the fs-skeleton class is inert, so every
   // screenshot/export/diff render is static and deterministic.
@@ -602,13 +612,6 @@ function rootBackgroundCss(root: SceneNode): string {
 }
 
 function renderNode(node: SceneNode, rc: RenderCtx): string {
-  const { canvas } = rc;
-  // Resolve instances: clone the component tree and apply overrides
-  if (node.type === 'instance' && node.componentId && canvas) {
-    const resolved = resolveInstance(node, canvas);
-    if (resolved) return renderNode(resolved, rc);
-  }
-
   // Phase 31 slice E — an overlay renders in the overlay layer, not here.
   if (OVERLAY_TYPES.has(node.type)) {
     rc.overlays.push(node);
@@ -672,44 +675,6 @@ function renderNode(node: SceneNode, rc: RenderCtx): string {
   }
 
   return `<div${dataAttr}${styleAttr}>${renderChildren(node, rc)}</div>`;
-}
-
-// Exported for drift.ts (Phase 23 slice B): the structural inventory must see
-// through instances — an app shell stamped as a component still has controls
-// and text the shipped page either has or hasn't.
-export function resolveInstance(instance: SceneNode, canvas: Canvas): SceneNode | null {
-  const component = canvas.components[instance.componentId!];
-  if (!component) return null;
-
-  // Deep clone the component tree
-  const clone = structuredClone(component);
-  // Give the clone the instance's ID so it's targetable
-  clone.id = instance.id;
-
-  // Apply instance-level style overrides to the root
-  const { type: _, id: _id, componentId: _cid, overrides: _ov, children: _ch, ...rootOverrides } = instance;
-  Object.assign(clone, rootOverrides);
-
-  // Apply named child overrides
-  if (instance.overrides) {
-    applyOverrides(clone, instance.overrides);
-  }
-
-  return clone;
-}
-
-function applyOverrides(node: SceneNode, overrides: Record<string, Partial<SceneNode>>): void {
-  // Match overrides by node name
-  if (node.name && overrides[node.name]) {
-    const { type: _, id: _id, children: _ch, ...props } = overrides[node.name];
-    Object.assign(node, props);
-  }
-
-  if (node.children) {
-    for (const child of node.children) {
-      applyOverrides(child, overrides);
-    }
-  }
 }
 
 function renderChildren(node: SceneNode, rc: RenderCtx): string {
@@ -1013,8 +978,8 @@ function renderSelect(node: SceneNode, dataAttr: string): string {
 // ── mobile primitives (Phase 30 slice D) ─────────────────────────────────────
 // Fixed anatomy like the controls: each builder hand-rolls its styles from
 // src/primitives.ts geometry, and colours arrive pre-defaulted by
-// resolveVariables (the fallbacks below only serve a primitive that skipped
-// it, such as one inside a component). Every primitive refuses to
+// resolveVariables (the fallbacks below only serve a tree rendered without
+// resolution, such as a test's raw tree). Every primitive refuses to
 // flex-shrink, so it keeps its size in a fixed-height column. Labels sit in
 // `data-fs-label` elements that truncate to one line — canvas_stress reads
 // their overflow as designed truncation.
@@ -1026,8 +991,8 @@ const FALLBACK = { accent: '#2563EB', text: '#111827', secondary: '#6B7280', bor
 // and pressed layer the ink over the fill at the state's opacity (focus adds
 // the ring, 2px at a 2px gap so it meets only the backdrop, spec change S9);
 // disabled draws the token pair when the design system has it, else today's
-// 0.5. Resolution (applyControlDefaults) hands over `stateStyle`; a node it
-// skipped (inside a component) uses the fallback.
+// 0.5. Resolution (applyControlDefaults) hands over `stateStyle`; a node in
+// a tree rendered without resolution uses the fallback.
 
 const STATE_FALLBACK: StateStyle = { ring: FALLBACK.accent, onSurface: FALLBACK.text, surface: FALLBACK.surface, hover: STATE_LAYERS.hover, focus: STATE_LAYERS.focus, pressed: STATE_LAYERS.pressed };
 
@@ -1335,8 +1300,8 @@ function renderButton(node: SceneNode, rc: RenderCtx, attrs: string, item = fals
   if (name) attrs += ` aria-label="${escapeAttr(name)}" title="${escapeAttr(name)}"`;
   const h = buttonHeight(node);
   const words = text(node.label) ? labelHtml(text(node.label), '') : '';
-  // Unthemed (a button inside a component skips resolveVariables): the
-  // primary look, so it is never an invisible white-on-transparent label.
+  // Unthemed (a raw tree that skipped resolveVariables): the primary look,
+  // so it is never an invisible white-on-transparent label.
   const fill = node.fill ?? (node.variant === 'secondary' || node.variant === 'ghost' ? 'transparent' : node.variant === 'destructive' ? FALLBACK.danger : FALLBACK.accent);
   const color = node.color ?? (fill === 'transparent' ? FALLBACK.accent : '#FFFFFF');
   const glyph = iconHtml(node.icon, size === 'xs' ? 14 : size === 'sm' ? 16 : 20, color);
@@ -1947,12 +1912,12 @@ export function isValidKeyframeName(name: string): name is keyof typeof KEYFRAME
   return name in KEYFRAME_LIBRARY;
 }
 
-function buildRendererStylesheet(root: SceneNode, canvas?: Canvas): string {
+function buildRendererStylesheet(root: SceneNode): string {
   const stackIds: string[] = [];
   const gridStackIds: string[] = [];
   const relativeIds = new Set<string>();
   const keyframes = new Set<string>();
-  collectRendererHints(root, [], canvas, stackIds, gridStackIds, relativeIds, keyframes);
+  collectRendererHints(root, [], stackIds, gridStackIds, relativeIds, keyframes);
 
   const parts: string[] = [];
 
@@ -1995,31 +1960,25 @@ function buildRendererStylesheet(root: SceneNode, canvas?: Canvas): string {
 function collectRendererHints(
   node: SceneNode,
   ancestors: SceneNode[],
-  canvas: Canvas | undefined,
   stackIds: string[],
   gridStackIds: string[],
   relativeIds: Set<string>,
   keyframes: Set<string>,
 ): void {
-  // Resolve instances so responsive hints inside components are picked up
-  const resolved = node.type === 'instance' && node.componentId && canvas
-    ? resolveInstance(node, canvas) ?? node
-    : node;
-
-  if (resolved.responsive === 'stack' && resolved.layout === 'horizontal') {
-    stackIds.push(resolved.id);
+  if (node.responsive === 'stack' && node.layout === 'horizontal') {
+    stackIds.push(node.id);
   }
   // Phase 26 slice A — a grid with responsive: "stack" collapses to a single
   // column on mobile (spans reset so tiles flow naturally).
-  if (resolved.responsive === 'stack' && resolved.layout === 'grid') {
-    gridStackIds.push(resolved.id);
+  if (node.responsive === 'stack' && node.layout === 'grid') {
+    gridStackIds.push(node.id);
   }
 
-  if (resolved.animation?.name && isValidKeyframeName(resolved.animation.name)) {
-    keyframes.add(resolved.animation.name);
+  if (node.animation?.name && isValidKeyframeName(node.animation.name)) {
+    keyframes.add(node.animation.name);
   }
 
-  if (resolved.position === 'absolute') {
+  if (node.position === 'absolute') {
     const hasPositionedAncestor = ancestors.some((a) => a.position === 'relative' || a.position === 'absolute');
     if (!hasPositionedAncestor) {
       const container = findNearestContainer(ancestors);
@@ -2029,10 +1988,10 @@ function collectRendererHints(
     }
   }
 
-  if (resolved.children) {
-    const nextAncestors = [...ancestors, resolved];
-    for (const child of resolved.children) {
-      collectRendererHints(child, nextAncestors, canvas, stackIds, gridStackIds, relativeIds, keyframes);
+  if (node.children) {
+    const nextAncestors = [...ancestors, node];
+    for (const child of node.children) {
+      collectRendererHints(child, nextAncestors, stackIds, gridStackIds, relativeIds, keyframes);
     }
   }
 }

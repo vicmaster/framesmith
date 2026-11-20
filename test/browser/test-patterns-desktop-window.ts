@@ -23,7 +23,7 @@ import { createCanvas } from '../../src/scene-graph.js';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { getVariables, resolveVariables, setVariables } from '../../src/variables.js';
 import { renderToHtml } from '../../src/renderer.js';
-import { expandInstances } from '../../src/drift.js';
+import { expandTree } from '../../src/expand.js';
 import { computeLayout, shutdown } from '../../src/screenshot.js';
 import { applyPerturbation, compareLayouts, PERTURBATION_NAMES } from '../../src/stress.js';
 import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from '../../src/design-language.js';
@@ -56,7 +56,7 @@ async function stressWarnings(canvas: Canvas): Promise<string[]> {
   const h = canvas.root.height as number;
   const merged = getVariables(canvas);
   const layoutOf = (root: SceneNode) => computeLayout(renderToHtml(resolveVariables(structuredClone(root), merged), w, h, canvas), undefined, 25, { width: w, height: h });
-  const base = expandInstances(canvas.root, canvas);
+  const base = expandTree(canvas.root, canvas).root;
   const baseline = await layoutOf(base);
   const warnings: string[] = [];
   for (const p of PERTURBATION_NAMES) {
@@ -73,7 +73,7 @@ async function stressWarnings(canvas: Canvas): Promise<string[]> {
 async function layoutRects(canvas: Canvas): Promise<{ nodeId: string; width: number }[]> {
   const w = canvas.root.width as number;
   const h = canvas.root.height as number;
-  const rects = await computeLayout(renderToHtml(resolveVariables(structuredClone(expandInstances(canvas.root, canvas)), getVariables(canvas)), w, h, canvas), undefined, 25, { width: w, height: h });
+  const rects = await computeLayout(renderToHtml(resolveVariables(structuredClone(expandTree(canvas.root, canvas).root), getVariables(canvas)), w, h, canvas), undefined, 25, { width: w, height: h });
   const out: { nodeId: string; width: number }[] = [];
   const walk = (r: { nodeId: string; width: number; children?: unknown[] }) => { out.push(r); (r.children as typeof r[] | undefined)?.forEach(walk); };
   rects.forEach(walk);

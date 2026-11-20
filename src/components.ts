@@ -1,7 +1,7 @@
 // Phase 22 slice E (#130) — component ergonomics.
 //
 // The render machinery for components has existed since v1 (canvas.components
-// + resolveInstance in renderer.ts, override-by-child-name), but nothing in
+// + resolveInstance in expand.ts, override-by-child-name), but nothing in
 // the authoring surface *created* one from existing work: canvas_evaluate
 // scolded "no component instances found" while the only path was hand-building
 // a type:"component" node. Two pure operations close the gap:

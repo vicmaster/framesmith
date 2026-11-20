@@ -289,16 +289,12 @@ export function unpinsFixed(n: SceneNode): boolean {
 
 /** How far each edge's pinned chrome reaches: the largest chrome height +
  * offset per edge, over every effectively fixed status-bar (top) and tab-bar /
- * home-indicator (bottom) in the tree. A sheet's subtree is skipped. `expand`
- * resolves an instance to the tree it renders. */
-export function chromeReservation(
-  root: SceneNode,
-  expand: (n: SceneNode) => SceneNode = (n) => n,
-): { top: number; bottom: number } {
+ * home-indicator (bottom) in the tree. A sheet's subtree is skipped. Read it
+ * on an expanded tree (src/expand.ts) to see chrome inside instances. */
+export function chromeReservation(root: SceneNode): { top: number; bottom: number } {
   const insets = rootInsets(root);
   const out = { top: 0, bottom: 0 };
-  (function walk(raw: SceneNode) {
-    const n = expand(raw);
+  (function walk(n: SceneNode) {
     if (n.type === 'sheet') return;
     const edge = CHROME_EDGE[n.type];
     if (edge && effectivePosition(n) === 'fixed') {

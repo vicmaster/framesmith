@@ -149,10 +149,13 @@ const inspector = (): SceneNode[] => [panel([
   f = of(await issues([panel([{ id: 'b', type: 'button', label: 'Go' }], { fill: '$bg' })], { colors: { bg: '#FFFFFF', 'focus-ring': '#1d4ed8' }, dark: { colors: { bg: '#0b1220', 'focus-ring': '#1e3a8a' } } }), FOCUS);
   check('R2: a dark-only failure is tagged dark', f.length === 1 && f[0].theme === 'dark' && /dark token layer/.test(f[0].suggestion ?? ''), show(f));
 
-  // Inside a component: the ring falls back to #2563EB, reported on the instance.
+  // Inside a component: the ring is the design system's, as the render draws it
+  // (Phase 32 slice B: instances are expanded, then resolved), reported on the instance.
   const comp: SceneNode = { id: 'cc', type: 'frame', fill: '#2563EB', children: [{ id: 'cb1', type: 'button', label: 'Go' }] };
+  f = of(await issues([panel([{ id: 'i1', name: 'i1', type: 'instance', componentId: 'cc' }])], { colors: { 'focus-ring': '#1d4ed8' } }, 'desktop-app', { cc: comp }), FOCUS);
+  check('R2: a target inside a component uses the design system\'s ring and reports the instance', f.length === 1 && ids(f[0]) === 'i1' && /#1d4ed8/i.test(f[0].message) && /instance "i1"/.test(f[0].message), show(f));
   f = of(await issues([panel([{ id: 'i1', name: 'i1', type: 'instance', componentId: 'cc' }])], { colors: { 'focus-ring': '#000000' } }, 'desktop-app', { cc: comp }), FOCUS);
-  check('R2: a target inside a component uses #2563EB and reports the instance', f.length === 1 && ids(f[0]) === 'i1' && /#2563EB/.test(f[0].message), show(f));
+  check('R2 twin: a ring that clears 3:1 inside a component passes (the fallback #2563EB no longer applies)', f.length === 0, show(f));
 
   // Desktop-app only.
   for (const type of ['web', 'mobile'] as const) {
@@ -377,10 +380,11 @@ for (const personality of PERSONALITY_NAMES) {
   check('V4 fix: a literal pair is reported once (no dark copy)', f.length === 1 && !f[0].theme, show(f));
   f = of(await issues([{ id: 'tok', type: 'frame', fill: '$bg-primary', children: [{ id: 'tg', type: 'toggle', fill: '$bg-surface' }] }], sysD), BOUNDARY);
   check('V4 fix twin: a token pair that fails in both themes is reported per theme', f.length === 2 && f.some((i) => i.theme === 'dark'), show(f));
-  // V4: inside an instance the suggestion says the tokens never reach it.
+  // V4, Phase 32 slice B: the design system reaches inside an instance, so a
+  // checkbox there draws $border-strong and passes, as it does outside.
   const compI: SceneNode = { id: 'cf', type: 'frame', children: [{ id: 'cbi', type: 'checkbox' }] };
   f = of(await issues([panel([{ id: 'i9', name: 'Field', type: 'instance', componentId: 'cf' }])], sysD, 'desktop-app', { cf: compI }), BOUNDARY);
-  check('V4 fix: an instance finding\'s suggestion says the design system never reaches it', f.length > 0 && f.every((i) => /inside a component instance/.test(i.suggestion ?? '')), show(f));
+  check('V4: a checkbox inside an instance draws the design system\'s $border-strong and passes', f.length === 0, show(f));
   f = of(await issues([panel([{ id: 'cb', type: 'checkbox', stroke: '#EEEEEE' }])], sysD), BOUNDARY);
   check('V4 fix twin: a direct finding keeps the token suggestion', f.length > 0 && f.every((i) => /border-strong/.test(i.suggestion ?? '')), show(f));
   // Out-of-contract values degrade instead of throwing.
@@ -396,10 +400,10 @@ for (const personality of PERSONALITY_NAMES) {
   check('fix: a numeric fill paints nothing in the walk (no throw)', numeric.kind === 'color' && numeric.rgb.join(',') === '0,0,0', JSON.stringify(numeric));
   // A grouped finding whose members sit inside instances names them.
   const comp: SceneNode = { id: 'cc', type: 'frame', children: [{ id: 'inner', type: 'button', label: 'Go' }] };
-  // A component's button rings in #2563EB; on a #2563EB panel it shares the
-  // direct button's failing pair when the token ring is #2563EB too.
+  // A component's button rings in the token ring as the direct one does, so on
+  // a #2563EB panel with a #2563EB ring both share one failing pair.
   f = of(await issues([panel([{ id: 'direct', type: 'button', label: 'Go' }, { id: 'i1', name: 'Card', type: 'instance', componentId: 'cc' }], { fill: '#2563EB' })], { colors: { 'focus-ring': '#2563EB' } }, 'desktop-app', { cc: comp }), FOCUS);
-  check('fix: a group with members in an instance says so by name', f.some((i) => /some inside instances, listed by instance: "Card"/.test(i.message) && (i.nodeIds ?? []).includes('i1')), show(f));
+  check('fix: a group with members in an instance says so by name', f.some((i) => /some inside instance "Card" of component "cc"/.test(i.message) && (i.nodeIds ?? []).includes('i1')), show(f));
   const plain = of(await issues([panel([{ id: 'd1', type: 'button', label: 'Go' }, { id: 'd2', type: 'button', label: 'Go' }], { fill: '#2563EB' })], { colors: { 'focus-ring': '#2563EB' } }), FOCUS);
   check('fix twin: a group with no instance member says nothing of instances', plain.length === 1 && !/instance/.test(plain[0].message), show(plain));
 }
@@ -544,13 +548,17 @@ for (const personality of PERSONALITY_NAMES) {
 // ── 3b fixes ─────────────────────────────────────────────────────────────
 {
   const sysR = generateDesignSystem('#2563EB', 'technical', { surface: 'desktop-app' }).variables;
+  // Phase 32 slice B: an instance whose root is the target is judged with the
+  // design system (it passes) and, when it fails, reported on its own id.
   let f = of(await issues([panel([{ id: 'i1', name: 'Box', type: 'instance', componentId: 'cb' }])], sysR, 'desktop-app', { cb: { id: 'cb', type: 'checkbox' } }), BOUNDARY);
-  check('3b: an instance whose root is the target gets the instance advice and note', f.length > 0 && f.every((i) => /inside a component instance/.test(i.suggestion ?? '') && /\(an instance — fix it in its component\)/.test(i.message)), show(f));
+  check('3b: an instance whose root is the target draws $border-strong and passes', f.length === 0, show(f));
+  f = of(await issues([panel([{ id: 'i1', name: 'Box', type: 'instance', componentId: 'cb' }])], sysR, 'desktop-app', { cb: { id: 'cb', type: 'checkbox', stroke: '$nope' } }), BOUNDARY);
+  check('3b: a failing instance root is reported on the instance itself, with no innerNodeId', f.length > 0 && f.every((i) => (i.nodeIds ?? [i.nodeId]).includes('i1') && i.innerNodeId === undefined), show(f));
   f = of(await issues([panel([{ id: 'c1', type: 'checkbox', stroke: '$nope' }])], sysR), BOUNDARY);
   check('3b twin: the same checkbox placed directly keeps the token advice', f.length > 0 && f.every((i) => /border-strong/.test(i.suggestion ?? '') && !/instance/.test(i.message)), show(f));
   const grad = { gradient: { type: 'linear', angle: 90, stops: [{ color: '#000000', position: 0 }, { color: '#FFFFFF', position: 1 }] } as SceneNode['gradient'], fill: undefined };
   f = of(await issues([panel([{ id: 'ig', name: 'G', type: 'instance', componentId: 'gb' }], grad)], {}, 'desktop-app', { gb: { id: 'gb', type: 'frame', children: [{ id: 'gbb', type: 'button', label: 'x' }] } }), FOCUS);
-  check('3b: an info inside an instance keeps its "check by eye" advice and adds the instance one', f.length === 1 && f[0].severity === 'info' && /by eye/.test(f[0].suggestion ?? '') && /inside a component instance/.test(f[0].suggestion ?? ''), show(f));
+  check('3b: an info inside an instance keeps its "check by eye" advice and names the instance', f.length === 1 && f[0].severity === 'info' && /by eye/.test(f[0].suggestion ?? '') && /inside instance "G" of component "gb"/.test(f[0].message), show(f));
   f = of(await issues([panel([{ id: 'rd', type: 'radio', stroke: 'none' }, { id: 'tg', type: 'toggle', fill: 'none' }, { id: 'cb', type: 'checkbox', stroke: 'none' }])]), BOUNDARY);
   check('3b: a radio or toggle message never speaks of its fill; a checkbox does', f.filter((i) => /its fill/.test(i.message)).map((i) => i.nodeId).join(',') === 'cb' && f.length === 3, show(f));
   f = of(await issues([panel([{ id: 'tb', type: 'tabs', variant: 'contained', fill: 'navy', items: [{ label: 'A', active: true }] }])]), FOCUS);

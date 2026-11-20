@@ -11,7 +11,7 @@ import { backdropBehind, composite, paintsNothing, parseAlpha, parseColor, reada
 import { OVERLAY_TYPES, STATE_LAYERS, STATEFUL_TYPES, isDisabled, modalActions, navActions, tabItems, tabsItems } from './primitives.js';
 
 /** The renderer's fallbacks (renderer.ts FALLBACK), for props the resolver
- * never set (a primitive inside a component). */
+ * never set (a tree checked without resolution). */
 const FALLBACK = { accent: '#2563EB', text: '#111827', secondary: '#6B7280', border: '#D1D5DB', surface: '#FFFFFF', danger: '#DC2626' } as const;
 /** A contained tab's active fill without a token (renderTabs). */
 const TINT_FALLBACK = '#EFF4FF';

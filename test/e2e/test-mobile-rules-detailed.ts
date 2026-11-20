@@ -291,7 +291,12 @@ I("document", { type: "frame", name: "Pinned", position: "fixed", bottom: 0, hei
   tokens.variables = { ...tokens.variables, spacing: { 'space-12': 60 } };
   tokens.components = { pad: { id: 'pad', type: 'component', layout: 'vertical', children: [{ id: 'pad-sp', type: 'frame', height: '$space-12' }, { id: 'pad-t', type: 'text', content: 'Inside' }] } };
   const tk = await safeArea(tokens, 'detailed');
-  check('detailed reads a component as the screenshot draws it (its own $refs unresolved)', tk.some((i) => i.message.includes('top')), show(tk));
+  // Phase 32 slice B: the screenshot resolves a component's own $refs, so its
+  // 60px spacer clears the top inset, and detailed mode reads the same.
+  check('detailed reads a component as the screenshot draws it (its $refs resolved: the spacer clears the inset)', !tk.some((i) => i.message.includes('top')), show(tk));
+  tokens.variables = { ...tokens.variables, spacing: { 'space-12': 4 } };
+  const tk4 = await safeArea(tokens, 'detailed');
+  check('…twin: a 4px spacer leaves the content in the top inset', tk4.some((i) => i.message.includes('top')), show(tk4));
 }
 
 console.log(allPass ? '\nAll detailed mobile checks passed.' : '\nSome detailed mobile checks FAILED.');

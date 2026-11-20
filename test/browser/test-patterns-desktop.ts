@@ -32,7 +32,7 @@ import { createCanvas } from '../../src/scene-graph.js';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { getVariables, resolveVariables, setVariables } from '../../src/variables.js';
 import { renderToHtml } from '../../src/renderer.js';
-import { expandInstances } from '../../src/drift.js';
+import { expandTree } from '../../src/expand.js';
 import { computeLayout, shutdown, type LayoutRect } from '../../src/screenshot.js';
 import { applyPerturbation, compareLayouts, PERTURBATION_NAMES } from '../../src/stress.js';
 import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from '../../src/design-language.js';
@@ -93,7 +93,7 @@ function flat(rects: LayoutRect[]): LayoutRect[] {
 /** Warnings from a full stress run, as canvas_stress computes them, and the
  * nodes `many` and `empty` touched. */
 async function stress(canvas: Canvas): Promise<{ warnings: string[]; touched: Record<string, number> }> {
-  const base = expandInstances(canvas.root, canvas);
+  const base = expandTree(canvas.root, canvas).root;
   const baseline = await layoutOf(canvas, base);
   const warnings: string[] = [];
   const touched: Record<string, number> = {};
@@ -132,7 +132,7 @@ for (const s of app) {
   // Tripled content scrolls inside its pane: the root keeps the artboard's
   // height and no row squashes to make room.
   const canvas = stamped(s.name, component);
-  const base = expandInstances(canvas.root, canvas);
+  const base = expandTree(canvas.root, canvas).root;
   const before = new Map(flat(await layoutOf(canvas, base)).map((r) => [r.nodeId, r]));
   const after = flat(await layoutOf(canvas, applyPerturbation('many', base, { type: 'desktop-app' }).root));
   const root = after.find((r) => r.nodeId === canvas.root.id);
@@ -156,7 +156,7 @@ for (const s of app) {
   const narrow = stamped(s.name, component, undefined, { width: 1024, height: 768 });
   const narrowFindings = (await detailedFindings(narrow)).filter((f) => f.includes('desktop-app-'));
   check(`${s.name}: detailed mode raises no desktop-app finding at 1024×768`, narrowFindings.length === 0, narrowFindings.slice(0, 4).join(' | '));
-  const past = flat(await layoutOf(narrow, expandInstances(narrow.root, narrow))).filter((r) => r.x + r.width > 1024 + 1);
+  const past = flat(await layoutOf(narrow, expandTree(narrow.root, narrow).root)).filter((r) => r.x + r.width > 1024 + 1);
   check(`${s.name}: nothing reaches past a 1024px window`, past.length === 0, past.slice(0, 4).map((r) => `${r.nodeId} ${r.x + r.width}`).join(' | '));
 }
 
@@ -174,7 +174,7 @@ for (const s of app) {
     return canvas;
   };
   const manyWarnings = async (canvas: Canvas) => {
-    const base = expandInstances(canvas.root, canvas);
+    const base = expandTree(canvas.root, canvas).root;
     const run = applyPerturbation('many', base, { type: 'desktop-app' });
     return compareLayouts(await layoutOf(canvas, base), await layoutOf(canvas, run.root), run.touched, 1440).filter((f) => f.severity === 'warning');
   };
@@ -182,7 +182,7 @@ for (const s of app) {
   check('twin: the same pane with overflow hidden clips under many', (await manyWarnings(shellWith({ overflow: 'hidden' }, true))).some((f) => f.kind === 'clip' && f.nodeId === 'pane'));
 
   const rootHeight = async (canvas: Canvas) => {
-    const run = applyPerturbation('many', expandInstances(canvas.root, canvas), { type: 'desktop-app' });
+    const run = applyPerturbation('many', expandTree(canvas.root, canvas).root, { type: 'desktop-app' });
     return flat(await layoutOf(canvas, run.root)).find((r) => r.nodeId === canvas.root.id)?.height;
   };
   check('with root overflow hidden the root keeps the window height', (await rootHeight(shellWith({ overflow: 'auto' }, true))) === 900);
@@ -194,7 +194,7 @@ for (const s of app) {
     const canvas = stamped('dashboard-app', false);
     const table = flatNodes(canvas.root).find((n) => n.id === 'dba-table')!;
     if (overflow) table.overflow = overflow;
-    const base = expandInstances(canvas.root, canvas);
+    const base = expandTree(canvas.root, canvas).root;
     const before = new Map(flat(await layoutOf(canvas, base)).map((r) => [r.nodeId, r.height]));
     const after = flat(await layoutOf(canvas, applyPerturbation('many', base, { type: 'desktop-app' }).root));
     return after.filter((r) => (before.get(r.nodeId) ?? 0) - r.height > 1).map((r) => r.nodeId);

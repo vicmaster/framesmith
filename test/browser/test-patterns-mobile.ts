@@ -21,7 +21,7 @@ import { createCanvas } from '../../src/scene-graph.js';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { getVariables, resolveVariables } from '../../src/variables.js';
 import { renderToHtml } from '../../src/renderer.js';
-import { expandInstances } from '../../src/drift.js';
+import { expandTree } from '../../src/expand.js';
 import { computeLayout, shutdown } from '../../src/screenshot.js';
 import { applyPerturbation, compareLayouts, PERTURBATION_NAMES } from '../../src/stress.js';
 import { generateDesignSystem, PERSONALITY_NAMES, type PersonalityName } from '../../src/design-language.js';
@@ -45,7 +45,7 @@ async function stressWarnings(canvas: Canvas): Promise<string[]> {
   const w = canvas.root.width as number;
   const h = canvas.root.height as number;
   const merged = getVariables(canvas);
-  const base = expandInstances(canvas.root, canvas);
+  const base = expandTree(canvas.root, canvas).root;
   const layoutOf = (root: typeof base) =>
     computeLayout(renderToHtml(resolveVariables(structuredClone(root), merged), w, h, canvas), undefined, 25, { width: w, height: h });
   const baseline = await layoutOf(base);

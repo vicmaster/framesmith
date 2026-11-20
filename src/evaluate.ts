@@ -1,13 +1,13 @@
 import type { Canvas, SceneNode, DesignVariables, TabItem } from './types.js';
-import { resolveVariables } from './variables.js';
 import { getCanvasTokens } from './workspaces.js';
-import { renderToHtml, resolveInstance, type RenderOptions } from './renderer.js';
+import { renderToHtml, type RenderOptions } from './renderer.js';
+import { expandTree } from './expand.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import {
   checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkOverlays, checkPrimaryCount, checkRowRhythm, checkTruncation,
   checkTypeLadder, type DesktopContext,
 } from './desktop-app-rules.js';
-import { extractInventory, expandInstances, isDataLike } from './drift.js';
+import { extractInventory, isDataLike } from './drift.js';
 import { getIconSvg, parseIconRef } from './icons.js';
 import { backdropBehind, composite, contrastRatio, parseAlpha, parseColor, rgbToHex } from './color-math.js';
 import { checkStates, STATE_RULES } from './state-checks.js';
@@ -50,6 +50,10 @@ export interface EvaluationIssue {
   severity: IssueSeverity;
   nodeId: string;
   nodeName?: string;
+  /** Phase 32 slice B — on a finding about a node inside a component
+   * instance: the node's expanded id (`<instanceId>/<childId>`), while
+   * `nodeId` names the instance. Not addressable by batch_design. */
+  innerNodeId?: string;
   /** Phase 31 FR-A7 — on a FOLDED finding (canvas_evaluate's serialised result
    * only): every node the repeated finding names, nodeId being the first. */
   nodeIds?: string[];
@@ -837,8 +841,9 @@ function iconCandidates(ref: string, style: SceneNode['iconStyle']): string[] {
 
 function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
   // Instance-expanded so icons inside stamped components are checked too;
-  // ids that aren't in the canvas tree itself live in a component definition.
-  const expanded = expandInstances(canvas.root, canvas);
+  // ids that aren't in the canvas tree itself live in a component (the
+  // findings pass in evaluateCanvas names the instance).
+  const expanded = expandTree(canvas.root, canvas).root;
   const ownIds = new Set<string>();
   (function walk(n: SceneNode) { ownIds.add(n.id); n.children?.forEach(walk); })(canvas.root);
 
@@ -857,15 +862,18 @@ function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
   const issues: EvaluationIssue[] = [];
   const seen = new Set<string>();
   for (const { node, path, ref: rawRef, flat, required } of icons) {
-    const key = `${node.id}\u0000${path}`;
+    // One finding per origin: the same icon in a component, seen through two
+    // instances (expanded ids <instance>/<node>), is one defect with one fix.
+    // A stored node is its own origin, so it never hides behind an instance.
+    const origin = node.id.includes('/') ? `component:${node.id.slice(node.id.lastIndexOf('/') + 1)}` : node.id;
+    const key = `${origin}\u0000${path}\u0000${rawRef}`;
     if (seen.has(key)) continue;
     seen.add(key);
     const ref = rawRef.trim();
     if (ref && getIconSvg(ref, 24, undefined, node.iconStyle)) continue;
     if (!ref && !required) continue;
 
-    const where = (ownIds.has(node.id) ? '' : ' (inside a component — fix it in the component definition)')
-      + (node.type === 'icon' ? '' : ` (${node.type} ${path})`);
+    const where = node.type === 'icon' ? '' : ` (${node.type} ${path})`;
     if (!ref) {
       issues.push({
         category: 'structure',
@@ -2355,7 +2363,7 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
   // shipped loading screen flashes real-looking data next to placeholders.
   if (canvas.metadata?.variant) {
     if (canvas.metadata.variant.state === 'loading') {
-      const root = expandInstances(canvas.root, canvas);
+      const root = expandTree(canvas.root, canvas).root;
       const hasSkeleton = (n: SceneNode): boolean =>
         n.type === 'skeleton' || (n.children ?? []).some(hasSkeleton);
       if (hasSkeleton(root)) {
@@ -2401,7 +2409,7 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
     return { result: { score: 100, issues: [] } };
   }
 
-  const expanded = expandInstances(canvas.root, canvas);
+  const expanded = expandTree(canvas.root, canvas).root;
   const inv: ReturnType<typeof extractInventory> & { textInputs?: number } = extractInventory(expanded);
   inv.textInputs = countTextInputs(expanded, new Set(inv.tables.map((t) => t.nodeId)));
   const demanded = new Map<string, string>(); // state → noun that demanded it
@@ -2424,73 +2432,48 @@ function checkCoverage(canvas: Canvas, designedStates: string[]): { result: Chec
   };
 }
 
-/** Phase 30 slice D — the tree with every instance expanded into what it
- * renders, for the mobile rules. Nodes inside an instance get ids prefixed by
- * the instance path (`inst/child`), so two instances of one component never
- * share an id, and `owners` maps each such id to the outermost instance. */
-function expandForRules(root: SceneNode, canvas: Canvas): { root: SceneNode; owners: Map<string, SceneNode> } {
-  const owners = new Map<string, SceneNode>();
-  const walk = (node: SceneNode, owner: SceneNode | undefined, prefix: string): SceneNode => {
-    const id = owner ? prefix + node.id : node.id;
-    if (owner) owners.set(id, owner);
-    const resolved = node.type === 'instance' && node.componentId ? resolveInstance(node, canvas) : null;
-    if (resolved) {
-      const childPrefix = `${prefix}${node.id}/`;
-      return { ...resolved, id, children: resolved.children?.map((c) => walk(c, owner ?? node, childPrefix)) };
-    }
-    return { ...node, id, children: node.children?.map((c) => walk(c, owner, prefix)) };
-  };
-  return { root: walk(root, undefined, ''), owners };
-}
-
-/** Re-point findings on nodes inside an instance at the instance (the
- * component holds the node), naming the inner node. */
-/** Phase 31 slice H — the state checks' two themes, cleaned up. A dark
- * finding that says what the light one says (the same colours: they come
- * from literals, not tokens) is dropped, since the dark token layer cannot
- * change it. A finding about targets inside a component instance says the
- * design system never reaches them (instances render unresolved). */
-function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[], owners: Map<string, SceneNode>, instanceIds: Set<string>): EvaluationIssue[] {
+/** Phase 31 slice H — the state checks' two themes: a dark finding that says
+ * what the light one says (the same colours: they come from literals, not
+ * tokens) is dropped, since the dark token layer cannot change it. */
+function stateFindings(light: EvaluationIssue[], dark: EvaluationIssue[]): EvaluationIssue[] {
   const key = (i: EvaluationIssue) => `${i.rule}|${i.severity}|${(i.nodeIds ?? [i.nodeId]).join(',')}|${i.message}`;
   const seen = new Set(light.map(key));
-  const kept = [...light, ...dark.filter((i) => !seen.has(key({ ...i, message: i.message.replace(' in the dark theme', '') })))];
-  const advice = 'These targets sit inside a component instance, which renders without the design system (its tokens and the dark layer never reach them): set the colours on the component\'s own nodes, or move the targets out of the component.';
-  return kept.map((i) => {
-    const ids = i.nodeIds ?? [i.nodeId];
-    // An instance whose component root is itself the target keeps its own id
-    // (owners maps only the nodes under it), so it is named here.
-    const roots = ids.filter((id) => instanceIds.has(id) && !owners.has(id));
-    if (!roots.length && !ids.some((id) => owners.has(id))) return i;
-    const note = roots.length && !ids.some((id) => owners.has(id)) ? ` (${roots.length === 1 ? 'an instance' : 'instances'} — fix ${roots.length === 1 ? 'it in its component' : 'them in their components'})` : '';
-    // An info keeps its own advice (a ring to check by eye) and gains this.
-    return { ...i, message: `${i.message}${note}`, suggestion: i.severity === 'info' && i.suggestion ? `${i.suggestion} ${advice}` : advice };
-  });
+  return [...light, ...dark.filter((i) => !seen.has(key({ ...i, message: i.message.replace(' in the dark theme', '') })))];
 }
 
-/** Every instance node's id in a tree (the ids an expanded instance root keeps). */
-function instanceIdsOf(root: SceneNode): Set<string> {
-  const out = new Set<string>();
-  (function walk(n: SceneNode) { if (n.type === 'instance') out.add(n.id); n.children?.forEach(walk); })(root);
-  return out;
-}
-
-function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>): EvaluationIssue[] {
+/** Phase 32 slice B (K4) — a finding on a node inside a component instance is
+ * reported on the instance, the one stored node that holds it: `nodeId` names
+ * the instance, `innerNodeId` the expanded node, and the message the
+ * component. Its fix is dropped, since batch_design cannot address the node.
+ * A grouped finding maps each of its nodes to its owner. */
+function reportOnInstances(issues: EvaluationIssue[], owners: Map<string, SceneNode>, canvas: Canvas): EvaluationIssue[] {
+  const where = (owner: SceneNode) => {
+    const component = owner.componentId ? canvas.components[owner.componentId] : undefined;
+    return `instance "${owner.name ?? owner.id}" of component "${component?.name ?? owner.componentId}"`;
+  };
   return issues.map((i) => {
-    // A grouped finding (slice H) names several nodes: each maps to its owner.
     const nodeIds = i.nodeIds ? [...new Set(i.nodeIds.map((id) => owners.get(id)?.id ?? id))] : undefined;
-    const owner = i.nodeId ? owners.get(i.nodeId) : undefined;
-    if (nodeIds && i.nodeIds!.length > 1) {
-      // Several members: say which ids are instances, not just the first's.
-      const inside = [...new Set(i.nodeIds!.flatMap((id) => { const o = owners.get(id); return o ? [o.name ?? o.id] : []; }))];
-      const names = inside.map((n) => `"${n}"`).join(', ');
-      const all = i.nodeIds!.every((id) => owners.has(id));
-      const suffix = !inside.length ? ''
-        : all ? (inside.length === 1 ? ` (inside instance ${names} — fix it in its component)` : ` (inside instances ${names} — fix them in their components)`)
-          : ` (some inside instances, listed by instance: ${names} — fix those in their components)`;
-      return { ...i, ...(owner ? { nodeId: owner.id, nodeName: owner.name } : {}), nodeIds, message: `${i.message}${suffix}` };
+    const owner = owners.get(i.nodeId);
+    if (i.nodeIds && i.nodeIds.length > 1) {
+      // Several members: name every instance holding one, not just the first's.
+      const inside = [...new Map(i.nodeIds.flatMap((id) => { const o = owners.get(id); return o ? [[o.id, o] as const] : []; })).values()];
+      if (!inside.length) return { ...i, nodeIds };
+      const all = i.nodeIds.every((id) => owners.has(id));
+      const suffix = all ? ` (inside ${inside.map(where).join(', ')}: fix ${inside.length === 1 ? 'it in the component' : 'them in their components'}, or with an override)`
+        : ` (some inside ${inside.map(where).join(', ')}: fix those in their components, or with an override)`;
+      const { fix: _fix, fixes: _fixes, ...rest } = i;
+      return { ...rest, ...(owner ? { nodeId: owner.id, nodeName: owner.name, innerNodeId: i.nodeId } : {}), nodeIds, message: `${i.message}${suffix}` };
     }
     if (!owner) return nodeIds ? { ...i, nodeIds } : i;
-    return { ...i, nodeId: owner.id, nodeName: owner.name, ...(nodeIds ? { nodeIds } : {}), message: `${i.message} (inside instance "${owner.name ?? owner.id}" — fix it in its component)` };
+    const { fix: _fix, fixes: _fixes, ...rest } = i;
+    return {
+      ...rest,
+      nodeId: owner.id,
+      nodeName: owner.name,
+      innerNodeId: i.nodeId,
+      ...(nodeIds ? { nodeIds } : {}),
+      message: `${i.message} (inside ${where(owner)}: fix it in the component, or with an override on the instance)`,
+    };
   });
 }
 
@@ -2510,7 +2493,12 @@ export async function evaluateCanvas(
   // canvas itself has empty `variables` and inherits everything from the
   // workspace design system.
   const mergedTokens = getCanvasTokens(canvas);
-  const resolvedRoot = resolveVariables(canvas.root, mergedTokens);
+  // Phase 32 slice B — one tree: instances expanded, then resolved, as the
+  // renderer draws them, so every check sees inside components. `rawTree` is
+  // the same expansion with $refs as authored; `owners` maps each node inside
+  // an instance to it, for the findings pass at the end.
+  const { root: resolvedRoot, owners } = expandTree(canvas.root, canvas, mergedTokens);
+  const rawTree = expandTree(canvas.root, canvas).root;
   // Phase 30 slice B — one composition of the type, genre and preset rulesets
   // serves the cliche relaxation and the surface report.
   const declared = resolveSurface(canvas);
@@ -2519,29 +2507,25 @@ export async function evaluateCanvas(
   const rules = composeRulesets(activeRulesets({ type: declared.type, genre: resolvedGenre.genre, preset }));
   const surface: SurfaceReport = { ...declared, rulesOn: rules.on, rulesOff: rules.off, conflicts: rules.conflicts };
   const ruleOn = new Set(rules.on);
-  // Phase 30 slice D — the mobile rules judge what the renderer draws, so they
-  // read the tree with instances expanded (a tab bar inside a component is
-  // still a tab bar). Findings inside an instance report the instance.
-  // Expanded after resolution, as the renderer does it: a component's own
-  // $refs stay as the screenshot draws them.
-  const { root: mobileRoot, owners } = expandForRules(resolvedRoot, canvas);
-  const expandedRaw = expandForRules(canvas.root, canvas).root;
   const mobileTypeRules = MOBILE_RULES.some((id) => ruleOn.has(id));
   // Phase 31 slice C — the desktop-app rules read the expanded tree too, and
   // in detailed mode the rects of that tree.
   const desktopTypeRules = DESKTOP_APP_RULES.some((id) => ruleOn.has(id));
   const expandedRules = mobileTypeRules || desktopTypeRules;
   const mobile: MobileContext = {
-    root: mobileRoot,
+    root: resolvedRoot,
     profile: deviceProfile(declared.device ?? DEFAULT_DEVICE) ?? DEVICE_PROFILES[DEFAULT_DEVICE],
     width: typeof resolvedRoot.width === 'number' ? resolvedRoot.width : 1440,
     height: typeof resolvedRoot.height === 'number' ? resolvedRoot.height : 900,
   };
   const entries = buildTreeContext(resolvedRoot);
-  // Also walk the unresolved tree for token usage stats
-  const rawEntries = buildTreeContext(canvas.root);
+  // The raw expansion: spacing and the cliché check read authored values.
+  const rawEntries = buildTreeContext(rawTree);
+  // The stored tree (K3): emptiness, the stats, checkStructure and the token
+  // census read the canvas as stored, instance nodes included.
+  const storedEntries = buildTreeContext(canvas.root);
 
-  if (entries.length <= 1) {
+  if (storedEntries.length <= 1) {
     // A blank document is not a presentable design. This used to return 100
     // with the emptiness only mentioned in the summary — so a canvas whose
     // content never landed (or was wiped) sailed through every gate and the
@@ -2558,7 +2542,7 @@ export async function evaluateCanvas(
         message: 'The canvas is empty — nothing has been designed yet. Stamp a structure (list_structures → apply_structure) or add content before evaluating.',
       }],
       summary: 'Canvas is empty — nothing has been designed yet.',
-      stats: { totalNodes: entries.length, textNodes: 0, frameNodes: 0, maxDepth: 0, tokenUsagePercent: 0, componentReusePercent: 0 },
+      stats: { totalNodes: storedEntries.length, textNodes: 0, frameNodes: 0, maxDepth: 0, tokenUsagePercent: 0, componentReusePercent: 0 },
       mode: options.mode,
       surface,
     };
@@ -2578,19 +2562,19 @@ export async function evaluateCanvas(
     // the worse theme: a dark-only failure must hurt.
     const darkLayer = mergedTokens.dark?.colors;
     const hasDark = !!darkLayer && Object.keys(darkLayer).length > 0;
-    const darkRoot = hasDark ? resolveVariables(canvas.root, mergedTokens, { theme: 'dark' }) : undefined;
+    const darkRoot = hasDark ? expandTree(canvas.root, canvas, mergedTokens, { theme: 'dark' }).root : undefined;
     let color = light;
     if (darkRoot) {
       const dark = checkColorContrast(buildTreeContext(darkRoot), 'dark');
       color = { score: Math.min(light.score, dark.score), issues: [...light.issues, ...dark.issues] };
     }
     // Phase 31 slice H (FR-H1 to FR-H4) — the element states, checked from
-    // the tree the renderer draws (instances expanded), in each theme.
+    // the tree the renderer draws, in each theme.
     const stateOn = (id: string) => ruleOn.has(id);
     const states = Object.values(STATE_RULES).some(stateOn)
-      ? stateFindings(checkStates(mobileRoot, stateOn), darkRoot ? checkStates(expandForRules(darkRoot, canvas).root, stateOn, 'dark') : [], owners, instanceIdsOf(canvas.root))
+      ? stateFindings(checkStates(resolvedRoot, stateOn), darkRoot ? checkStates(darkRoot, stateOn, 'dark') : [])
       : [];
-    results.set('color', withRuleIssues(color, reportOnInstances(states, owners)));
+    results.set('color', withRuleIssues(color, states));
   }
   // Phase 25 slice A — detailed-mode layout is computed ONCE and shared by
   // the consistency and typography (measure) checks.
@@ -2601,10 +2585,9 @@ export async function evaluateCanvas(
   if (options.mode === 'detailed' && (activeCategories.includes('consistency') || activeCategories.includes('typography') || safeAreaDetailed || desktopDetailed)) {
     const w = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
     const h = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
-    // On a mobile canvas render the tree the mobile rules read: the same
-    // pixels as the canvas render, with every node inside an instance under
-    // its own id, so the rects are unambiguous. Web keeps the canvas render.
-    const html = renderToHtml(expandedRules ? mobileRoot : resolvedRoot, w, h, canvas, options.renderOpts);
+    // The one tree, so every node inside an instance has its own id and the
+    // rects and the findings agree.
+    const html = renderToHtml(resolvedRoot, w, h, canvas, options.renderOpts);
     detailedLayout = await computeLayout(html, undefined, expandedRules ? 25 : 10, { width: w, height: h });
   }
   // Phase 31 slice C — the desktop-app rules' view of the canvas.
@@ -2615,11 +2598,11 @@ export async function evaluateCanvas(
     const index = (r: LayoutRect) => { rects.set(r.nodeId, r); r.children?.forEach(index); };
     detailedLayout?.forEach(index);
     desktop = {
-      root: mobileRoot,
+      root: resolvedRoot,
       profile: windowProfile(declared.device ?? DEFAULT_WINDOW) ?? WINDOW_PROFILES[DEFAULT_WINDOW],
       ...(detailedLayout ? { rects } : {}),
     };
-    desktopTables = new Set(extractInventory(mobileRoot).tables.map((t) => t.nodeId));
+    desktopTables = new Set(extractInventory(resolvedRoot).tables.map((t) => t.nodeId));
   }
   if (activeCategories.includes('typography')) {
     const typography = checkTypography(entries, mergedTokens, {
@@ -2628,18 +2611,18 @@ export async function evaluateCanvas(
       layout: detailedLayout,
       tables: extractInventory(resolvedRoot).tables,
     });
-    const rawById = new Map(buildTreeContext(expandedRaw).map((en) => [en.node.id, en.node]));
+    const rawById = new Map(rawEntries.map((en) => [en.node.id, en.node]));
     const pinned = new Set(Object.values(mergedTokens.typography ?? {}).map((t) => t.fontSize).filter((v): v is number => typeof v === 'number'));
-    results.set('typography', withRuleIssues(typography, reportOnInstances([
+    results.set('typography', withRuleIssues(typography, [
       ...(ruleOn.has('mobile-type-floor') ? checkTypeFloor(mobile, rawById) : []),
       ...(desktop && ruleOn.has('desktop-app-type-ladder') ? checkTypeLadder(desktop, rawById, pinned) : []),
-    ], owners)));
+    ]));
   }
   if (activeCategories.includes('structure')) {
-    results.set('structure', withRuleIssues(checkStructure(rawEntries, canvas), [
-      ...(ruleOn.has('mobile-artboard') ? reportOnInstances(checkArtboard(mobile, declared), owners) : []),
-      ...(ruleOn.has('desktop-app-artboard') ? reportOnInstances(checkDesktopArtboard(mobileRoot, declared), owners) : []),
-      ...(desktop && ruleOn.has('desktop-app-primary-count') ? reportOnInstances(checkPrimaryCount(desktop), owners) : []),
+    results.set('structure', withRuleIssues(checkStructure(storedEntries, canvas), [
+      ...(ruleOn.has('mobile-artboard') ? checkArtboard(mobile, declared) : []),
+      ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(resolvedRoot, declared) : []),
+      ...(desktop && ruleOn.has('desktop-app-primary-count') ? checkPrimaryCount(desktop) : []),
     ]));
   }
   if (activeCategories.includes('consistency')) {
@@ -2648,24 +2631,20 @@ export async function evaluateCanvas(
       ? checkConsistencyDetailed(entries, detailedLayout, consistencyCtx)
       : checkConsistency(entries, consistencyCtx);
     results.set('consistency', withRuleIssues(consistency,
-      desktop && ruleOn.has('desktop-app-row-rhythm') ? reportOnInstances(checkRowRhythm(desktop, desktopTables), owners) : []));
+      desktop && ruleOn.has('desktop-app-row-rhythm') ? checkRowRhythm(desktop, desktopTables) : []));
   }
   if (activeCategories.includes('usability')) {
     const touch = ruleOn.has('mobile-touch-target') ? { floor: mobile.profile.touchTarget } : undefined;
-    // On a mobile canvas the whole usability check reads the expanded tree;
-    // web keeps the unexpanded one.
-    let usability = mobileTypeRules
-      ? (({ score, issues }) => ({ score, issues: reportOnInstances(issues, owners) }))(checkUsability(buildTreeContext(mobileRoot), mobile.width, touch))
-      : checkUsability(entries, mobile.width, touch);
+    let usability = checkUsability(entries, mobile.width, touch);
     if (!touch) {
       // Phase 31 FR-A4 — web and desktop-app: the pointer-target census reads
       // the tree with instances expanded. Detailed mode renders that tree
       // only when something is undersized, so the circle test has rects.
-      const targetEntries = buildTreeContext(mobileRoot);
+      const targetEntries = entries;
       const targets = pointerTargets(targetEntries, mobile.width);
       let rects: Map<string, LayoutRect> | undefined;
       if (options.mode === 'detailed' && undersizedTargets(targets).length > 0) {
-        const layout = await computeLayout(renderToHtml(mobileRoot, mobile.width, mobile.height, canvas, options.renderOpts), undefined, 25, { width: mobile.width, height: mobile.height });
+        const layout = await computeLayout(renderToHtml(resolvedRoot, mobile.width, mobile.height, canvas, options.renderOpts), undefined, 25, { width: mobile.width, height: mobile.height });
         // computeLayout returns a tree (each rect nests its children).
         rects = new Map();
         const index = (r: LayoutRect) => { rects!.set(r.nodeId, r); r.children?.forEach(index); };
@@ -2680,10 +2659,10 @@ export async function evaluateCanvas(
         : pointer.issues;
       usability = {
         score: Math.max(0, usability.score - (100 - pointer.score)),
-        issues: [...usability.issues, ...reportOnInstances(named, owners)],
+        issues: [...usability.issues, ...named],
       };
     }
-    const extra = reportOnInstances([
+    const extra = [
       ...(ruleOn.has('mobile-handbuilt-target') ? checkHandbuiltTargets(mobile) : []),
       ...(ruleOn.has('mobile-safe-area') ? (detailedLayout ? checkSafeAreaDetailed(mobile, detailedLayout) : checkSafeAreaFast(mobile)) : []),
       ...(ruleOn.has('mobile-one-column') ? checkOneColumn(mobile) : []),
@@ -2693,7 +2672,7 @@ export async function evaluateCanvas(
       ...(desktop && ruleOn.has('desktop-app-current') ? checkCurrent(desktop) : []),
       ...(desktop && ruleOn.has('desktop-app-truncation') ? checkTruncation(desktop, desktopTables) : []),
       ...(desktop && ruleOn.has('desktop-app-overlay') ? checkOverlays(desktop, desktopTables) : []),
-    ], owners);
+    ];
     results.set('usability', withRuleIssues(usability, extra));
   }
 
@@ -2729,6 +2708,9 @@ export async function evaluateCanvas(
     genreReport = buildGenreReport(resolvedGenre, relaxed, preset);
   }
 
+  // K4 — findings on nodes inside an instance are reported on the instance.
+  for (const [name, result] of results) results.set(name, { ...result, issues: reportOnInstances(result.issues, owners, canvas) });
+
   const overallScore = aggregateScores(results, CATEGORY_WEIGHTS);
   const allIssues = [...results.values()].flatMap((r) => r.issues);
   const categories: CategoryScore[] = [];
@@ -2742,15 +2724,15 @@ export async function evaluateCanvas(
   }
 
   // Stats
-  const totalNodes = entries.length;
-  const textNodes = entries.filter((e) => e.node.type === 'text').length;
-  const frameNodes = entries.filter((e) => ['frame', 'component'].includes(e.node.type)).length;
-  const maxDepth = Math.max(...entries.map((e) => e.depth));
-  const instanceNodes = entries.filter((e) => e.node.type === 'instance').length;
+  const totalNodes = storedEntries.length;
+  const textNodes = storedEntries.filter((e) => e.node.type === 'text').length;
+  const frameNodes = storedEntries.filter((e) => ['frame', 'component'].includes(e.node.type)).length;
+  const maxDepth = Math.max(...storedEntries.map((e) => e.depth));
+  const instanceNodes = storedEntries.filter((e) => e.node.type === 'instance').length;
 
   let tokenRefs = 0;
   let totalStringProps = 0;
-  for (const { node } of rawEntries) {
+  for (const { node } of storedEntries) {
     for (const [key, val] of Object.entries(node)) {
       if (['id', 'type', 'name', 'children'].includes(key) || PRIMITIVE_COPY_PROPS.has(key)) continue;
       if (typeof val === 'string') {

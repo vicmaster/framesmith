@@ -9,10 +9,9 @@
 // styles, geometry, or nesting depth, because those are exactly what the
 // import pipeline normalizes away. Pure and fixture-testable without Chrome;
 // the caller supplies both trees (the canvas side instance-expanded via
-// expandInstances, the page side from an ephemeral importUrl).
+// expandTree in src/expand.ts, the page side from an ephemeral importUrl).
 
-import type { Canvas, SceneNode } from './types.js';
-import { resolveInstance } from './renderer.js';
+import type { SceneNode } from './types.js';
 
 export type DriftFindingKind = 'missing-in-page' | 'missing-in-canvas' | 'control-mismatch' | 'table-mismatch';
 
@@ -257,22 +256,6 @@ export function extractInventory(root: SceneNode): Inventory {
 
   walk(root, null, 0, []);
   return inv;
-}
-
-/** Expand instance nodes against the canvas's component registry so the
- * inventory sees through stamped components (app shells). Unknown componentIds
- * pass through unexpanded. */
-export function expandInstances(root: SceneNode, canvas: Canvas): SceneNode {
-  const clone = structuredClone(root);
-  function walk(node: SceneNode): SceneNode {
-    if (node.type === 'instance' && node.componentId) {
-      const resolved = resolveInstance(node, canvas);
-      if (resolved) return walk(resolved);
-    }
-    if (node.children) node.children = node.children.map(walk);
-    return node;
-  }
-  return walk(clone);
 }
 
 // ── comparison ──────────────────────────────────────────────────────────────

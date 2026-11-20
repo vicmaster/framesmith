@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { getCanvas, listCanvases, archiveCanvas, unarchiveCanvas, deleteCanvas, ensureFresh, touchCanvas, type CanvasSummary } from './scene-graph.js';
-import { resolveVariables } from './variables.js';
+import { expandTree } from './expand.js';
 import { renderToHtml } from './renderer.js';
 import { getProject, listProjects, listWorkspaces, getCanvasTokens, getProjectDesignSystem, getWorkspaceDesignSystem } from './workspaces.js';
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from './aggregate.js';
@@ -119,7 +119,7 @@ export async function startViewer(port: number): Promise<number> {
         if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
         // Phase 25 slice D — ?theme=dark renders the dark token layer.
         const theme = url.searchParams.get('theme') === 'dark' ? 'dark' as const : undefined;
-        const resolved = resolveVariables(canvas.root, getCanvasTokens(canvas), { theme });
+        const resolved = expandTree(canvas.root, canvas, getCanvasTokens(canvas), { theme }).root;
         const defaultW = typeof canvas.root.width === 'number' ? canvas.root.width : 1440;
         const defaultH = typeof canvas.root.height === 'number' ? canvas.root.height : 900;
         const w = url.searchParams.has('w') ? parseInt(url.searchParams.get('w')!, 10) : defaultW;
@@ -1775,7 +1775,10 @@ ${FAVICON_HTML}
       const chain = [];
       let el = target;
       while (el) {
-        chain.push(el.getAttribute('data-node-id'));
+        // A node inside a component instance renders as "<instance>/<node>":
+        // the comment anchors on the instance, the node the canvas stores.
+        const id = el.getAttribute('data-node-id').split('/')[0];
+        if (!chain.includes(id)) chain.push(id);
         el = el.parentElement && el.parentElement.closest('[data-node-id]');
       }
       openPopover(chain, e);
