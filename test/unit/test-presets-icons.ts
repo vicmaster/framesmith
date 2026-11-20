@@ -81,7 +81,3 @@ testIcons();
 
 console.log(`\nResults: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
-
-// Deliberate type error: proves CI's fast job type-checks tests. Reverted next.
-const typeCheckProbe: number = 'not a number';
-void typeCheckProbe;
