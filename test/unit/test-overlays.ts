@@ -185,7 +185,7 @@ const modal = (extra: Partial<SceneNode> = {}): SceneNode => ({
   check('explicit fill wins; $token refs inside actions resolve', explicit.children![0].fill === '#000000' && explicit.children![0].actions![0].fill === TOKENS.danger);
   const noElevation = resolveVariables(canvasWith([modal()], app, TOKENS).root, { colors: TOKENS });
   check('without $elevation.overlay no shadows are set (renderer fallback)', noElevation.children![0].shadows === undefined);
-  // Unthemed and inside a component (which skips resolveVariables): neutral fallbacks, never invisible.
+  // Unthemed, or a raw tree rendered without resolveVariables: neutral fallbacks, never invisible.
   const unthemed = layerOf(renderToHtml(canvasWith([modal(), { id: 'tip', name: 'tip', type: 'tooltip', text: 'x' }]).root, 1440, 900));
   check('unthemed modal: white surface, grey border, dark text', /data-node-id="m"[^>]*background-color: #FFFFFF; border: 1px solid #D1D5DB/.test(unthemed));
   check('unthemed tooltip: dark fill, light text', /data-node-id="tip"[^>]*background-color: #111827; color: #FFFFFF/.test(unthemed));

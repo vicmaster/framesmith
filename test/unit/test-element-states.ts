@@ -133,7 +133,7 @@ for (const s of ['rest', 'hover', 'focus', 'pressed'] as const) {
   check('P3: then $primary', tag(render([{ id: 'n', type: 'button', label: 'S', state: 'focus' }], onlyPrimary), 'n').includes(ringCss('#B45309')));
   check('P3: then #2563EB', tag(render([{ id: 'n', type: 'button', label: 'S', state: 'focus' }], {}), 'n').includes(ringCss('#2563EB')));
   const unresolved = tag(render([{ id: 'n', type: 'button', label: 'S', state: 'hover', color: '#FFFFFF', fill: '#000000' }], {}, false), 'n');
-  check('P3: an unresolved node (inside a component) uses #2563EB and the constant layers', unresolved.includes(layer('#FFFFFF', 8)) && unresolved.includes('--fs-ring: #2563EB'), unresolved);
+  check('P3: an unresolved node (a tree rendered without resolution) uses #2563EB and the constant layers', unresolved.includes(layer('#FFFFFF', 8)) && unresolved.includes('--fs-ring: #2563EB'), unresolved);
   const tuned: DesignVariables = { ...SYSTEM, state: { ...SYSTEM.state, hover: 0.2, pressed: 0.3 } };
   const h = tag(render([{ id: 'n', type: 'button', label: 'S', state: 'hover' }], tuned), 'n');
   check('P3: a hover token of 0.2 layers at 20%', h.includes('#FFFFFF 20%'), h);

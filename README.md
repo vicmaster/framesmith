@@ -936,6 +936,8 @@ Every result also carries a **`surface`** field: `{ type, device, source, rulesO
 
 Repeated findings fold in this result: three or more warnings or infos with the same severity, category, rule (or tell) and theme come back as one entry when they also share their message — on its shape for members that carry a fix (each fix op holds its node's specifics), word for word apart from quoted node text for members without one. The entry keeps the first one's message and adds `nodeIds` (distinct), `count` and, when they had fixes, `fixes: [{ nodeId, op }]`. Errors never fold, and `canvas_autofix` works from the unfolded list.
 
+Every check reads the canvas as it renders: each component instance is expanded into its component, with the instance's props and overrides applied, and the design system is resolved inside it. A finding on a node inside an instance reports the instance in `nodeId` (the stored node, fixed in the component or with an override). It reports the inner node in `innerNodeId`, as `"<instanceId>/<childId>"`, the id `snapshot_layout` and `canvas_stress` give it. Its message names the component, and it carries no `fix`, since `batch_design` cannot address an expanded id.
+
 Whenever the `coverage` category runs on a **base** canvas, the result also carries a **`coverage`** field: `{ dataBearing, states, missing }` — whether the screen carries data-bearing content, which state variants (`canvas_add_variant`) already exist, and which demanded states are missing. It's absent on variant canvases (a variant *is* a designed state, so it doesn't demand states of itself).
 
 | Param | Type | Description |
