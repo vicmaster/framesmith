@@ -294,7 +294,7 @@ function resolveStateStyle(v: DesignVariables): StateStyle {
     // FR-H1's chain: the renderer and the check never disagree.
     ring: c['focus-ring'] ?? c.accent ?? c.primary ?? CONTROL_FALLBACK.accent,
     onSurface: c['text-primary'] ?? CONTROL_FALLBACK.text,
-    surface: c['bg-surface'] ?? c.surface ?? c['bg-primary'] ?? c.background ?? CONTROL_FALLBACK.surface,
+    surface: SURFACE_CHAIN.map((n) => c[n]).find((x) => x !== undefined) ?? CONTROL_FALLBACK.surface,
     hover: unit(s.hover) ?? STATE_LAYERS.hover,
     focus: unit(s.focus) ?? STATE_LAYERS.focus,
     pressed: unit(s.pressed) ?? STATE_LAYERS.pressed,

@@ -29,7 +29,7 @@ const BORDER_NON_COLOR = new Set(['collapse', 'separate', 'solid', 'dashed', 'do
 // Phase 32 slice C — text- and bg- utilities that are not colours (wrapping,
 // alignment, image placement, gradients): mapped as colours they became
 // $refs no token defines.
-const TEXT_NON_COLOR = /^(balance|pretty|wrap|nowrap|ellipsis|clip|justify|start|end|shadow(-.+)?)$/;
+const TEXT_NON_COLOR = /^(balance|pretty|wrap|nowrap|ellipsis|clip|justify|start|end|shadow(-.+)?|opacity-.+)$/;
 const BG_NON_COLOR = /^(cover|contain|auto|none|fixed|local|scroll|center|top|bottom|left|right|(left|right)-(top|bottom)|(no-)?repeat(-.+)?|clip-.+|origin-.+|blend-.+|gradient-.+|linear-.+|radial(-.+)?|conic(-.+)?|opacity-.+|size-.+|position-.+)$/;
 
 const TEXT_SIZES: Record<string, number> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60, '7xl': 72, '8xl': 96, '9xl': 128 };
@@ -57,6 +57,9 @@ function colorValue(name: string, theme?: Record<string, string>): string | null
   if (name === 'black') return '#000000';
   if (name === 'transparent' || name === 'current' || name === 'inherit') return null;
   if (name.startsWith('[')) return null; // arbitrary value — computed styles cover it
+  // An opacity modifier (red-500/50) or a CSS variable (bg-(--x)): computed
+  // styles cover it; as a name it would be a $ref no token defines.
+  if (name.includes('/') || name.startsWith('(')) return null;
   if (name in TAILWIND_PALETTE && !(theme && name in theme)) return TAILWIND_PALETTE[name];
   return `$${name}`;
 }
@@ -153,11 +156,14 @@ export function classesToProps(classes: string[], theme?: Record<string, string>
     if (m) {
       const rest = m[1];
       if (rest in TEXT_SIZES) { props.fontSize = TEXT_SIZES[rest]; continue; }
+      // text-sm/6: a size with a line-height modifier (computed styles own the leading).
+      const size = rest.split('/')[0];
+      if (rest.includes('/') && size in TEXT_SIZES) { props.fontSize = TEXT_SIZES[size]; continue; }
       if (rest === 'center' || rest === 'right' || rest === 'left') {
         if (rest !== 'left') props.textAlign = rest;
         continue;
       }
-      if (!TEXT_NON_COLOR.test(rest)) setColor('color', rest, cls);
+      if ((theme && rest in theme) || !TEXT_NON_COLOR.test(rest)) setColor('color', rest, cls);
       continue;
     }
     m = cls.match(/^font-(.+)$/);
@@ -168,7 +174,7 @@ export function classesToProps(classes: string[], theme?: Record<string, string>
 
     // ── background ──
     m = cls.match(/^bg-(.+)$/);
-    if (m) { if (!BG_NON_COLOR.test(m[1])) setColor('fill', m[1], cls); continue; }
+    if (m) { if ((theme && m[1] in theme) || !BG_NON_COLOR.test(m[1])) setColor('fill', m[1], cls); continue; }
 
     // ── misc ──
     if (cls === 'overflow-hidden') { props.overflow = 'hidden'; continue; }

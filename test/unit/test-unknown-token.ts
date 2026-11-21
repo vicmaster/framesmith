@@ -201,9 +201,13 @@ b=I("${tp.nodeId}", {type: "instance", name: "b", componentId: "${tc.nodeId}", o
   check('twin: the same typo in two stored instances\' own overrides is two findings', about(await findings(twin), '$nope-own').length === 2);
 }
 {
-  const ladder: DesignVariables = { ...SYSTEM, spacing: { 'space-md': 16, 'space-lg': 24 } };
-  const [m] = await findings(canvasWith([frame('a', { gap: '$space-m' })], ladder));
-  check('a lone letter is a typo, not a ladder step: $space-m is fixed to $space-md', m?.fix?.op === 'U("a", { gap: "$space-md" })', m?.fix?.op);
+  // A lone letter is a rung of an s / m / l ladder, so it is never renamed
+  // across: a missed fix is cheaper than a wrong size.
+  const sml: DesignVariables = { ...SYSTEM, spacing: { 'space-md': 16 } };
+  const [l] = await findings(canvasWith([frame('a', { gap: '$space-l' })], sml));
+  check('$space-l on a ladder with only space-md is not renamed to it', !!l && !l.fix, l?.fix?.op);
+  const [m] = await findings(canvasWith([frame('a', { gap: '$space-m' })], { ...SYSTEM, spacing: { 'space-l': 24 } }));
+  check('$space-m on a ladder with only space-l is not renamed to it', !!m && !m.fix, m?.fix?.op);
   // Twins: real steps still never cross a rung.
   const [xl] = await findings(canvasWith([frame('a', { gap: '$space-2xl' })], { ...SYSTEM, spacing: { 'space-xl': 32 } }));
   check('twin: $space-2xl with only space-xl defined is not fixed (another rung)', !!xl && !xl.fix);
@@ -216,7 +220,15 @@ b=I("${tp.nodeId}", {type: "instance", name: "b", componentId: "${tc.nodeId}", o
   parseAndExecute(canvas.root, `a=I("document", {type: "instance", name: "a", componentId: "${card.nodeId}"})`, canvas);
   const fs = await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] });
   const ids = fs.issues.filter((i) => i.rule === 'unknown-token').map((i) => `${i.nodeId}|${i.innerNodeId ?? ''}`);
-  check('an id-less node inside a component never reports an id ending in "undefined"', ids.length > 0 && ids.every((x) => !x.includes('undefined')), ids.join(', '));
+  const instId = canvas.root.children!.find((n) => n.name === 'a')?.id;
+  check('an id-less node inside an instance is reported on the instance', fs.issues.some((i) => i.rule === 'unknown-token' && i.nodeId === instId && !i.fix), ids.join(', '));
+  // Every rule keeps the instance for such a node (contrast too).
+  const contrast = canvasWith([]);
+  const [cc] = parseAndExecute(contrast.root, 'card=I("document", {type: "component", name: "Faint", fill: "#FFFFFF", children: [{type: "text", content: "faint words here", color: "#EEEEEE", fontSize: 12}]})', contrast);
+  const [ci] = parseAndExecute(contrast.root, `a=I("document", {type: "instance", name: "a", componentId: "${cc.nodeId}"})`, contrast);
+  const cev = await evaluateCanvas(contrast, { mode: 'fast', categories: ['color'] });
+  const onInst = cev.issues.filter((i) => i.category === 'color' && i.severity === 'error' && i.nodeId === ci.nodeId);
+  check('an id-less text inside an instance keeps its contrast error on the instance', onInst.length >= 1, cev.issues.map((i) => i.nodeId).join(', '));
 }
 
 // ── Verify round 1 (review): dotted derived names, aliases, messages ─────────────
@@ -234,6 +246,10 @@ b=I("${tp.nodeId}", {type: "instance", name: "b", componentId: "${tc.nodeId}", o
   vars.dark = { elevation: { glow: [{ x: 0, y: 0, blur: 4, spread: 0, color: '#000' }] } };
   const [f] = await findings(canvasWith([frame('a', { shadow: '$elevation.glow' })], vars));
   check('a dark-only elevation names the elevation layer', /base elevation/.test(f?.suggestion ?? ''), f?.suggestion);
+  const night = structuredClone(SYSTEM);
+  night.dark = { colors: { night: '#000000' } };
+  const [n] = await findings(canvasWith([frame('a', { fill: '$colors.night' })], night));
+  check('a dark-only dotted colour names the bare token and the colors layer', n?.suggestion?.startsWith('Define "night" in the base colors') === true, n?.suggestion);
 }
 {
   const [f] = await findings(canvasWith([frame('a', { gap: '$space-mdd' })]));

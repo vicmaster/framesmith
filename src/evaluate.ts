@@ -971,11 +971,12 @@ function levenshtein(a: string, b: string): number {
   return row[b.length];
 }
 
-/** The size step a token name ends in (3xs, xxs, xs, sm, md, lg, xl, 2xl, a
- * number), if any. A lone letter is a typo, not a step. */
+/** The size step a token name ends in (s, m, l, 3xs, xxs, xs, sm, md, lg,
+ * xl, 2xl, a number), if any. A lone letter counts: on an s / m / l ladder
+ * `$space-m` is a rung, so it is never renamed to `$space-md`. */
 function ladderStep(name: string): string | undefined {
   const last = name.slice(name.lastIndexOf('-') + 1).toLowerCase();
-  return /^(\d*x+[sl]|sm|md|lg|\d+)$/.test(last) ? last : undefined;
+  return /^(\d*x*[sml]|sm|md|lg|\d+)$/.test(last) ? last : undefined;
 }
 
 /** The value at a ref site on an object (a node or an override). */
@@ -1081,7 +1082,7 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
     if (kind) return;
     if (tokenKind(name, dark) !== undefined) {
       const layer = name.startsWith('elevation.') ? 'elevation' : 'colors';
-      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined only in the dark layer, so light renders it raw${where}.`, suggestion: `Define "${name.replace(/^elevation\./, '')}" in the base ${layer} too (set_variables), not only under dark.${fromOverride}` });
+      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined only in the dark layer, so light renders it raw${where}.`, suggestion: `Define "${name.replace(/^(elevation|colors)\./, '')}" in the base ${layer} too (set_variables), not only under dark.${fromOverride}` });
       return;
     }
     const ranked = candidatePool(accepts, tokens)

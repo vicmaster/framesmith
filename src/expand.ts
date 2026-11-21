@@ -34,10 +34,8 @@ export function expandTree(
   // inside itself stays unexpanded instead of recursing forever.
   const open = new Set<string>();
   const walk = (node: SceneNode, owner: SceneNode | undefined, prefix: string): SceneNode => {
-    // A node with no id (an inline child of a batch_design insert) stays
-    // without one inside an instance too.
-    const id = owner && node.id !== undefined ? prefix + node.id : node.id;
-    if (owner && id !== undefined) owners.set(id, owner);
+    const id = owner ? prefix + node.id : node.id;
+    if (owner) owners.set(id, owner);
     const cid = node.type === 'instance' ? node.componentId : undefined;
     const resolved = cid && !open.has(cid) ? resolveInstance(node, canvas) : null;
     const source = resolved ?? node;
