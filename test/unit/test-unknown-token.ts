@@ -161,6 +161,21 @@ b=I("${page.nodeId}", {type: "instance", name: "card-b", componentId: "${card.no
   check('a typo in a component no instance uses warns and names it', fs.length === 1 && /Unused card/.test(fs[0].message) && !fs[0].fix, fs.map((f) => f.message).join(' | '));
 }
 
+// ── Nodes with no id (inline children of a batch_design insert) ─────────────
+{
+  const canvas = canvasWith([]);
+  parseAndExecute(canvas.root, 'box=I("document", {type: "frame", name: "box", children: [{type: "text", content: "x", color: "$nope"}, {type: "icon", icon: "no-such-icon-xyz"}]})', canvas);
+  const box = canvas.root.children![0].id;
+  let crashed = '';
+  let ev: Awaited<ReturnType<typeof evaluateCanvas>> | undefined;
+  try { ev = await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] }); } catch (e) { crashed = (e as Error).message; }
+  check('an id-less inline child does not crash evaluate', !crashed, crashed);
+  const token = ev?.issues.find((i) => i.rule === 'unknown-token');
+  check('...its unknown token is reported on its nearest ancestor with an id, with no fix', token?.nodeId === box && !token.fix, token?.nodeId);
+  const icon = ev?.issues.find((i) => /Unknown icon/.test(i.message));
+  check('...and so is its unknown icon, with no fix (an op would rewrite the parent)', icon?.nodeId === box && !icon.fix, icon?.nodeId);
+}
+
 // ── FR-C3: copy is never resolved ─────────────────────────────────────────────
 {
   const canvas = canvasWith([

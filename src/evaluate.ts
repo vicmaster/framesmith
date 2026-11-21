@@ -785,10 +785,18 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas, tokens: DesignVari
  * primitives' icon props (a blank glyph in a tab bar is the same defect). */
 function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref: string; flat: boolean; required: boolean }> {
   const out: Array<{ node: SceneNode; path: string; ref: string; flat: boolean; required: boolean }> = [];
+  // A node with no id (an inline child of a batch_design insert) is reported
+  // on its nearest ancestor with one.
+  let anchor = root.id;
   const add = (node: SceneNode, path: string, ref: unknown, flat: boolean, required: boolean) => {
-    if (typeof ref === 'string' || required) out.push({ node, path, ref: typeof ref === 'string' ? ref : '', flat, required });
+    const hasId = typeof node.id === 'string';
+    const reported = hasId ? node : { ...node, id: anchor };
+    // `flat` gates the fix: one with no id of its own has no op to target.
+    if (typeof ref === 'string' || required) out.push({ node: reported, path, ref: typeof ref === 'string' ? ref : '', flat: flat && hasId, required });
   };
   (function walk(n: SceneNode) {
+    const outer = anchor;
+    if (typeof n.id === 'string') anchor = n.id;
     if (n.type === 'icon') add(n, 'icon', n.icon, true, true);
     else if (n.type === 'button') add(n, 'icon', n.icon, true, false);
     // Phase 31 slice B — the desktop-app primitives draw their `icon` too.
@@ -801,6 +809,7 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
       if (n.variant === 'fab') add(n, 'fab.icon', n.fab?.icon, false, false);
     }
     n.children?.forEach(walk);
+    anchor = outer;
   })(root);
   return out;
 }
@@ -1087,18 +1096,28 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
     pending.push({ issue, nodeId: node.id, key: site.key });
   };
 
-  (function walk(node: SceneNode, master?: string) {
-    const inMaster = master ?? (node.type === 'component' && !node.id.includes('/') && canvas.components[node.id] ? node.id : undefined);
-    for (const { ref, ...site } of tokenRefs(node)) judge(node, site, ref, originOf(node.id, node, site, ref, inMaster), inMaster);
-    node.children?.forEach((c) => walk(c, inMaster));
-  })(raw);
+  // A node with no id (inline children of a batch_design insert) is its own
+  // origin, reported on its nearest ancestor with one, and never fixed.
+  let anon = 0;
+  const judgeNode = (node: SceneNode, anchor: string, origin: (site: RefSite, ref: string) => string, component?: string) => {
+    const hasId = typeof node.id === 'string';
+    const own = hasId ? undefined : `anon:${anon++}`;
+    const reported = hasId ? node : { ...node, id: anchor };
+    for (const { ref, ...site } of tokenRefs(node)) judge(reported, site, ref, own ?? origin(site, ref), component);
+  };
+  (function walk(node: SceneNode, anchor: string, master?: string) {
+    const hasId = typeof node.id === 'string';
+    const inMaster = master ?? (node.type === 'component' && hasId && !node.id.includes('/') && canvas.components[node.id] ? node.id : undefined);
+    judgeNode(node, anchor, (site, ref) => originOf(node.id, node, site, ref, inMaster), inMaster);
+    node.children?.forEach((c) => walk(c, hasId ? node.id : anchor, inMaster));
+  })(raw, raw.id);
   // Components no instance uses are still the canvas's: judge their definitions.
   for (const [cid, component] of Object.entries(canvas.components)) {
     if (used.has(cid) || masters.has(cid)) continue;
-    (function walk(node: SceneNode) {
-      for (const { ref, ...site } of tokenRefs(node)) judge(node, site, ref, defNode(cid, node.id), cid);
-      node.children?.forEach(walk);
-    })(component);
+    (function walk(node: SceneNode, anchor: string) {
+      judgeNode(node, anchor, () => defNode(cid, node.id), cid);
+      node.children?.forEach((c) => walk(c, typeof node.id === 'string' ? node.id : anchor));
+    })(component, cid);
   }
 
   const stored = new Map<string, SceneNode>();

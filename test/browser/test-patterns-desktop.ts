@@ -64,7 +64,12 @@ async function detailedFindings(canvas: Canvas, infos = true): Promise<string[]>
  * painted as a page stamp paints it. */
 function stamped(name: string, component: boolean, personality?: PersonalityName, size: { width?: number; height?: number } = {}): Canvas {
   const canvas = createCanvas(`gate-${name}-${personality ?? 'plain'}`, undefined, size, { type: 'desktop-app' });
-  if (component) canvas.root.fill = '$bg-primary';
+  // The backdrop defines its own token (the scaffold default): a component
+  // stamp never seeds $bg-primary, and undefined it is an unknown-token warning.
+  if (component) {
+    canvas.root.fill = '$bg-primary';
+    canvas.variables.colors = { ...canvas.variables.colors, 'bg-primary': '#0a0a0a' };
+  }
   if (personality) setVariables(canvas, generateDesignSystem('#166534', personality, { surface: 'desktop-app' }).variables);
   const m = getCanvasTokens(canvas);
   applyStructure(canvas, name, {
