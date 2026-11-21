@@ -69,6 +69,11 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   // Phase 18 FR-A2 — border style/model keywords are not colors (#92's $collapse).
   const { props: bc, tokenRefs: bcRefs } = classesToProps(['border-collapse', 'border-separate', 'border-dashed', 'border-spacing-2']);
   expect('border style keywords map nothing', bc.stroke === undefined && bcRefs.length === 0, JSON.stringify(bc));
+  // Phase 32 slice C — nor are text- wrapping and bg- placement utilities.
+  const { props: nc, tokenRefs: ncRefs } = classesToProps(['text-balance', 'text-nowrap', 'text-ellipsis', 'text-justify', 'bg-cover', 'bg-center', 'bg-no-repeat', 'bg-fixed', 'bg-gradient-to-r', 'bg-opacity-50']);
+  expect('text- and bg- non-colour utilities map no colour', nc.color === undefined && nc.fill === undefined && ncRefs.length === 0, JSON.stringify(nc));
+  const { props: tc } = classesToProps(['text-muted', 'bg-surface']);
+  expect('twin: text- and bg- colours still map', tc.color === '$muted' && tc.fill === '$surface', JSON.stringify(tc));
   const { props: bcolor } = classesToProps(['border-muted', 'border-red-500']);
   expect('border colors still map', bcolor.stroke === '$muted' || bcolor.stroke === '#fb2c36'); // last one wins
 }

@@ -2,7 +2,7 @@ import type { Canvas, SceneNode, DesignVariables, TabItem } from './types.js';
 import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, type RenderOptions } from './renderer.js';
 import { expandTree } from './expand.js';
-import { DERIVED_COLORS, refPath, themeTokens, tokenKind, tokenRefs, type RefSite, type TokenKind } from './variables.js';
+import { DERIVED_COLORS, lookupToken, refPath, themeTokens, tokenKind, tokenRefs, type RefSite, type TokenKind } from './variables.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import {
   checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkOverlays, checkPrimaryCount, checkRowRhythm, checkTruncation,
@@ -971,10 +971,11 @@ function levenshtein(a: string, b: string): number {
   return row[b.length];
 }
 
-/** The size step a token name ends in (md, 2xl, 3xs, 4), if any. */
+/** The size step a token name ends in (3xs, xxs, xs, sm, md, lg, xl, 2xl, a
+ * number), if any. A lone letter is a typo, not a step. */
 function ladderStep(name: string): string | undefined {
   const last = name.slice(name.lastIndexOf('-') + 1).toLowerCase();
-  return /^(\d*x*[sml]|sm|md|lg|\d+)$/.test(last) ? last : undefined;
+  return /^(\d*x+[sl]|sm|md|lg|\d+)$/.test(last) ? last : undefined;
 }
 
 /** The value at a ref site on an object (a node or an override). */
@@ -1017,6 +1018,13 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
   // can sit in the stored tree as well as in canvas.components: inside it
   // (`master`), a stored node's own value is the definition's.
   const defNode = (cid: string, id: string) => `def:${cid}:${id === cid ? '(root)' : id}`;
+  // Where an instance node itself is written: stored, or a node of the
+  // component (or master) that holds it.
+  const instanceOrigin = (instId: string, master?: string): string => {
+    const at = instId.lastIndexOf('/');
+    const holder = at < 0 ? undefined : instAt.get(instId.slice(0, at));
+    return holder ? defNode(holder.componentId!, instId.slice(at + 1)) : master ? defNode(master, instId) : instId;
+  };
   const originOf = (id: string, node: SceneNode, site: RefSite, ref: string, master?: string): string => {
     const slash = id.lastIndexOf('/');
     const parent = slash < 0 ? undefined : instAt.get(id.slice(0, slash));
@@ -1025,7 +1033,7 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
     if (inst) return valueAt(inst, site) === ref ? own() : `def:${inst.componentId}:(root)`;
     if (!parent) return own();
     const override = node.name ? parent.overrides?.[node.name] : undefined;
-    if (override && valueAt(override, site) === ref) return `ovr:${id.slice(0, slash)}:${node.name}`;
+    if (override && valueAt(override, site) === ref) return `ovr:${instanceOrigin(id.slice(0, slash), master)}:${node.name}`;
     return `def:${parent.componentId}:${id.slice(slash + 1)}`;
   };
 
@@ -1065,14 +1073,20 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
       issues.push({ ...base, message: `"${ref}" on ${path} is ${KIND_NAMES[kind]}, not ${KIND_NAMES[accepts[0]]}${where}.`, suggestion: `Use ${KIND_NAMES[accepts[0]]}${examples}.${fromOverride}` });
       return;
     }
+    const value = lookupToken(name, tokens);
+    if (kind && typeof value === 'string' && value.startsWith('$')) {
+      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined as another ref ("${value}"), which the resolver does not follow, so it renders raw${where}.`, suggestion: `Set "${name}" to a value, or write "${value}" here instead.${fromOverride}` });
+      return;
+    }
     if (kind) return;
     if (tokenKind(name, dark) !== undefined) {
-      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined only in the dark layer, so light renders it raw${where}.`, suggestion: `Define "${name}" in the base colors too (set_variables), not only under dark.${fromOverride}` });
+      const layer = name.startsWith('elevation.') ? 'elevation' : 'colors';
+      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined only in the dark layer, so light renders it raw${where}.`, suggestion: `Define "${name.replace(/^elevation\./, '')}" in the base ${layer} too (set_variables), not only under dark.${fromOverride}` });
       return;
     }
     const ranked = candidatePool(accepts, tokens)
       .map((n) => ({ n, d: levenshtein(name, n) }))
-      .filter((c) => c.d <= 3)
+      .filter((c) => c.d <= 2)
       .sort((a, b) => a.d - b.d || a.n.localeCompare(b.n));
     const named = ranked.slice(0, 3).map((c) => `"$${c.n}"`);
     const issue: EvaluationIssue = {

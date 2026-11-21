@@ -26,6 +26,11 @@ const SCALE = 4; // 1 unit = 0.25rem = 4px
  * without this, `border-collapse` becomes a bogus `$collapse` stroke ref
  * (issue #92's noisy-warning repro). */
 const BORDER_NON_COLOR = new Set(['collapse', 'separate', 'solid', 'dashed', 'dotted', 'double', 'hidden', 'none']);
+// Phase 32 slice C — text- and bg- utilities that are not colours (wrapping,
+// alignment, image placement, gradients): mapped as colours they became
+// $refs no token defines.
+const TEXT_NON_COLOR = /^(balance|pretty|wrap|nowrap|ellipsis|clip|justify|start|end|shadow(-.+)?)$/;
+const BG_NON_COLOR = /^(cover|contain|auto|none|fixed|local|scroll|center|top|bottom|left|right|(left|right)-(top|bottom)|(no-)?repeat(-.+)?|clip-.+|origin-.+|blend-.+|gradient-.+|linear-.+|radial(-.+)?|conic(-.+)?|opacity-.+|size-.+|position-.+)$/;
 
 const TEXT_SIZES: Record<string, number> = { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60, '7xl': 72, '8xl': 96, '9xl': 128 };
 const FONT_WEIGHTS: Record<string, number> = { thin: 100, extralight: 200, light: 300, normal: 400, medium: 500, semibold: 600, bold: 700, extrabold: 800, black: 900 };
@@ -152,7 +157,7 @@ export function classesToProps(classes: string[], theme?: Record<string, string>
         if (rest !== 'left') props.textAlign = rest;
         continue;
       }
-      setColor('color', rest, cls);
+      if (!TEXT_NON_COLOR.test(rest)) setColor('color', rest, cls);
       continue;
     }
     m = cls.match(/^font-(.+)$/);
@@ -163,7 +168,7 @@ export function classesToProps(classes: string[], theme?: Record<string, string>
 
     // ── background ──
     m = cls.match(/^bg-(.+)$/);
-    if (m) { setColor('fill', m[1], cls); continue; }
+    if (m) { if (!BG_NON_COLOR.test(m[1])) setColor('fill', m[1], cls); continue; }
 
     // ── misc ──
     if (cls === 'overflow-hidden') { props.overflow = 'hidden'; continue; }

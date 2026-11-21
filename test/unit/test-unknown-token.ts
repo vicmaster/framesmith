@@ -176,6 +176,206 @@ b=I("${page.nodeId}", {type: "instance", name: "card-b", componentId: "${card.no
   check('...and so is its unknown icon, with no fix (an op would rewrite the parent)', icon?.nodeId === box && !icon.fix, icon?.nodeId);
 }
 
+// ── Verify round 1: an override written inside a component, and a one-letter step ──
+{
+  const canvas = canvasWith([]);
+  const [page] = parseAndExecute(canvas.root, 'page=I("document", {type: "frame", name: "page", layout: "vertical"})', canvas);
+  const [inner] = parseAndExecute(canvas.root, 'inner=I("document", {type: "component", name: "Inner", layout: "vertical"})', canvas);
+  parseAndExecute(canvas.root, `t=I("${inner.nodeId}", {type: "text", name: "title", content: "x", color: "$text-primary"})`, canvas);
+  const [outer] = parseAndExecute(canvas.root, 'outer=I("document", {type: "component", name: "Outer", layout: "vertical"})', canvas);
+  parseAndExecute(canvas.root, `ci=I("${outer.nodeId}", {type: "instance", name: "ci", componentId: "${inner.nodeId}", overrides: {"title": {"color": "$nope-in-def"}}})`, canvas);
+  parseAndExecute(canvas.root, `
+o1=I("${page.nodeId}", {type: "instance", name: "o1", componentId: "${outer.nodeId}"})
+o2=I("${page.nodeId}", {type: "instance", name: "o2", componentId: "${outer.nodeId}"})
+`, canvas);
+  check('an override written inside a component, shown through two outer instances, warns once', about(await findings(canvas), '$nope-in-def').length === 1, String(about(await findings(canvas), '$nope-in-def').length));
+  // Twin: overrides written on two stored instances are two places.
+  const twin = canvasWith([]);
+  const [tp] = parseAndExecute(twin.root, 'page=I("document", {type: "frame", name: "page", layout: "vertical"})', twin);
+  const [tc] = parseAndExecute(twin.root, 'card=I("document", {type: "component", name: "Card", layout: "vertical"})', twin);
+  parseAndExecute(twin.root, `t=I("${tc.nodeId}", {type: "text", name: "title", content: "x", color: "$text-primary"})`, twin);
+  parseAndExecute(twin.root, `
+a=I("${tp.nodeId}", {type: "instance", name: "a", componentId: "${tc.nodeId}", overrides: {"title": {"color": "$nope-own"}}})
+b=I("${tp.nodeId}", {type: "instance", name: "b", componentId: "${tc.nodeId}", overrides: {"title": {"color": "$nope-own"}}})
+`, twin);
+  check('twin: the same typo in two stored instances\' own overrides is two findings', about(await findings(twin), '$nope-own').length === 2);
+}
+{
+  const ladder: DesignVariables = { ...SYSTEM, spacing: { 'space-md': 16, 'space-lg': 24 } };
+  const [m] = await findings(canvasWith([frame('a', { gap: '$space-m' })], ladder));
+  check('a lone letter is a typo, not a ladder step: $space-m is fixed to $space-md', m?.fix?.op === 'U("a", { gap: "$space-md" })', m?.fix?.op);
+  // Twins: real steps still never cross a rung.
+  const [xl] = await findings(canvasWith([frame('a', { gap: '$space-2xl' })], { ...SYSTEM, spacing: { 'space-xl': 32 } }));
+  check('twin: $space-2xl with only space-xl defined is not fixed (another rung)', !!xl && !xl.fix);
+  const [xxs] = await findings(canvasWith([frame('a', { gap: '$space-xxs' })], { ...SYSTEM, spacing: { 'space-xs': 8 } }));
+  check('twin: $space-xxs with only space-xs defined is not fixed (another rung)', !!xxs && !xxs.fix);
+}
+{
+  const canvas = canvasWith([]);
+  const [card] = parseAndExecute(canvas.root, 'card=I("document", {type: "component", name: "Card", children: [{type: "text", content: "x", color: "$nope-anon"}]})', canvas);
+  parseAndExecute(canvas.root, `a=I("document", {type: "instance", name: "a", componentId: "${card.nodeId}"})`, canvas);
+  const fs = await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] });
+  const ids = fs.issues.filter((i) => i.rule === 'unknown-token').map((i) => `${i.nodeId}|${i.innerNodeId ?? ''}`);
+  check('an id-less node inside a component never reports an id ending in "undefined"', ids.length > 0 && ids.every((x) => !x.includes('undefined')), ids.join(', '));
+}
+
+// ── Verify round 1 (review): dotted derived names, aliases, messages ─────────────
+{
+  const fs = await findings(canvasWith([frame('a', { fill: '$colors.accent-tint' }), frame('b', { stroke: '$colors.danger' }), frame('c', { fill: '$colors.accnt-tint' })]));
+  check('a dotted ref to a derived colour is valid ($colors.accent-tint, $colors.danger)', fs.every((f) => f.nodeId === 'c') && fs.length === 1, fs.map((f) => f.message).join(' | '));
+}
+{
+  const vars: DesignVariables = { ...SYSTEM, colors: { ...SYSTEM.colors, brand: '$accent' } };
+  const fs = await findings(canvasWith([frame('a', { fill: '$brand' }), frame('b', { fill: '$accent' })], vars));
+  check('a token whose value is itself a ref warns (the resolver does not follow it)', fs.length === 1 && fs[0].nodeId === 'a' && /does not follow/.test(fs[0].message), fs.map((f) => f.message).join(' | '));
+}
+{
+  const vars = structuredClone(SYSTEM);
+  vars.dark = { elevation: { glow: [{ x: 0, y: 0, blur: 4, spread: 0, color: '#000' }] } };
+  const [f] = await findings(canvasWith([frame('a', { shadow: '$elevation.glow' })], vars));
+  check('a dark-only elevation names the elevation layer', /base elevation/.test(f?.suggestion ?? ''), f?.suggestion);
+}
+{
+  const [f] = await findings(canvasWith([frame('a', { gap: '$space-mdd' })]));
+  check('"Did you mean" lists only names within two edits', f?.suggestion === 'Did you mean "$space-md"?', f?.suggestion);
+}
+
+// ── Verify round 1 (mutation): edges of the fix, dedupe, tables, kill switch ──
+{
+  const md: DesignVariables = { ...SYSTEM, spacing: { 'space-md': 16 } };
+  const [two] = await findings(canvasWith([frame('a', { gap: '$space-mxx' })], md));
+  check('a typo two edits away is fixed', two?.fix?.op === 'U("a", { gap: "$space-md" })', two?.fix?.op);
+  const [three] = await findings(canvasWith([frame('a', { gap: '$space-mxxx' })], md));
+  check('twin: three edits away it names no candidate and has no fix', !!three && !three.fix && /Define it/.test(three.suggestion ?? ''), three?.suggestion);
+  const tie: DesignVariables = { ...SYSTEM, spacing: { 'space-md': 16, 'space-me': 17 } };
+  const [t] = await findings(canvasWith([frame('a', { gap: '$space-mx' })], tie));
+  check('two names equally close: both named, no fix', !!t && !t.fix && /space-md/.test(t.suggestion ?? '') && /space-me/.test(t.suggestion ?? ''), t?.suggestion);
+  const steps: Array<[string, Record<string, number>]> = [
+    ['$space-4', { 'space-8': 32 }],
+    ['$space-LG', { 'space-md': 16 }],
+    ['$bg-surface-lg', { 'bg-surface-md': 16 }],
+  ];
+  for (const [ref, spacing] of steps) {
+    const [f] = await findings(canvasWith([frame('a', { gap: ref })], { ...SYSTEM, spacing }));
+    check(`${ref} against ${Object.keys(spacing)[0]} is another rung: no fix`, !!f && !f.fix, f?.fix?.op);
+  }
+}
+{
+  for (const side of ['borderRight', 'borderBottom', 'borderLeft'] as const) {
+    const [f] = await findings(canvasWith([frame('a', { [side]: { width: 1, color: '$accnt' } } as Partial<SceneNode>)]));
+    check(`a ${side}.color typo rewrites the whole object`, f?.fix?.op === `U("a", { ${side}: {"width":1,"color":"$accent"} })`, f?.fix?.op);
+  }
+}
+{
+  const fs = await findings(canvasWith([frame('a', { gap: '$space-mdd', rowGap: '$space-mdd' }), frame('b', { gap: '$space-mdd' })]));
+  check('one typo on two props of one node, and on another node, is three findings', fs.length === 3, String(fs.length));
+  const anon = canvasWith([]);
+  parseAndExecute(anon.root, 'box=I("document", {type: "frame", name: "box", children: [{type: "frame", gap: "$space-mdd"}, {type: "frame", gap: "$space-mdd"}]})', anon);
+  check('two id-less children with one typo are two findings', (await findings(anon)).length === 2);
+}
+{
+  const used = canvasWith([]);
+  const [p] = parseAndExecute(used.root, 'page=I("document", {type: "frame", name: "page"})', used);
+  const [c] = parseAndExecute(used.root, 'card=I("document", {type: "component", name: "Used card", gap: "$space-mdd"})', used);
+  parseAndExecute(used.root, `a=I("${p.nodeId}", {type: "instance", name: "a", componentId: "${c.nodeId}"})`, used);
+  const [f] = await findings(used);
+  check('twin: a used component\'s finding does not say no instance uses it', !!f && !/no instance uses/.test(f.message), f?.message);
+}
+{
+  // An override on a different prop is not where the typo comes from.
+  const canvas = canvasWith([]);
+  const [p] = parseAndExecute(canvas.root, 'page=I("document", {type: "frame", name: "page"})', canvas);
+  const [c] = parseAndExecute(canvas.root, 'card=I("document", {type: "component", name: "Card"})', canvas);
+  parseAndExecute(canvas.root, `t=I("${c.nodeId}", {type: "frame", name: "inner", gap: "$space-mdd", padding: ["$space-mdd", 0]})`, canvas);
+  parseAndExecute(canvas.root, `a=I("${p.nodeId}", {type: "instance", name: "a", componentId: "${c.nodeId}", overrides: {"inner": {"fill": "#FFFFFF"}}})`, canvas);
+  const fs = await findings(canvas);
+  check('an override on another prop does not claim the typo', fs.length === 2 && fs.every((f) => !/override for this node/.test(f.suggestion ?? '')), fs.map((f) => f.suggestion).join(' | '));
+  const ovr = canvasWith([]);
+  const [p2] = parseAndExecute(ovr.root, 'page=I("document", {type: "frame", name: "page"})', ovr);
+  const [c2] = parseAndExecute(ovr.root, 'card=I("document", {type: "component", name: "Card"})', ovr);
+  parseAndExecute(ovr.root, `t=I("${c2.nodeId}", {type: "frame", name: "inner", padding: [8, 0]})`, ovr);
+  parseAndExecute(ovr.root, `a=I("${p2.nodeId}", {type: "instance", name: "a", componentId: "${c2.nodeId}", overrides: {"inner": {"padding": ["$space-mdd", 0]}}})`, ovr);
+  const [o] = await findings(ovr);
+  check('twin: an override holding the typo in an array entry says so', /override for this node/.test(o?.suggestion ?? ''), o?.suggestion);
+}
+{
+  // An instance nested in a component, its own prop misspelt, seen through two outer instances.
+  const canvas = canvasWith([]);
+  const [p] = parseAndExecute(canvas.root, 'page=I("document", {type: "frame", name: "page"})', canvas);
+  const [inner] = parseAndExecute(canvas.root, 'inner=I("document", {type: "component", name: "Inner", layout: "vertical"})', canvas);
+  const [outer] = parseAndExecute(canvas.root, 'outer=I("document", {type: "component", name: "Outer"})', canvas);
+  parseAndExecute(canvas.root, `ci=I("${outer.nodeId}", {type: "instance", name: "ci", componentId: "${inner.nodeId}", gap: "$space-nested"})`, canvas);
+  parseAndExecute(canvas.root, `o1=I("${p.nodeId}", {type: "instance", name: "o1", componentId: "${outer.nodeId}"})\no2=I("${p.nodeId}", {type: "instance", name: "o2", componentId: "${outer.nodeId}"})`, canvas);
+  const fs = about(await findings(canvas), '$space-nested');
+  check('a nested instance\'s own typo, seen through two outer instances, is one finding with no fix', fs.length === 1 && !fs[0].fix, String(fs.length));
+}
+{
+  const vars: DesignVariables = { ...SYSTEM, radius: { 'radius-md': 8 }, motion: { fast: { duration: 150, easing: 'ease-out' } }, colors: { ...SYSTEM.colors, danger: '#DC2626' } };
+  const fs = await findings(canvasWith([
+    { id: 'fs', type: 'text', name: 'fs', content: 'x', fontSize: '$accent' } as SceneNode,
+    frame('tr', { transition: '$motion.fastt' } as unknown as Partial<SceneNode>),
+    frame('tk', { transition: '$accent' } as unknown as Partial<SceneNode>),
+    frame('dt', { fill: '$danger-tnt' }),
+    frame('rd', { cornerRadius: '$radius-mdd' }),
+    { id: 'bd', type: 'text', name: 'bd', content: 'x', fontSize: '$bodyy' } as SceneNode,
+    frame('el', { shadow: '$elevation.mdd' }),
+  ], vars));
+  const on = (id: string) => fs.find((f) => f.nodeId === id);
+  check('fontSize "$accent" warns (a colour is not a size)', /color token/.test(on('fs')?.message ?? ''), on('fs')?.message);
+  check('transition "$motion.fastt" is fixed to $motion.fast', on('tr')?.fix?.op === 'U("tr", { transition: "$motion.fast" })', on('tr')?.fix?.op);
+  check('transition "$accent" warns (wrong kind)', /color token, not a motion token/.test(on('tk')?.message ?? ''), on('tk')?.message);
+  check('a typo near a derived colour names it', /"\$danger-tint"/.test(on('dt')?.suggestion ?? ''), on('dt')?.suggestion);
+  check('radius, typography and elevation names are candidates with their prefixes', /"\$radius-md"/.test(on('rd')?.suggestion ?? '') && /"\$body"/.test(on('bd')?.suggestion ?? '') && /"\$elevation\.md"/.test(on('el')?.suggestion ?? ''), [on('rd'), on('bd'), on('el')].map((f) => f?.suggestion).join(' | '));
+}
+{
+  // Every entry of the prop tables, and every copy prop.
+  const colorProps = ['fill', 'stroke', 'color', 'iconColor', 'secondaryColor', 'badgeColor', 'dotColor'];
+  const numberProps = ['width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'gap', 'rowGap', 'padding', 'cornerRadius', 'x', 'y', 'bottom', 'right', 'strokeWidth', 'opacity', 'blur', 'backdropBlur', 'fontWeight', 'lineHeight', 'letterSpacing', 'iconSize', 'labelWidth', 'inset', 'depth', 'rows', 'innerRatio', 'gridlines'];
+  const nodes = [
+    ...colorProps.map((p) => frame(`c-${p}`, { [p]: '$body' } as Partial<SceneNode>)),
+    ...numberProps.map((p) => frame(`n-${p}`, { [p]: '$accent' } as Partial<SceneNode>)),
+  ];
+  const fs = await findings(canvasWith(nodes));
+  const missC = colorProps.filter((p) => !fs.some((f) => f.nodeId === `c-${p}` && /not a color token/.test(f.message)));
+  const missN = numberProps.filter((p) => !fs.some((f) => f.nodeId === `n-${p}` && /not a spacing or radius token/.test(f.message)));
+  check('every colour prop rejects a typography token', missC.length === 0, missC.join(', '));
+  check('every number prop rejects a colour token', missN.length === 0, missN.join(', '));
+  const copy = ['name', 'content', 'text', 'title', 'subtitle', 'label', 'time', 'placeholder', 'value', 'shortcut', 'error', 'ariaLabel', 'count', 'closeLabel', 'centerValue', 'centerLabel'];
+  const cfs = await findings(canvasWith(copy.map((p) => frame(`k-${p}`, { [p]: '$49' } as Partial<SceneNode>))));
+  check('no copy prop is read as a token', cfs.length === 0, cfs.map((f) => f.nodeId).join(', '));
+}
+{
+  // The kill switch: a ruleset that turns the rule off silences it, score included.
+  const { RULESETS } = await import('../../src/surfaces.js');
+  const typo = () => canvasWith([frame('a', { gap: '$space-mdd' })]);
+  const on = await evaluateCanvas(typo(), { mode: 'fast', categories: ['structure'] });
+  const saved = RULESETS.type.web;
+  RULESETS.type.web = { disable: ['unknown-token'] };
+  const off = await evaluateCanvas(typo(), { mode: 'fast', categories: ['structure'] });
+  RULESETS.type.web = saved;
+  const score = (ev: typeof on) => ev.categories.find((c) => c.name === 'structure')!.score;
+  check('a ruleset that turns unknown-token off silences it and its score', !off.issues.some((i) => i.rule === 'unknown-token') && off.surface.rulesOff.includes('unknown-token') && score(off) === score(on) + 10, `${score(on)} → ${score(off)}`);
+}
+{
+  // Token usage runs on a canvas with colours only, or spacing only.
+  const colorsOnly = canvasWith([frame('a', { fill: '#123456', stroke: '#654321' })], { colors: { accent: '#2563EB' } });
+  const spacingOnly = canvasWith([frame('a', { fill: '#123456', stroke: '#654321' })], { spacing: { md: 16 } });
+  const advises = async (c: Canvas) => (await evaluateCanvas(c, { mode: 'fast', categories: ['structure'] })).issues.some((i) => /use design tokens/.test(i.message));
+  check('the token-usage advisory runs with colours only, and with spacing only', await advises(colorsOnly) && await advises(spacingOnly));
+  check('twin: with no tokens at all it does not', !(await advises(canvasWith([frame('a', { fill: '#123456', stroke: '#654321' })], {}))));
+}
+{
+  // An id-less icon with one resolving spelling: reported on the ancestor, never fixed.
+  const canvas = canvasWith([]);
+  parseAndExecute(canvas.root, 'box=I("document", {type: "frame", name: "box", children: [{type: "icon", icon: "material:chevron-right"}]})', canvas);
+  const ev = await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] });
+  const icon = ev.issues.find((i) => /Unknown icon/.test(i.message));
+  check('an id-less misspelt icon gets no fix (it would rewrite its ancestor)', !!icon && !icon.fix, icon?.fix?.op);
+  const twin = canvasWith([{ id: 'ic', type: 'icon', name: 'ic', icon: 'material:chevron-right' } as SceneNode]);
+  const tw = (await evaluateCanvas(twin, { mode: 'fast', categories: ['structure'] })).issues.find((i) => /Unknown icon/.test(i.message));
+  check('twin: the same icon with an id is fixed', tw?.fix?.op === 'U("ic", { icon: "material:chevron_right" })', tw?.fix?.op);
+}
+
 // ── FR-C3: copy is never resolved ─────────────────────────────────────────────
 {
   const canvas = canvasWith([

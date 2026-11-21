@@ -109,6 +109,14 @@ function stamped(structure: string, preset?: string, type?: 'desktop-app'): Canv
   check('a translucent surface lies over bg-primary: a glass card on a dark page is dark', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': '#ffffff0a', 'bg-primary': '#0a0a0a' } })) === 'dark');
   check('twin: the same glass over a light page is light', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': '#ffffff0a', 'bg-primary': '#fafafa' } })) === 'light');
   check('an hsl() surface parses (dark)', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': 'hsl(222 47% 11%)' } })) === 'dark');
+  check('the `surface` alias is a surface too (a design.md import names it so)', modeOf(resolveFill('$accent-tint', { colors: { surface: '#1C1C1E', background: '#000000' } })) === 'dark');
+  check('twin: and `background` behind a translucent surface', modeOf(resolveFill('$accent-tint', { colors: { surface: '#ffffff10', background: '#000000' } })) === 'dark' && modeOf(resolveFill('$accent-tint', { colors: { surface: '#ffffff10', background: '#fafafa' } })) === 'light');
+  {
+    const c = createCanvas('dt-alias-stamp');
+    c.variables = { colors: { surface: '#FAFAFA' } };
+    const r = applyStructure(c, 'status-chip', { existingColors: new Set(['surface']) });
+    check('a stamp on a canvas naming its surface `surface` does not seed a dark bg-surface over it', !r.seededColors.includes('bg-surface'), r.seededColors.join(', '));
+  }
   check('an unparseable surface falls to bg-primary', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': 'var(--x)', 'bg-primary': '#0a0a0a' } })) === 'dark');
   const neutral = resolveFill('$neutral-tint', { colors: { 'bg-surface': '#111111', 'text-secondary': '#ffffffa0' } });
   check('a grey ink with alpha (composited over the surface) gets a grey tint', isGrey(neutral) && modeOf(neutral) === 'dark', neutral);
@@ -163,6 +171,56 @@ function stamped(structure: string, preset?: string, type?: 'desktop-app'): Canv
   const withOther = structuredClone(plain);
   withOther.variables.colors!['accent-tint'] = '#152A48';
   check('twin: any other value moves the hash', canvasVersionHash(withOther) !== canvasVersionHash(plain));
+}
+
+// ── Verify round 1: a canvas without variables, and a seed-only colour layer ──
+{
+  const bare = createCanvas('dt-bare');
+  delete (bare as { variables?: unknown }).variables;
+  let threw = '';
+  try { getCanvasTokens(bare); } catch (e) { threw = (e as Error).message; }
+  check('a stored canvas with no variables key still resolves its tokens', !threw, threw);
+  const seedOnly = createCanvas('dt-seed-only');
+  seedOnly.variables = { colors: { 'accent-tint': '#152A47' } };
+  const none = structuredClone(seedOnly);
+  none.variables = {};
+  check('a colour layer holding only a seed hashes as if it had no colours', canvasVersionHash(seedOnly) === canvasVersionHash(none));
+  const empty = structuredClone(seedOnly);
+  empty.variables = { colors: { 'accent-tint': '#152A48' } };
+  check('twin: a non-seed value does not', canvasVersionHash(empty) !== canvasVersionHash(none));
+}
+
+// ── Verify round 1 (mutation): fallbacks, surface order, each seed ────────────
+{
+  check('danger-tint derives from danger, not error', resolveFill('$danger-tint', { colors: { 'bg-surface': '#FFFFFF', danger: '#7C2D12', error: '#B00020' } }) === tintFor('#7C2D12', 'light'));
+  check('accent-tint derives from primary when there is no accent', resolveFill('$accent-tint', { colors: { 'bg-surface': '#FFFFFF', primary: '#0E7490' } }) === tintFor('#0E7490', 'light'));
+  const empty = { colors: { 'bg-surface': '#FFFFFF' } };
+  const lit: Array<[string, string]> = [['$accent-tint', '#2563EB'], ['$success-tint', '#16A34A'], ['$warning-tint', '#D97706'], ['$danger-tint', '#DC2626'], ['$neutral-tint', '#6B7280']];
+  const wrong = lit.filter(([ref, ink]) => resolveFill(ref, empty) !== tintFor(ink, 'light', { grey: true }));
+  check('with no inks each tint derives from its literal ink', wrong.length === 0, wrong.map(([r]) => r).join(', '));
+  check('bg-surface wins over bg-primary', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': '#FFFFFF', 'bg-primary': '#111111' } })) === 'light');
+  check('twin: bg-primary alone decides', modeOf(resolveFill('$accent-tint', { colors: { 'bg-primary': '#111111' } })) === 'dark');
+  check('a translucent surface with nothing behind it lies over white', modeOf(resolveFill('$accent-tint', { colors: { 'bg-surface': '#00000010' } })) === 'light');
+  const { hexToOklch } = await import('../../src/color-system.js');
+  check('an ink of chroma 0.003 counts as grey', hexToOklch('#808082').c < 0.005 && isGrey(resolveFill('$neutral-tint', { colors: { 'bg-surface': '#FFFFFF', 'text-secondary': '#808082' } })));
+  check('twin: #6B7280 (chroma 0.023) keeps its hue', !isGrey(resolveFill('$neutral-tint', { colors: { 'bg-surface': '#FFFFFF', 'text-secondary': '#6B7280' } })));
+  check('a pure grey ink in light mode gets a grey tint', isGrey(resolveFill('$neutral-tint', { colors: { 'bg-surface': '#FFFFFF', 'text-secondary': '#808080' } })));
+  const dark = resolveVariables({ id: 'x', type: 'frame', shadow: '$elevation.raised' } as SceneNode, { elevation: { raised: [{ x: 0, y: 1, blur: 2, spread: 0, color: '#000' }] }, dark: { elevation: { raised: [{ x: 0, y: 9, blur: 9, spread: 0, color: '#fff' }] } } }, { theme: 'dark' });
+  check('a dark render merges dark.elevation too', dark.shadows?.[0]?.y === 9, JSON.stringify(dark.shadows));
+}
+{
+  const seeds: Array<[string, string]> = [['accent-tint', '#152A47'], ['success-tint', '#0F2E1B'], ['warning-tint', '#33260A'], ['danger-tint', '#3A1715'], ['neutral-tint', '#25282D'], ['danger', '#F87171']];
+  const kept = seeds.filter(([name, value]) => withoutRetiredSeeds({ colors: { [name]: value.toLowerCase() } }).colors?.[name] !== undefined);
+  check('each of the six retired seeds counts as unset', kept.length === 0, kept.map(([n]) => n).join(', '));
+  const near = seeds.filter(([name, value]) => withoutRetiredSeeds({ colors: { [name]: value.slice(0, 6) + 'F' } }).colors?.[name] === undefined);
+  check('twin: one digit off, each is kept', near.length === 0, near.map(([n]) => n).join(', '));
+  check('a seed with surrounding spaces still counts', withoutRetiredSeeds({ colors: { 'accent-tint': ' #152A47 ' } }).colors === undefined);
+}
+{
+  const c = createCanvas('dt-primary-stamp');
+  c.variables = { colors: { 'bg-primary': '#FAFAFA' } };
+  const r = applyStructure(c, 'status-chip', { existingColors: new Set(['bg-primary']) });
+  check('a stamp on a canvas with bg-primary does not seed bg-surface', !r.seededColors.includes('bg-surface'), r.seededColors.join(', '));
 }
 
 // ── No stamp reads badly on a derived tint ─────────────────────────────────────

@@ -39,11 +39,14 @@ export function isRetiredSeed(name: string, value: unknown): boolean {
   return seed !== undefined && typeof value === 'string' && value.trim().toLowerCase() === seed.toLowerCase();
 }
 
-/** A token layer without the retired seeds in its colours. */
-export function withoutRetiredSeeds(v: DesignVariables): DesignVariables {
-  const colors = v.colors;
+/** A token layer without the retired seeds in its colours; a colour layer
+ * that held nothing else is dropped, as if it had never been set. */
+export function withoutRetiredSeeds<T extends DesignVariables | undefined>(v: T): T {
+  const colors = v?.colors;
   if (!colors || !Object.entries(colors).some(([k, val]) => isRetiredSeed(k, val))) return v;
-  return { ...v, colors: Object.fromEntries(Object.entries(colors).filter(([k, val]) => !isRetiredSeed(k, val))) };
+  const kept = Object.entries(colors).filter(([k, val]) => !isRetiredSeed(k, val));
+  const { colors: _colors, ...rest } = v!;
+  return (kept.length ? { ...rest, colors: Object.fromEntries(kept) } : rest) as T;
 }
 
 /** The tokens with every missing derived colour filled in. */
@@ -57,10 +60,13 @@ const WHITE: [number, number, number] = [255, 255, 255];
 const BLACK: [number, number, number] = [0, 0, 0];
 const hexOf = (rgb: [number, number, number]) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase();
 
-/** The surface tints sit on: bg-surface, else bg-primary, else white; a
- * translucent one laid over the next opaque one in that chain. */
+/** The surface names, in the order every default reads them. */
+export const SURFACE_CHAIN = ['bg-surface', 'surface', 'bg-primary', 'background'] as const;
+
+/** The surface tints sit on: the first of SURFACE_CHAIN that parses, else
+ * white; a translucent one laid over the next opaque one in that chain. */
 function tintSurface(c: Record<string, string>): [number, number, number] {
-  const chain = [c['bg-surface'], c['bg-primary']].filter((x): x is string => typeof x === 'string' && rgbOf(x) !== undefined);
+  const chain = SURFACE_CHAIN.map((n) => c[n]).filter((x): x is string => typeof x === 'string' && rgbOf(x) !== undefined);
   const opaque = (from: number): [number, number, number] => {
     const next = chain.slice(from).find((x) => parseAlpha(x) >= 1);
     return next ? rgbOf(next)! : WHITE;
@@ -147,6 +153,7 @@ export function tokenKind(name: string, v: DesignVariables): TokenKind | undefin
   if (dot > 0) {
     const category = name.slice(0, dot);
     const cat = (v as Record<string, unknown>)[category];
+    if (category === 'colors' && DERIVED_NAMES.has(name.slice(dot + 1))) return 'color';
     if (cat && typeof cat === 'object' && Object.hasOwn(cat, name.slice(dot + 1))) {
       if (category === 'colors') return 'color';
       if (category === 'spacing' || category === 'radius' || category === 'state') return 'number';

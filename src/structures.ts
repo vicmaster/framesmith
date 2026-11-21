@@ -2,7 +2,7 @@ import type { BuildLogEntry, Canvas, SceneNode, Structure, StructureAxes } from 
 import { resolveSurface, SURFACE_TYPES, type SurfaceType } from './surfaces.js';
 import { COLOR, SPACE, RADIUS, ELEV, TYPE, TINT } from './structure-tokens.js';
 import { DESKTOP_APP_STRUCTURES } from './structures-desktop.js';
-import { DERIVED_COLORS } from './variables.js';
+import { DERIVED_COLORS, SURFACE_CHAIN } from './variables.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -2153,7 +2153,7 @@ export function applyStructure(
   // surface (variables.ts withDerivedColors). A stamp that reads one seeds that
   // surface too unless the canvas has one, so an unthemed stamp's tints come
   // out dark, the mode its seeded inks are tuned for.
-  if ([...referenced].some((t) => (DERIVED_COLORS as readonly string[]).includes(t)) && !existingColors.has('bg-primary')) referenced.add('bg-surface');
+  if ([...referenced].some((t) => (DERIVED_COLORS as readonly string[]).includes(t)) && !SURFACE_CHAIN.some((n) => existingColors.has(n))) referenced.add('bg-surface');
   const seededColors: string[] = [];
   for (const token of referenced) {
     if (existingColors.has(token)) continue;
