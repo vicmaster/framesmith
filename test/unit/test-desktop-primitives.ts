@@ -14,6 +14,7 @@ import { readFileSync } from 'node:fs';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { renderToHtml } from '../../src/renderer.js';
 import { resolveVariables } from '../../src/variables.js';
+import { tintFor } from '../../src/color-system.js';
 import { applyPerturbation } from '../../src/stress.js';
 import { getStructure, applyStructure } from '../../src/structures.js';
 import { createCanvas } from '../../src/scene-graph.js';
@@ -61,18 +62,24 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
 // ── FR-B3..B9: markup and defaults ─────────────────────────────────────────
 {
   const nav = html({ id: 'n', name: 'n', type: 'nav-item', label: 'Projects', icon: 'folder', active: true, count: 12 });
-  check('an active nav-item draws fill, bar and weight, with aria-current', /aria-current="page"/.test(nav) && /width: 2px/.test(nav) && /font-weight: 600/.test(nav) && /background-color: #E5ECFD/.test(nav), (nav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
-  const darkNav = html({ id: 'nd', name: 'nd', type: 'nav-item', label: 'A', active: true }, { accent: '#60A5FA', 'bg-surface': '#111827' });
-  check('without an accent-tint token the active fill is the accent washed into the surface (dark stays dark)', /background-color: #1A2940/.test(darkNav), (darkNav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
+  // Phase 32 slice C (FR-C5) — without an accent-tint token the active fill is
+  // the tint derived from the accent, in the mode of the surface it sits on.
+  const fill = (h: string) => new RegExp(`background-color: ${tintFor('#2563EB', 'light')}`).test(h);
+  check('an active nav-item draws fill, bar and weight, with aria-current', /aria-current="page"/.test(nav) && /width: 2px/.test(nav) && /font-weight: 600/.test(nav) && fill(nav), (nav.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' '));
   const fills = (h: string) => (h.match(/background-color: #[0-9A-F]{6}/gi) ?? []).join(' ');
+  const has = (h: string, hex: string) => h.includes(`background-color: ${hex}`);
+  const darkNav = html({ id: 'nd', name: 'nd', type: 'nav-item', label: 'A', active: true }, { accent: '#60A5FA', 'bg-surface': '#111827' });
+  check('without an accent-tint token the active fill derives from the accent (dark stays dark)', has(darkNav, tintFor('#60A5FA', 'dark')), fills(darkNav));
+  check('twin: it is not the light tint', !has(darkNav, tintFor('#60A5FA', 'light')));
   const rgbNav = html({ id: 'nr', name: 'nr', type: 'nav-item', label: 'A', active: true }, { accent: 'rgb(96, 165, 250)', 'bg-surface': '#111827' });
-  check('an rgb() accent washes into the surface like its hex twin', /background-color: #1A2940/.test(rgbNav), fills(rgbNav));
+  check('an rgb() accent derives like its hex twin', has(rgbNav, tintFor('#60A5FA', 'dark')), fills(rgbNav));
   const hslNav = html({ id: 'nh', name: 'nh', type: 'nav-item', label: 'A', active: true }, { accent: 'hsl(213 94% 68%)', 'bg-surface': 'rgb(17 24 39)' });
-  check('an hsl() accent on an rgb() surface washes in too (dark stays dark)', /background-color: #1B2940/.test(hslNav), fills(hslNav));
+  // #192F49: the dark tint of hsl(213 94% 68%), which parses to #60A6FA.
+  check('an hsl() accent on an rgb() surface derives too (dark stays dark)', has(hslNav, '#192F49') && has(hslNav, tintFor('#60A6FA', 'dark')), fills(hslNav));
   const shortNav = html({ id: 'ns', name: 'ns', type: 'nav-item', label: 'A', active: true }, { accent: '#06F', 'bg-surface': '#FFF' });
-  check('a #RGB accent and surface mix', /background-color: #E0EDFF/.test(shortNav), fills(shortNav));
+  check('a #RGB accent on a #RGB surface derives a light tint', has(shortNav, tintFor('#0066FF', 'light')), fills(shortNav));
   const namedNav = html({ id: 'nn', name: 'nn', type: 'nav-item', label: 'A', active: true }, { accent: 'royalblue', 'bg-surface': '#111827' });
-  check('a named accent still falls back to the light tint', /background-color: #EFF4FF/.test(namedNav), fills(namedNav));
+  check('a named accent takes the #2563EB literal, in the surface\'s mode', has(namedNav, tintFor('#2563EB', 'dark')), fills(namedNav));
   const rail = html({ id: 'n2', name: 'n2', type: 'nav-item', label: 'Projects', icon: 'folder', collapsed: true });
   check('a collapsed nav-item is 32×32 with its label as the accessible name', /width: 32px/.test(rail) && /aria-label="Projects"/.test(rail) && !/>Projects</.test(rail));
   const themedNav = html({ id: 'n3', name: 'n3', type: 'nav-item', label: 'A', active: true }, { 'accent-tint': '#123456', accent: '#0E7490' });

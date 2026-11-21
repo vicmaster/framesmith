@@ -7,7 +7,7 @@
 // Gamut policy (spec ANALYZE): out-of-gamut colors clip toward LOWER CHROMA
 // at fixed lightness and hue — never hue-shift, never lightness-shift.
 
-import { contrastRatio, parseColor } from './evaluate.js';
+import { contrastRatio, parseColor } from './color-math.js';
 
 export interface Oklch {
   l: number; // 0..1
@@ -281,20 +281,27 @@ export function tintLayer(
   mode: 'light' | 'dark',
 ): TintLayer {
   const out = {} as TintLayer;
-  for (const [name, ink] of Object.entries(inks) as Array<[keyof TintLayer, string]>) {
-    const hue = hexToOklch(ink).h;
-    let tint: Oklch = mode === 'light'
-      ? { l: 0.93, c: 0.045, h: hue }
-      : { l: 0.3, c: 0.055, h: hue };
-    const inkRgb = rgbOf(ink);
-    // Back the tint off (lighter in light mode, darker in dark) until the
-    // pair reads at AA text contrast.
-    for (let i = 0; i < 20 && contrastRatio(inkRgb, rgbOf(oklchToHex(tint))) < 4.5; i++) {
-      tint = { ...tint, l: mode === 'light' ? Math.min(0.97, tint.l + 0.01) : Math.max(0.2, tint.l - 0.01) };
-    }
-    out[name] = oklchToHex(tint);
-  }
+  for (const [name, ink] of Object.entries(inks) as Array<[keyof TintLayer, string]>) out[name] = tintFor(ink, mode);
   return out;
+}
+
+/** One tint of the tint layer for a hex ink. With `grey`, an ink with no
+ * usable hue (OKLCH chroma under 0.005) gets a grey tint: its hue is noise,
+ * and a pure grey would otherwise wash into an arbitrary colour. The
+ * generator never passes it. */
+export function tintFor(ink: string, mode: 'light' | 'dark', opts: { grey?: boolean } = {}): string {
+  const { c, h } = hexToOklch(ink);
+  const grey = opts.grey && c < 0.005;
+  let tint: Oklch = mode === 'light'
+    ? { l: 0.93, c: grey ? 0 : 0.045, h }
+    : { l: 0.3, c: grey ? 0 : 0.055, h };
+  const inkRgb = rgbOf(ink);
+  // Back the tint off (lighter in light mode, darker in dark) until the
+  // pair reads at AA text contrast.
+  for (let i = 0; i < 20 && contrastRatio(inkRgb, rgbOf(oklchToHex(tint))) < 4.5; i++) {
+    tint = { ...tint, l: mode === 'light' ? Math.min(0.97, tint.l + 0.01) : Math.max(0.2, tint.l - 0.01) };
+  }
+  return oklchToHex(tint);
 }
 
 export type StatusColors = Record<'success' | 'warning' | 'danger', string>;

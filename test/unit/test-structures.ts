@@ -217,14 +217,16 @@ check(detailPh.some((p) => p.id === 'dtm-nav' && p.prop === 'leading.label' && p
 const fallbacks = applyStructure(createCanvas('e-fallback', undefined, {}, { type: 'mobile' }), 'feed', { existingColors: new Set(['primary', 'surface', 'error']) });
 check(!['accent', 'bg-surface', 'danger'].some((t) => fallbacks.seededColors.includes(t)) && fallbacks.seededColors.includes('text-primary'),
   'a canvas resolving primary / surface / error keeps them: the primitives\' accent / bg-surface / danger are not seeded over them', fallbacks.seededColors.join(', '));
-check(['text-primary', 'text-secondary', 'border', 'bg-surface', 'danger', 'accent'].every((t) => r1.seededColors.includes(t)), 'the colour tokens primitives read are seeded');
+check(['text-primary', 'text-secondary', 'border', 'bg-surface', 'accent'].every((t) => r1.seededColors.includes(t)), 'the colour tokens primitives read are seeded');
+// Phase 32 slice C (FR-C5) — danger and the tints derive; they are never seeded.
+check(!['danger', 'accent-tint', 'success-tint', 'warning-tint', 'danger-tint', 'neutral-tint'].some((t) => r1.seededColors.includes(t)), 'danger and the tint layer are not seeded', r1.seededColors.join(', '));
 const plain = applyStructure(createCanvas('e-plain', undefined, {}, { type: 'mobile' }), 'feed');
 check(plain.seededColors.includes('text-primary'), 'a stamp that references no $text-primary still seeds it for its primitives');
 for (const type of ['status-bar', 'home-indicator', 'nav-bar', 'tab-bar', 'button', 'list-row', 'sheet'] as const) {
   registerStructure(page(`seed-${type}`, { surface: 'any', nodes: [{ id: `seed-${type}-n`, type }] }));
   const seeded = applyStructure(createCanvas(`e-seed-${type}`), `seed-${type}`).seededColors;
-  const want = ['accent', 'bg-surface', 'border', 'danger', 'text-primary', 'text-secondary'];
-  check(want.every((t) => seeded.includes(t)), `a lone ${type} seeds all six colours the primitives read`, seeded.join(', '));
+  const want = ['accent', 'bg-surface', 'border', 'text-primary', 'text-secondary'];
+  check(want.every((t) => seeded.includes(t)) && !seeded.includes('danger'), `a lone ${type} seeds the five colours the primitives read, and not danger (it derives)`, seeded.join(', '));
 }
 const forced = applyStructure(createCanvas('e-forced', undefined, {}, { type: 'mobile' }), 'dashboard', { realisation: 'web' });
 check(forced.applied === 'dashboard' && forced.surface === 'web', 'realisation: "web" stamps the web dashboard on a mobile canvas');

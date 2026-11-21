@@ -2,6 +2,7 @@ import type { Canvas, SceneNode, DesignVariables, TabItem } from './types.js';
 import { getCanvasTokens } from './workspaces.js';
 import { renderToHtml, type RenderOptions } from './renderer.js';
 import { expandTree } from './expand.js';
+import { DERIVED_COLORS, refPath, themeTokens, tokenKind, tokenRefs, type RefSite, type TokenKind } from './variables.js';
 import { computeLayout, type LayoutRect } from './screenshot.js';
 import {
   checkCurrent, checkDesktopArtboard, checkHandbuiltTargetsApp, checkIconLabels, checkOverlays, checkPrimaryCount, checkRowRhythm, checkTruncation,
@@ -14,7 +15,7 @@ import { checkStates, STATE_RULES } from './state-checks.js';
 import { storedGenre } from './genre.js';
 import { relaxedByPreset, relaxedByGenre, canonicalGenre, genreRulesets, activeRulesets, composeRulesets, resolveSurface, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, MOBILE_RULES, DESKTOP_APP_RULES, DEFAULT_WINDOW, WINDOW_PROFILES, windowProfile, type SurfaceType } from './surfaces.js';
 import { checkArtboard, checkHandbuiltTargets, checkOneColumn, checkSafeAreaDetailed, checkSafeAreaFast, checkTabBars, checkTypeFloor, paddingSides, type MobileContext } from './mobile-rules.js';
-import { CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, isDisabled, STATEFUL_TYPES, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
+import { COPY_PROPS, CHROME_EDGE, FAB_SIZE, NAV_ACTION, TAPPABLE_PRIMITIVES, CLICKABLE_PRIMITIVES, CONTROL_OWNERS, LIST_ROW_HEIGHT, MENU_ROW_HEIGHT, NAV_ITEM_HEIGHT, PROPERTY_ROW_HEIGHT, buttonBox, desktopTargets, overlayTargets, effectivePosition, isDisabled, STATEFUL_TYPES, listRowMinHeight, navActions, pinsBottom, tabItemBox, tabItems } from './primitives.js';
 
 // --- Types ---
 
@@ -675,7 +676,7 @@ function checkTypography(entries: NodeEntry[], variables: DesignVariables = {}, 
   return { score: Math.max(0, Math.min(100, Math.round(score))), issues };
 }
 
-function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
+function checkStructure(entries: NodeEntry[], canvas: Canvas, tokens: DesignVariables, unknownTokens: boolean): CheckResult {
   const issues: EvaluationIssue[] = [];
   let score = 100;
 
@@ -722,26 +723,14 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
     }
   }
 
-  // Token usage (copy and variant names on the mobile primitives are not
-  // style values — they could never be tokens)
-  const hasVariables = canvas.variables && (
-    Object.keys(canvas.variables.colors ?? {}).length > 0 ||
-    Object.keys(canvas.variables.spacing ?? {}).length > 0
-  );
+  // Token usage, against the tokens the canvas resolves (its own and what it
+  // inherits). Copy and enum names are not style values, and a ref counts only
+  // when it is defined: a typo is not token use.
+  const hasVariables = Object.keys(tokens.colors ?? {}).length > 0 || Object.keys(tokens.spacing ?? {}).length > 0;
   if (hasVariables) {
-    let tokenRefs = 0;
-    let totalProps = 0;
-    for (const { node } of entries) {
-      for (const [key, val] of Object.entries(node)) {
-        if (['id', 'type', 'name', 'children'].includes(key) || PRIMITIVE_COPY_PROPS.has(key)) continue;
-        if (typeof val === 'string') {
-          totalProps++;
-          if (val.startsWith('$')) tokenRefs++;
-        }
-      }
-    }
-    if (totalProps > 0) {
-      const tokenPercent = Math.round((tokenRefs / totalProps) * 100);
+    const { refs, total } = tokenCensus(entries, tokens);
+    if (total > 0) {
+      const tokenPercent = Math.round((refs / total) * 100);
       if (tokenPercent < 30) {
         score -= 10;
         issues.push({
@@ -760,6 +749,14 @@ function checkStructure(entries: NodeEntry[], canvas: Canvas): CheckResult {
   const iconFindings = checkUnknownIcons(canvas);
   score -= 10 * iconFindings.length;
   issues.push(...iconFindings);
+
+  // Phase 32 slice C — unknown and wrong-kind token refs render something
+  // other than intended (usually nothing). Same weight as an unknown icon.
+  if (unknownTokens) {
+    const tokenFindings = checkUnknownTokens(canvas, tokens);
+    score -= 10 * tokenFindings.length;
+    issues.push(...tokenFindings);
+  }
 
   // Component reuse. Phase 30 slice D — a repeated primitive (list rows,
   // buttons, tab bars) is reuse too: the primitive is the component. Phase 31
@@ -807,16 +804,6 @@ function iconSlots(root: SceneNode): Array<{ node: SceneNode; path: string; ref:
   })(root);
   return out;
 }
-
-/** Phase 30 slice D — the mobile primitives' copy and enum props: words and
- * variant names, never style values, so the token census skips them. */
-const PRIMITIVE_COPY_PROPS = new Set([
-  'title', 'subtitle', 'label', 'time', 'variant', 'size', 'detent', 'appearance', 'iconPosition',
-  // Phase 31 slice B — the desktop-app primitives' copy and enums.
-  'placeholder', 'value', 'shortcut', 'error', 'ariaLabel', 'count', 'orientation',
-  // Phase 31 slice G — the element state is an enum, not a style value.
-  'state',
-]);
 
 /** Spellings worth trying for an icon name that didn't resolve: Material
  * Symbols names multi-word icons with `_` (chevron_right), Lucide with `-`
@@ -906,6 +893,224 @@ function checkUnknownIcons(canvas: Canvas): EvaluationIssue[] {
       };
     }
     issues.push(issue);
+  }
+  return issues;
+}
+
+/** The token census: top-level string style props, and how many of them are
+ * refs the tokens define. */
+function tokenCensus(entries: NodeEntry[], tokens: DesignVariables): { refs: number; total: number } {
+  let refs = 0;
+  let total = 0;
+  for (const { node } of entries) {
+    for (const [key, val] of Object.entries(node)) {
+      if (key === 'id' || key === 'type' || key === 'children' || COPY_PROPS.has(key) || typeof val !== 'string') continue;
+      total++;
+      if (val.startsWith('$') && tokenKind(val.slice(1), tokens) !== undefined) refs++;
+    }
+  }
+  return { refs, total };
+}
+
+// ── Phase 32 slice C: unknown-token (FR-C1, FR-C2; contracts M2–M6) ─────────
+
+const COLOR_PROPS = new Set(['fill', 'stroke', 'color', 'iconColor', 'secondaryColor', 'badgeColor', 'dotColor']);
+const NUMBER_PROPS = new Set([
+  'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'gap', 'rowGap', 'padding', 'cornerRadius', 'x', 'y', 'bottom', 'right',
+  'strokeWidth', 'opacity', 'blur', 'backdropBlur', 'fontWeight', 'lineHeight', 'letterSpacing', 'iconSize', 'labelWidth',
+  'inset', 'depth', 'rows', 'innerRatio', 'gridlines',
+]);
+const KIND_NAMES: Record<TokenKind, string> = {
+  color: 'a color token', number: 'a spacing or radius token', typography: 'a typography token',
+  elevation: 'an elevation token', motion: 'a motion token', object: 'a whole token group',
+};
+
+/** The token kinds a ref site takes (M4); empty when it takes none. */
+function siteAccepts(site: RefSite): TokenKind[] {
+  if (site.sub) return ['color'];
+  if (COLOR_PROPS.has(site.key)) return ['color'];
+  if (site.key === 'fontSize') return ['number', 'typography'];
+  if (NUMBER_PROPS.has(site.key)) return ['number'];
+  if (site.key === 'shadow') return ['elevation'];
+  if (site.key === 'transition') return ['motion'];
+  return [];
+}
+
+/** The defined names a site could have meant (M5). */
+function candidatePool(accepts: TokenKind[], tokens: DesignVariables): string[] {
+  const names = new Set<string>();
+  const add = (cat: object | undefined, prefix = '') => { for (const k of Object.keys(cat ?? {})) names.add(prefix + k); };
+  if (accepts.includes('color')) { add(tokens.colors); DERIVED_COLORS.forEach((n) => names.add(n)); }
+  if (accepts.includes('number')) { add(tokens.spacing); add(tokens.radius); }
+  if (accepts.includes('typography')) add(tokens.typography);
+  if (accepts.includes('elevation')) add(tokens.elevation, 'elevation.');
+  if (accepts.includes('motion')) add(tokens.motion, 'motion.');
+  return [...names];
+}
+
+function levenshtein(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cur = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+/** The size step a token name ends in (md, 2xl, 3xs, 4), if any. */
+function ladderStep(name: string): string | undefined {
+  const last = name.slice(name.lastIndexOf('-') + 1).toLowerCase();
+  return /^(\d*x*[sml]|sm|md|lg|\d+)$/.test(last) ? last : undefined;
+}
+
+/** The value at a ref site on an object (a node or an override). */
+function valueAt(obj: unknown, site: RefSite): unknown {
+  let v = (obj as Record<string, unknown> | undefined)?.[site.key];
+  if (site.at !== undefined) v = Array.isArray(v) ? v[site.at] : undefined;
+  if (site.sub) v = v && typeof v === 'object' ? (v as Record<string, unknown>)[site.sub] : undefined;
+  return v;
+}
+
+/** M5 (d): the sites a rename op can rewrite whole through the U parser. */
+const fixableSite = (site: RefSite) =>
+  (!site.sub && site.at === undefined) || ((site.key === 'padding' || site.key === 'cornerRadius') && !site.sub) || NESTED_BORDER.has(site.key);
+const NESTED_BORDER = new Set(['borderTop', 'borderRight', 'borderBottom', 'borderLeft']);
+
+function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): EvaluationIssue[] {
+  const dark = themeTokens(tokens, 'dark');
+  const raw = expandTree(canvas.root, canvas).root;
+
+  // Expanded id of every expanded instance root → that instance node (stored,
+  // or inside a component definition), mirroring expandTree's id scheme.
+  const instAt = new Map<string, SceneNode>();
+  const used = new Set<string>();
+  (function walk(node: SceneNode, prefix: string, inside: boolean, open: Set<string>) {
+    const id = inside ? prefix + node.id : node.id;
+    const cid = node.type === 'instance' ? node.componentId : undefined;
+    const component = cid && !open.has(cid) ? canvas.components[cid] : undefined;
+    if (component) {
+      instAt.set(id, node);
+      used.add(cid!);
+      open.add(cid!);
+      for (const c of component.children ?? []) walk(c, `${prefix}${node.id}/`, true, open);
+      open.delete(cid!);
+      return;
+    }
+    for (const c of node.children ?? []) walk(c, prefix, inside, open);
+  })(canvas.root, '', false, new Set());
+
+  // M6 — where a value on an expanded node was written. A component's master
+  // can sit in the stored tree as well as in canvas.components: inside it
+  // (`master`), a stored node's own value is the definition's.
+  const defNode = (cid: string, id: string) => `def:${cid}:${id === cid ? '(root)' : id}`;
+  const originOf = (id: string, node: SceneNode, site: RefSite, ref: string, master?: string): string => {
+    const slash = id.lastIndexOf('/');
+    const parent = slash < 0 ? undefined : instAt.get(id.slice(0, slash));
+    const own = () => (parent ? defNode(parent.componentId!, id.slice(slash + 1)) : master ? defNode(master, id) : `node:${id}`);
+    const inst = instAt.get(id);
+    if (inst) return valueAt(inst, site) === ref ? own() : `def:${inst.componentId}:(root)`;
+    if (!parent) return own();
+    const override = node.name ? parent.overrides?.[node.name] : undefined;
+    if (override && valueAt(override, site) === ref) return `ovr:${id.slice(0, slash)}:${node.name}`;
+    return `def:${parent.componentId}:${id.slice(slash + 1)}`;
+  };
+
+  const issues: EvaluationIssue[] = [];
+  const seen = new Set<string>();
+  // Renames per (stored node, top-level key), so two typos in one array carry
+  // one op that applies both.
+  const renames = new Map<string, Array<{ site: RefSite; to: string }>>();
+  const pending: Array<{ issue: EvaluationIssue; nodeId: string; key: string }> = [];
+
+  // A master in the stored tree is walked there, so its definition is not
+  // walked again.
+  const masters = new Set<string>();
+  (function find(n: SceneNode) { if (n.type === 'component' && canvas.components[n.id]) masters.add(n.id); n.children?.forEach(find); })(canvas.root);
+
+  /** `component`: the id of the definition the ref is read from directly (a
+   * master in the tree, or a definition no instance uses). */
+  const judge = (node: SceneNode, site: RefSite, ref: string, origin: string, component?: string) => {
+    const path = refPath(site);
+    const dedupe = `${origin}\u0000${path}\u0000${ref}`;
+    if (seen.has(dedupe)) return;
+    seen.add(dedupe);
+    const name = ref.slice(1);
+    const accepts = siteAccepts(site);
+    const kind = tokenKind(name, tokens);
+    const base = { category: 'structure' as const, severity: 'warning' as const, rule: 'unknown-token', nodeId: node.id, nodeName: node.name };
+    const where = component ? ` (in component "${canvas.components[component]?.name ?? component}"${used.has(component) ? '' : ', which no instance uses'})` : '';
+    const fromOverride = origin.startsWith('ovr:') ? ' It is set by the instance\'s override for this node: edit that override.' : '';
+
+    if (accepts.length === 0) {
+      issues.push({ ...base, message: `${path} takes no token: "${ref}" ${kind ? `is ${KIND_NAMES[kind]} and renders as its value` : 'renders as written'}${where}.`, suggestion: `Write the value itself.${fromOverride}` });
+      return;
+    }
+    if (kind && !accepts.includes(kind)) {
+      const pool = candidatePool(accepts, tokens).sort();
+      const examples = pool.length ? ` (the canvas defines ${pool.slice(0, 3).map((n) => `"$${n}"`).join(', ')}${pool.length > 3 ? ', …' : ''})` : '';
+      issues.push({ ...base, message: `"${ref}" on ${path} is ${KIND_NAMES[kind]}, not ${KIND_NAMES[accepts[0]]}${where}.`, suggestion: `Use ${KIND_NAMES[accepts[0]]}${examples}.${fromOverride}` });
+      return;
+    }
+    if (kind) return;
+    if (tokenKind(name, dark) !== undefined) {
+      issues.push({ ...base, message: `Token "${ref}" on ${path} is defined only in the dark layer, so light renders it raw${where}.`, suggestion: `Define "${name}" in the base colors too (set_variables), not only under dark.${fromOverride}` });
+      return;
+    }
+    const ranked = candidatePool(accepts, tokens)
+      .map((n) => ({ n, d: levenshtein(name, n) }))
+      .filter((c) => c.d <= 3)
+      .sort((a, b) => a.d - b.d || a.n.localeCompare(b.n));
+    const named = ranked.slice(0, 3).map((c) => `"$${c.n}"`);
+    const issue: EvaluationIssue = {
+      ...base,
+      message: `Unknown token "${ref}" on ${path}: no such token is defined, so the value is dropped${where}.`,
+      suggestion: named.length
+        ? `Did you mean ${named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} or ${named[named.length - 1]}`}?${fromOverride}`
+        : `Define it with set_variables (or generate_design_system), or use a token the canvas defines.${fromOverride}`,
+    };
+    issues.push(issue);
+
+    const [first, second] = ranked;
+    if (!first || first.d > 2 || (second && second.d <= first.d)) return;
+    const stepA = ladderStep(name);
+    const stepB = ladderStep(first.n);
+    // A different rung of the same ladder is a different size, not a spelling.
+    if (stepA && stepB && stepA !== stepB) return;
+    if (!origin.startsWith('node:') || !fixableSite(site)) return;
+    const k = `${node.id}\u0000${site.key}`;
+    renames.set(k, [...(renames.get(k) ?? []), { site, to: `$${first.n}` }]);
+    pending.push({ issue, nodeId: node.id, key: site.key });
+  };
+
+  (function walk(node: SceneNode, master?: string) {
+    const inMaster = master ?? (node.type === 'component' && !node.id.includes('/') && canvas.components[node.id] ? node.id : undefined);
+    for (const { ref, ...site } of tokenRefs(node)) judge(node, site, ref, originOf(node.id, node, site, ref, inMaster), inMaster);
+    node.children?.forEach((c) => walk(c, inMaster));
+  })(raw);
+  // Components no instance uses are still the canvas's: judge their definitions.
+  for (const [cid, component] of Object.entries(canvas.components)) {
+    if (used.has(cid) || masters.has(cid)) continue;
+    (function walk(node: SceneNode) {
+      for (const { ref, ...site } of tokenRefs(node)) judge(node, site, ref, defNode(cid, node.id), cid);
+      node.children?.forEach(walk);
+    })(component);
+  }
+
+  const stored = new Map<string, SceneNode>();
+  (function index(n: SceneNode) { stored.set(n.id, n); n.children?.forEach(index); })(canvas.root);
+  for (const { issue, nodeId, key } of pending) {
+    let next: unknown = structuredClone((stored.get(nodeId) as unknown as Record<string, unknown>)[key]);
+    for (const { site, to } of renames.get(`${nodeId}\u0000${key}`) ?? []) {
+      if (site.at === undefined && !site.sub) next = to;
+      else if (site.at !== undefined && Array.isArray(next)) next[site.at] = to;
+      else if (site.sub && next && typeof next === 'object') (next as Record<string, unknown>)[site.sub] = to;
+    }
+    issue.fix = { op: formatUpdateOp(nodeId, { [key]: next }), rationale: 'The token is misspelt; the nearest defined name is the only one that close.' };
   }
   return issues;
 }
@@ -2619,7 +2824,7 @@ export async function evaluateCanvas(
     ]));
   }
   if (activeCategories.includes('structure')) {
-    results.set('structure', withRuleIssues(checkStructure(storedEntries, canvas), [
+    results.set('structure', withRuleIssues(checkStructure(storedEntries, canvas, mergedTokens, !rules.off.includes('unknown-token')), [
       ...(ruleOn.has('mobile-artboard') ? checkArtboard(mobile, declared) : []),
       ...(ruleOn.has('desktop-app-artboard') ? checkDesktopArtboard(resolvedRoot, declared) : []),
       ...(desktop && ruleOn.has('desktop-app-primary-count') ? checkPrimaryCount(desktop) : []),
@@ -2730,17 +2935,7 @@ export async function evaluateCanvas(
   const maxDepth = Math.max(...storedEntries.map((e) => e.depth));
   const instanceNodes = storedEntries.filter((e) => e.node.type === 'instance').length;
 
-  let tokenRefs = 0;
-  let totalStringProps = 0;
-  for (const { node } of storedEntries) {
-    for (const [key, val] of Object.entries(node)) {
-      if (['id', 'type', 'name', 'children'].includes(key) || PRIMITIVE_COPY_PROPS.has(key)) continue;
-      if (typeof val === 'string') {
-        totalStringProps++;
-        if (val.startsWith('$')) tokenRefs++;
-      }
-    }
-  }
+  const census = tokenCensus(storedEntries, mergedTokens);
 
   return {
     overallScore,
@@ -2755,7 +2950,7 @@ export async function evaluateCanvas(
       textNodes,
       frameNodes,
       maxDepth,
-      tokenUsagePercent: totalStringProps > 0 ? Math.round((tokenRefs / totalStringProps) * 100) : 0,
+      tokenUsagePercent: census.total > 0 ? Math.round((census.refs / census.total) * 100) : 0,
       componentReusePercent: totalNodes > 0 ? Math.round((instanceNodes / totalNodes) * 100) : 0,
     },
     mode: options.mode,

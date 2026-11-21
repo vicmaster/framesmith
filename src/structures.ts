@@ -2,6 +2,7 @@ import type { BuildLogEntry, Canvas, SceneNode, Structure, StructureAxes } from 
 import { resolveSurface, SURFACE_TYPES, type SurfaceType } from './surfaces.js';
 import { COLOR, SPACE, RADIUS, ELEV, TYPE, TINT } from './structure-tokens.js';
 import { DESKTOP_APP_STRUCTURES } from './structures-desktop.js';
+import { DERIVED_COLORS } from './variables.js';
 
 // Phase 11 — layout scaffold library. A Structure is a named page shape: a
 // partial scene tree of *labeled placeholder* children (C8 — never fabricated
@@ -1862,15 +1863,9 @@ const DEFAULT_SCAFFOLD_COLORS: Record<string, string> = {
   // AA against the dark defaults above; generated systems override.
   'success': '#4ADE80',
   'warning': '#FBBF24',
-  'danger': '#F87171',
-  // Phase 28 — the tint layer (chips, icon tiles, pills, avatars). Dark
-  // washes paired with the inks above; generated systems override with
-  // seed-derived tints in both themes.
-  'accent-tint': '#152A47',
-  'success-tint': '#0F2E1B',
-  'warning-tint': '#33260A',
-  'danger-tint': '#3A1715',
-  'neutral-tint': '#25282D',
+  // Phase 32 slice C — `danger` and the tint layer are not seeded: they derive
+  // from these inks and the applied surface (variables.ts withDerivedColors),
+  // so a later light preset gets light tints. Generated systems define them.
   // Phase 31 — a control's only boundary: 3:1 against every dark surface above.
   'border-strong': '#666666',
 };
@@ -1932,14 +1927,14 @@ const PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = {
   'text-primary': [], 'text-secondary': [], border: [],
   // The token, then the names applyControlDefaults falls back to: a canvas
   // that resolves the fallback keeps it rather than getting a seeded default.
-  accent: ['primary'], 'bg-surface': ['surface'], danger: ['error'],
+  accent: ['primary'], 'bg-surface': ['surface'],
 };
 /** Phase 31 — the extra token the desktop-app vocabulary reads: a
  * text-input's and a control's boundary (which falls back to `border`).
  * Mobile stamps never seed it. Slice D (spec change S6) stopped seeding
  * `accent-tint`, the active fill of nav-item / tree-row / contained tabs:
  * presets carry no tint, so a dark seed survived a later light preset; without
- * the token the renderer mixes 12% accent into whatever surface is applied. */
+ * the token it derives from the accent and whatever surface is applied. */
 const DESKTOP_PRIMITIVE_TYPES = new Set(['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row', 'property-row', 'divider']);
 const DESKTOP_PRIMITIVE_COLOR_TOKENS: Record<string, string[]> = { 'border-strong': ['border'] };
 
@@ -2154,6 +2149,11 @@ export function applyStructure(
 
   // Seed neutral defaults for referenced colors not already resolvable (A-P4).
   const existingColors = opts.existingColors ?? new Set<string>();
+  // Phase 32 slice C — `danger` and the tints derive in the mode of the
+  // surface (variables.ts withDerivedColors). A stamp that reads one seeds that
+  // surface too unless the canvas has one, so an unthemed stamp's tints come
+  // out dark, the mode its seeded inks are tuned for.
+  if ([...referenced].some((t) => (DERIVED_COLORS as readonly string[]).includes(t)) && !existingColors.has('bg-primary')) referenced.add('bg-surface');
   const seededColors: string[] = [];
   for (const token of referenced) {
     if (existingColors.has(token)) continue;

@@ -13,7 +13,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID, type Canvas, type DesignVariables, type Project, type Workspace } from './types.js';
-import { mergeDesignTokens } from './variables.js';
+import { mergeDesignTokens, withoutRetiredSeeds } from './variables.js';
 import { isRepoBound, repoDir, writeWorkspaceFile, readWorkspaceFile, recordWorkspaceFileState, workspaceFileModified, registerProjectDir, getProjectDir, uniqueProjectDir, type RepoWorkspaceFile } from './repo-store.js';
 
 const workspaces = new Map<string, Workspace>();
@@ -361,7 +361,9 @@ export function getCanvasTokens(canvas: Canvas): DesignVariables {
   ensureWorkspaceFresh();
   const project = projects.get(canvas.projectId);
   const workspace = project ? workspaces.get(project.workspaceId) : undefined;
-  return mergeDesignTokens(workspace?.designSystem, project?.designSystem, canvas.variables);
+  // Phase 32 slice C (FR-C6) — a colour a scaffold used to seed counts as
+  // unset, so what the canvas inherits, or derives, shows through.
+  return mergeDesignTokens(workspace?.designSystem, project?.designSystem, withoutRetiredSeeds(canvas.variables));
 }
 
 /** The tokens a canvas inherits from the workspace + project layers, *excluding*
