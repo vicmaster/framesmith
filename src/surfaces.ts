@@ -208,8 +208,9 @@ export const DESKTOP_APP_RULES: readonly string[] = [
 ];
 
 /** Phase 31: default rules — they run unless an active ruleset disables them.
- * A rule id appears here when some type replaces the check. */
-export const DEFAULT_RULES = ['type-scale-ratio'] as const;
+ * A rule id appears here when some type replaces the check, or (Phase 32
+ * `unknown-token`) when a ruleset may need to. */
+export const DEFAULT_RULES = ['type-scale-ratio', 'unknown-token'] as const;
 
 /** Keyed by axis, then value. Genre rows are canonical names only; aliases
  * fold through GENRE_ALIASES first. A rule id lands here in the same change as

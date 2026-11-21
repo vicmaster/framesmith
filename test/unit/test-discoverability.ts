@@ -18,7 +18,7 @@ import '../env.js';
 import { readFileSync } from 'node:fs';
 import { domToSceneGraph, type RawDomNode } from '../../src/import.js';
 import { listStructures } from '../../src/structures.js';
-import { RULESETS, GENRE_ALIASES, SURFACE_TYPES, DEVICE_PROFILES, WINDOW_PROFILES } from '../../src/surfaces.js';
+import { RULESETS, DEFAULT_RULES, GENRE_ALIASES, SURFACE_TYPES, DEVICE_PROFILES, WINDOW_PROFILES } from '../../src/surfaces.js';
 
 interface Check { name: string; ok: boolean; detail?: string }
 const checks: Check[] = [];
@@ -428,6 +428,8 @@ const guidelines = readFileSync('docs/GUIDELINES.md', 'utf-8');
   for (const axis of Object.values(RULESETS)) {
     for (const r of Object.values(axis)) [...(r.enable ?? []), ...(r.disable ?? [])].forEach((id) => ruleIds.add(id));
   }
+  // Default rules run unless a ruleset turns them off (Phase 32: unknown-token).
+  DEFAULT_RULES.forEach((id) => ruleIds.add(id));
   expect('the ruleset table registers rule ids', ruleIds.size > 0);
   for (const [label, src] of [['src/index.ts', indexSrc], ['GUIDELINES', guidelines], ['README', readme]] as const) {
     const missing = [...ruleIds].filter((id) => !src.includes(id));

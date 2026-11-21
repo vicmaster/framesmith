@@ -11,7 +11,7 @@ import { listStructures, applyStructure } from '../../src/structures.js';
 import { getPreset } from '../../src/presets.js';
 import { evaluateCanvas, contrastRatio, parseColor } from '../../src/evaluate.js';
 import { generateDesignSystem, PERSONALITY_NAMES } from '../../src/design-language.js';
-import { setVariables, applyPresetTokens, getVariables } from '../../src/variables.js';
+import { setVariables, applyPresetTokens, getVariables, themeTokens, withDerivedColors } from '../../src/variables.js';
 import { getCanvasTokens, createWorkspace, createProject, setWorkspaceDesignSystem } from '../../src/workspaces.js';
 import type { Canvas, SceneNode } from '../../src/types.js';
 
@@ -63,10 +63,10 @@ async function main() {
         // not their type scale: every built-in preset sets a 14–15px body,
         // which mobile-type-floor rightly flags on every phone screen whatever
         // its structure. generate_design_system is the phone type path, and
-        // the personalities below hold the realisations to it.
-        if (preset) canvas.variables = mobile
-          ? { ...structuredClone(preset.variables), typography: canvas.variables.typography }
-          : structuredClone(preset.variables);
+        // the personalities below hold the realisations to it. The preset
+        // merges as apply_preset merges it: replacing the variables wholesale
+        // would drop the stamp's seeded spacing, radius and type tokens.
+        if (preset) applyPresetTokens(canvas, mobile ? { ...preset.variables, typography: undefined } : preset.variables, {});
       }
       // The gate measures the PATTERN's taste/craft — coverage (Phase 24)
       // demands sibling state variants, which is a property of a designed
@@ -113,11 +113,48 @@ async function main() {
   }
 
   await desktopGate();
+  await unknownTokenGate();
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
 }
 main();
+
+// ── Phase 32 slice C (M11) — no stamp ever references a token it lacks ──────
+// Every structure, of every kind and surface, stamped unthemed, then under
+// each preset (merged, as apply_preset does), then over a generated system:
+// zero unknown-token findings. A scaffold that adds a ref nothing seeds or
+// derives fails here first.
+async function unknownTokenGate() {
+  const all = listStructures();
+  const presets = ['dark', 'light', 'material', 'minimal'] as const;
+  console.log(`\nunknown-token gate — ${all.length} structures × (unthemed + ${presets.length} presets + a generated system)\n`);
+  let clean = 0;
+  const misses: string[] = [];
+  for (const s of all) {
+    const opts = s.surface === 'mobile' ? { type: 'mobile' as const } : s.surface === 'desktop-app' ? { type: 'desktop-app' as const } : undefined;
+    const variants: Array<[string, (c: Canvas) => void]> = [
+      ['unthemed', (c) => { applyStructure(c, s.name, { replace: true }); }],
+      ...presets.map((p): [string, (c: Canvas) => void] => [p, (c) => { applyStructure(c, s.name, { replace: true }); applyPresetTokens(c, getPreset(p)!.variables, {}); }]),
+      ['generated', (c) => { setVariables(c, generateDesignSystem('#2563EB', 'technical').variables); applyStructure(c, s.name, { replace: true, ...existing(c) }); }],
+    ];
+    for (const [label, stamp] of variants) {
+      const canvas = createCanvas(`ut-${s.name}-${label}`, undefined, {}, opts);
+      stamp(canvas);
+      const found = (await evaluateCanvas(canvas, { mode: 'fast', categories: ['structure'] })).issues.filter((i) => i.rule === 'unknown-token');
+      if (found.length) misses.push(`${s.name} @ ${label}: ${found.map((f) => f.message).join(' | ')}`);
+      else clean++;
+    }
+  }
+  assert(misses.length === 0, `every stamp resolves every ref (${clean} clean)${misses.length ? ' — ' + misses.slice(0, 5).join(' ;; ') : ''}`);
+  // Twin: a stamp whose variables were replaced wholesale by a preset loses its
+  // seeded spacing tokens, and the gate sees it.
+  const wiped = createCanvas('ut-wiped');
+  applyStructure(wiped, 'dashboard', { replace: true });
+  wiped.variables = structuredClone(getPreset('light')!.variables);
+  const wipedFound = (await evaluateCanvas(wiped, { mode: 'fast', categories: ['structure'] })).issues.filter((i) => i.rule === 'unknown-token');
+  assert(wipedFound.length > 0, `twin: a stamp whose variables a preset replaced wholesale fails the gate (${wipedFound.length} findings)`);
+}
 
 // ── Phase 31 slice D (FR-D3, G2 + G4) — the desktop-app gate ────────────────
 // Every desktop-app realisation, and data-table-app / skeleton-table-app,
@@ -148,9 +185,13 @@ const blocking = (issues: { severity: string; rule?: string; category: string; t
 
 /** `$text-primary` on `$accent-tint`, light and dark, where the canvas has a tint. */
 function tintContrast(canvas: Canvas): number[] {
-  const merged = getVariables(canvas);
+  // The tokens the render uses: merged, old seeds dropped, and (Phase 32
+  // slice C) a missing tint derived in each theme.
+  const merged = getCanvasTokens(canvas);
   const ratios: number[] = [];
-  for (const colors of [merged.colors, merged.dark?.colors ? { ...merged.colors, ...merged.dark.colors } : undefined]) {
+  for (const theme of ['light', 'dark'] as const) {
+    if (theme === 'dark' && !merged.dark?.colors) continue;
+    const colors = withDerivedColors(themeTokens(merged, theme)).colors;
     const tint = colors?.['accent-tint'];
     const ink = colors?.['text-primary'];
     const fg = typeof ink === 'string' ? parseColor(ink) : null;
@@ -163,7 +204,13 @@ function tintContrast(canvas: Canvas): number[] {
 /** A desktop-app canvas; a component goes under a root painted as a page is. */
 function appCanvas(name: string, component: boolean): Canvas {
   const canvas = createCanvas(name, undefined, {}, { type: 'desktop-app' });
-  if (component) canvas.root.fill = '$bg-primary';
+  // A component stamp seeds only what it references, so the backdrop the
+  // harness gives it defines its own token (the scaffold default): an
+  // undefined $bg-primary is an unknown-token warning, and drew nothing.
+  if (component) {
+    canvas.root.fill = '$bg-primary';
+    canvas.variables.colors = { ...canvas.variables.colors, 'bg-primary': '#0a0a0a' };
+  }
   return canvas;
 }
 
@@ -236,7 +283,8 @@ async function desktopGate() {
   assert(blocking((await evaluateCanvas(unnamed, { mode: 'fast', categories: CATEGORIES })).issues).some((b) => b.includes('desktop-app-icon-label')), 'twin: an icon-only button without ariaLabel fails the gate');
   const darkTint = appCanvas('twin-tint', false);
   applyStructure(darkTint, 'split-workbench-app');
-  darkTint.variables.colors = { ...darkTint.variables.colors, 'accent-tint': '#152A47' };
+  // Not the retired seed #152A47 itself, which now counts as unset and derives.
+  darkTint.variables.colors = { ...darkTint.variables.colors, 'accent-tint': '#152A48' };
   applyPresetTokens(darkTint, getPreset('light')!.variables, getVariables(darkTint));
   assert(tintContrast(darkTint).some((r) => r < 4.5) && !(await verdict(darkTint, 'light')).ok, 'twin: a dark $accent-tint left under the light preset fails the gate');
   // An info-level desktop-app finding (a hand-built 28px icon frame) fails it too.

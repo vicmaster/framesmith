@@ -1,26 +1,175 @@
 import type { Canvas, DesignVariables, SceneNode, ShadowSpec, StateStyle } from './types.js';
-import { STATE_LAYERS, STATEFUL_TYPES } from './primitives.js';
+import { COPY_PROPS, STATE_LAYERS, STATEFUL_TYPES } from './primitives.js';
+import { composite, contrastRatio, parseAlpha } from './color-math.js';
+import { tintFor } from './color-system.js';
 
 export function resolveVariables(node: SceneNode, variables: DesignVariables, opts?: { theme?: 'light' | 'dark' }): SceneNode {
-  // Phase 25 slice D — dark is a sparse override layer: merge it over colors
-  // and resolve exactly as light does. Theme is a pure RENDER/EVALUATE
-  // parameter, never canvas state (versionHash and drift baselines must not
-  // fork on it).
-  const effective = opts?.theme === 'dark' && (variables.dark?.colors || variables.dark?.elevation)
+  return deepResolve(structuredClone(node), withDerivedColors(themeTokens(variables, opts?.theme)));
+}
+
+/** The tokens a theme renders with. Phase 25 slice D — dark is a sparse
+ * override layer merged over colors and elevation. Theme is a pure
+ * RENDER/EVALUATE parameter, never canvas state (versionHash and drift
+ * baselines must not fork on it). */
+export function themeTokens(variables: DesignVariables, theme?: 'light' | 'dark'): DesignVariables {
+  return theme === 'dark' && (variables.dark?.colors || variables.dark?.elevation)
     ? {
         ...variables,
         colors: { ...variables.colors, ...variables.dark?.colors },
         elevation: { ...variables.elevation, ...variables.dark?.elevation },
       }
     : variables;
-  return deepResolve(structuredClone(node), effective);
+}
+
+// Phase 32 slice C (FR-C5, contract M7) — the tint layer and `danger` derive
+// when the design system does not define them, so a scaffold never needs a
+// seed that a later preset cannot replace.
+export const DERIVED_COLORS = ['accent-tint', 'success-tint', 'warning-tint', 'danger-tint', 'neutral-tint', 'danger'] as const;
+const DERIVED_NAMES = new Set<string>(DERIVED_COLORS);
+
+/** The colours a scaffold used to seed (structures.ts) before they derived.
+ * A canvas-layer colour holding one counts as unset (FR-C6). */
+export const RETIRED_SEEDS = new Map<string, string>([
+  ['accent-tint', '#152A47'], ['success-tint', '#0F2E1B'], ['warning-tint', '#33260A'],
+  ['danger-tint', '#3A1715'], ['neutral-tint', '#25282D'], ['danger', '#F87171'],
+]);
+
+export function isRetiredSeed(name: string, value: unknown): boolean {
+  const seed = RETIRED_SEEDS.get(name);
+  return seed !== undefined && typeof value === 'string' && value.trim().toLowerCase() === seed.toLowerCase();
+}
+
+/** A token layer without the retired seeds in its colours; a colour layer
+ * that held nothing else is dropped, as if it had never been set. */
+export function withoutRetiredSeeds<T extends DesignVariables | undefined>(v: T): T {
+  const colors = v?.colors;
+  if (!colors || !Object.entries(colors).some(([k, val]) => isRetiredSeed(k, val))) return v;
+  const kept = Object.entries(colors).filter(([k, val]) => !isRetiredSeed(k, val));
+  const { colors: _colors, ...rest } = v!;
+  return (kept.length ? { ...rest, colors: Object.fromEntries(kept) } : rest) as T;
+}
+
+/** The tokens with every missing derived colour filled in. */
+export function withDerivedColors(v: DesignVariables): DesignVariables {
+  const c = v.colors ?? {};
+  if (DERIVED_COLORS.every((name) => c[name] !== undefined)) return v;
+  return { ...v, colors: { ...deriveColors(c), ...c } };
+}
+
+const WHITE: [number, number, number] = [255, 255, 255];
+const BLACK: [number, number, number] = [0, 0, 0];
+const hexOf = (rgb: [number, number, number]) => '#' + rgb.map((x) => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+
+/** The surface names, in the order every default reads them. */
+export const SURFACE_CHAIN = ['bg-surface', 'surface', 'bg-primary', 'background'] as const;
+
+/** The surface tints sit on: the first of SURFACE_CHAIN that parses, else
+ * white; a translucent one laid over the next opaque one in that chain. */
+function tintSurface(c: Record<string, string>): [number, number, number] {
+  const chain = SURFACE_CHAIN.map((n) => c[n]).filter((x): x is string => typeof x === 'string' && rgbOf(x) !== undefined);
+  const opaque = (from: number): [number, number, number] => {
+    const next = chain.slice(from).find((x) => parseAlpha(x) >= 1);
+    return next ? rgbOf(next)! : WHITE;
+  };
+  if (!chain.length) return WHITE;
+  const alpha = parseAlpha(chain[0]);
+  return alpha >= 1 ? rgbOf(chain[0])! : composite(rgbOf(chain[0])!, alpha, opaque(1));
+}
+
+function deriveColors(c: Record<string, string>): Record<string, string> {
+  const surface = tintSurface(c);
+  const mode = contrastRatio(surface, WHITE) > contrastRatio(surface, BLACK) ? 'dark' : 'light';
+  // An ink as opaque hex over the surface; its literal when it does not parse.
+  const ink = (value: string | undefined, literal: string): string => {
+    const rgb = value === undefined ? undefined : rgbOf(value);
+    if (!rgb) return literal;
+    const alpha = parseAlpha(value!);
+    return hexOf(alpha < 1 ? composite(rgb, alpha, surface) : rgb);
+  };
+  const danger = c.danger ?? c.error ?? (mode === 'dark' ? '#F87171' : '#DC2626');
+  const tint = (value: string | undefined, literal: string) => tintFor(ink(value, literal), mode, { grey: true });
+  return {
+    danger,
+    'accent-tint': tint(c.accent ?? c.primary, '#2563EB'),
+    'success-tint': tint(c.success, '#16A34A'),
+    'warning-tint': tint(c.warning, '#D97706'),
+    'danger-tint': tint(danger, mode === 'dark' ? '#F87171' : '#DC2626'),
+    'neutral-tint': tint(c['text-secondary'], '#6B7280'),
+  };
+}
+
+/** Where a token ref sits on a node: a top-level prop (`key`), optionally an
+ * array entry (`at`) and/or a field of an object (`sub`). */
+export interface RefSite { key: string; at?: number; sub?: string }
+
+export function refPath(site: RefSite): string {
+  return `${site.key}${site.at !== undefined ? `[${site.at}]` : ''}${site.sub ? `.${site.sub}` : ''}`;
+}
+
+/** Every `$ref` on a node the resolver resolves (contract M2), in the order
+ * `deepResolve` visits them. */
+export function tokenRefs(node: SceneNode): Array<RefSite & { ref: string }> {
+  const out: Array<RefSite & { ref: string }> = [];
+  const isRef = (v: unknown): v is string => typeof v === 'string' && v.startsWith('$');
+  const rec = node as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(rec)) {
+    if (key === 'id' || key === 'type' || key === 'children' || COPY_PROPS.has(key)) continue;
+    if (isRef(value)) out.push({ key, ref: value });
+  }
+  for (const key of ['padding', 'cornerRadius']) {
+    const arr = rec[key];
+    if (Array.isArray(arr)) arr.forEach((v, at) => { if (isRef(v)) out.push({ key, at, ref: v }); });
+  }
+  for (const key of NESTED_TOKEN_PROPS) {
+    const obj = rec[key] as Record<string, unknown> | undefined;
+    if (obj && typeof obj === 'object' && isRef(obj.color)) out.push({ key, sub: 'color', ref: obj.color });
+  }
+  const each = (key: string, subs: string[]) => {
+    const arr = rec[key];
+    if (!Array.isArray(arr)) return;
+    arr.forEach((item, at) => {
+      if (!item || typeof item !== 'object') return;
+      for (const sub of subs) { const v = (item as Record<string, unknown>)[sub]; if (isRef(v)) out.push({ key, at, sub, ref: v }); }
+    });
+  };
+  each('series', ['stroke']);
+  each('actions', ['fill', 'color', 'stroke']);
+  const action = rec.action as Record<string, unknown> | undefined;
+  if (action && typeof action === 'object' && isRef(action.color)) out.push({ key: 'action', sub: 'color', ref: action.color });
+  each('segments', ['color']);
+  return out;
+}
+
+export type TokenKind = 'color' | 'number' | 'typography' | 'elevation' | 'motion' | 'object';
+
+/** What a token name resolves to, in `lookupToken`'s order (contract M3);
+ * undefined when it resolves to nothing. The derived colours always count. */
+export function tokenKind(name: string, v: DesignVariables): TokenKind | undefined {
+  const has = (cat: object | undefined) => !!cat && Object.hasOwn(cat, name) && (cat as Record<string, unknown>)[name] !== undefined;
+  if (has(v.colors)) return 'color';
+  if (has(v.spacing) || has(v.radius)) return 'number';
+  if (has(v.typography)) return 'typography';
+  const dot = name.indexOf('.');
+  if (dot > 0) {
+    const category = name.slice(0, dot);
+    const cat = (v as Record<string, unknown>)[category];
+    if (category === 'colors' && DERIVED_NAMES.has(name.slice(dot + 1))) return 'color';
+    if (cat && typeof cat === 'object' && Object.hasOwn(cat, name.slice(dot + 1))) {
+      if (category === 'colors') return 'color';
+      if (category === 'spacing' || category === 'radius' || category === 'state') return 'number';
+      if (category === 'elevation') return 'elevation';
+      if (category === 'motion') return 'motion';
+      return 'object';
+    }
+  }
+  return DERIVED_NAMES.has(name) ? 'color' : undefined;
 }
 
 const NESTED_TOKEN_PROPS = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'] as const;
 
 function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
   for (const [key, value] of Object.entries(node)) {
-    if (key === 'id' || key === 'type' || key === 'children') continue;
+    if (key === 'id' || key === 'type' || key === 'children' || COPY_PROPS.has(key)) continue;
 
     if (typeof value === 'string' && value.startsWith('$')) {
       const tokenName = value.slice(1);
@@ -145,7 +294,7 @@ function resolveStateStyle(v: DesignVariables): StateStyle {
     // FR-H1's chain: the renderer and the check never disagree.
     ring: c['focus-ring'] ?? c.accent ?? c.primary ?? CONTROL_FALLBACK.accent,
     onSurface: c['text-primary'] ?? CONTROL_FALLBACK.text,
-    surface: c['bg-surface'] ?? c.surface ?? c['bg-primary'] ?? c.background ?? CONTROL_FALLBACK.surface,
+    surface: SURFACE_CHAIN.map((n) => c[n]).find((x) => x !== undefined) ?? CONTROL_FALLBACK.surface,
     hover: unit(s.hover) ?? STATE_LAYERS.hover,
     focus: unit(s.focus) ?? STATE_LAYERS.focus,
     pressed: unit(s.pressed) ?? STATE_LAYERS.pressed,
@@ -224,10 +373,10 @@ function applyPrimitiveDefaults(node: SceneNode, v: DesignVariables): void {
   const surface = c['bg-surface'] ?? c.surface ?? CONTROL_FALLBACK.surface;
   const text = c['text-primary'] ?? CONTROL_FALLBACK.text;
   const secondary = c['text-secondary'] ?? '#6B7280';
-  const danger = c.danger ?? c.error ?? '#DC2626';
-  // Without an accent-tint token the active fill is the accent washed into the
-  // surface (12%), so it reads on a dark palette as well as a light one.
-  const tint = c['accent-tint'] ?? mixHex(accent, surface, 0.12) ?? '#EFF4FF';
+  // Both derive when the design system has neither (withDerivedColors): the
+  // tint from the accent, in the surface's mode.
+  const danger = c.danger;
+  const tint = c['accent-tint'];
   const set = <K extends keyof SceneNode>(key: K, value: SceneNode[K]) => { if (node[key] === undefined) node[key] = value; };
   legacyDisabled(node, v);
 
@@ -396,14 +545,6 @@ function rgbOf(color: string): [number, number, number] | undefined {
   return [hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((v) => Math.round(v * 255)) as [number, number, number];
 }
 
-/** `top` laid over `base` at `alpha`, as #RRGGBB; undefined unless both parse (see `rgbOf`). */
-function mixHex(top: string, base: string, alpha: number): string | undefined {
-  const t = rgbOf(top);
-  const b = rgbOf(base);
-  if (!t || !b) return undefined;
-  return '#' + [0, 1, 2].map((i) => Math.round(alpha * t[i] + (1 - alpha) * b[i]).toString(16).padStart(2, '0')).join('').toUpperCase();
-}
-
 /** A prop as text, for "is it set?" checks. */
 function text_(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -424,7 +565,7 @@ function onFill(fill: string | undefined): string {
   return 1.05 / (l + 0.05) >= (l + 0.05) / (lum('111827') + 0.05) ? '#FFFFFF' : '#111827';
 }
 
-function lookupToken(name: string, variables: DesignVariables): unknown {
+export function lookupToken(name: string, variables: DesignVariables): unknown {
   // Check each category
   if (variables.colors?.[name] !== undefined) return variables.colors[name];
   if (variables.spacing?.[name] !== undefined) return variables.spacing[name];
@@ -507,7 +648,8 @@ export function applyPresetTokens(
     const own = canvas.variables[cat] as Record<string, unknown>;
     const inh = (inherited[cat] ?? {}) as Record<string, unknown>;
     for (const [key, val] of Object.entries(pv)) {
-      const hasOwn = own[key] !== undefined;
+      // A retired scaffold seed is not the canvas's own choice (FR-C6).
+      const hasOwn = own[key] !== undefined && !(cat === 'colors' && isRetiredSeed(key, own[key]));
       const inhVal = inh[key];
       if (options.preserveInherited === false || hasOwn || inhVal === undefined || tokenEquals(inhVal, val)) {
         own[key] = val;

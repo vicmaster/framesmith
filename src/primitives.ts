@@ -23,6 +23,16 @@ export const FLOATING_INSET = 16;
 
 export const TAPPABLE_PRIMITIVES = new Set(['button', 'list-row', 'tab-bar', 'nav-bar']);
 
+/** Words and enum names, never style values: the resolver leaves them as
+ * written (a price such as "$49" is copy, not a token), and the token census
+ * and the unknown-token rule skip them. */
+export const COPY_PROPS = new Set([
+  'name', 'content', 'text', 'title', 'subtitle', 'label', 'time', 'placeholder', 'value', 'shortcut',
+  'error', 'ariaLabel', 'count', 'closeLabel', 'centerValue', 'centerLabel',
+  // Enums.
+  'variant', 'size', 'detent', 'appearance', 'iconPosition', 'orientation', 'state',
+]);
+
 // Phase 31 slice B — the desktop-app vocabulary's geometry, on the 24 / 32 /
 // 40 / 48 density ladder.
 export const LINK_MIN_HEIGHT = 24;

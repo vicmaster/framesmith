@@ -40,7 +40,12 @@ function check(name: string, cond: boolean, extra?: string) {
 
 function stamped(name: string, component: boolean, size: { width: number; height: number }, personality?: PersonalityName): Canvas {
   const canvas = createCanvas(`win-${name}`, undefined, size, { type: 'desktop-app' });
-  if (component) canvas.root.fill = '$bg-primary';
+  // The backdrop defines its own token (the scaffold default): a component
+  // stamp never seeds $bg-primary, and undefined it is an unknown-token warning.
+  if (component) {
+    canvas.root.fill = '$bg-primary';
+    canvas.variables.colors = { ...canvas.variables.colors, 'bg-primary': '#0a0a0a' };
+  }
   if (personality) setVariables(canvas, generateDesignSystem('#166534', personality, { surface: 'desktop-app' }).variables);
   const m = getCanvasTokens(canvas);
   applyStructure(canvas, name, {

@@ -69,6 +69,15 @@ function el(partial: Partial<RawDomNode> & { tag: string }): RawDomNode {
   // Phase 18 FR-A2 — border style/model keywords are not colors (#92's $collapse).
   const { props: bc, tokenRefs: bcRefs } = classesToProps(['border-collapse', 'border-separate', 'border-dashed', 'border-spacing-2']);
   expect('border style keywords map nothing', bc.stroke === undefined && bcRefs.length === 0, JSON.stringify(bc));
+  // Phase 32 slice C — nor are text- wrapping and bg- placement utilities.
+  const { props: nc, tokenRefs: ncRefs } = classesToProps(['text-balance', 'text-nowrap', 'text-ellipsis', 'text-justify', 'bg-cover', 'bg-center', 'bg-no-repeat', 'bg-fixed', 'bg-gradient-to-r', 'bg-opacity-50']);
+  expect('text- and bg- non-colour utilities map no colour', nc.color === undefined && nc.fill === undefined && ncRefs.length === 0, JSON.stringify(nc));
+  const { props: mod, tokenRefs: modRefs } = classesToProps(['text-sm/6', 'bg-red-500/20', 'text-opacity-50', 'bg-(--my-var)']);
+  expect('a size with a line-height modifier is a size; opacity modifiers and CSS variables map no colour', mod.fontSize === 14 && mod.fill === undefined && mod.color === undefined && modRefs.length === 0, JSON.stringify(mod));
+  const { props: th } = classesToProps(['bg-top', 'text-wrap'], { top: '#111111', wrap: '#222222' });
+  expect('a theme colour named like a non-colour utility still maps', th.fill === '$top' && th.color === '$wrap', JSON.stringify(th));
+  const { props: tc } = classesToProps(['text-muted', 'bg-surface']);
+  expect('twin: text- and bg- colours still map', tc.color === '$muted' && tc.fill === '$surface', JSON.stringify(tc));
   const { props: bcolor } = classesToProps(['border-muted', 'border-red-500']);
   expect('border colors still map', bcolor.stroke === '$muted' || bcolor.stroke === '#fb2c36'); // last one wins
 }

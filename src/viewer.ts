@@ -9,6 +9,7 @@ import { evaluateCanvas, resolveGenre, type EvaluationResult, type EvaluationIss
 import { resolveSurface, usableSafeArea, deviceProfile, DEVICE_PROFILES, DEFAULT_DEVICE, windowProfile, WINDOW_PROFILES, DEFAULT_WINDOW, type DeviceProfile } from './surfaces.js';
 import { isPresetName } from './genre.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from './feedback.js';
+import { withoutRetiredSeeds } from './variables.js';
 
 let runningPort: number | null = null;
 let externalViewerUrl: string | null = null;
@@ -979,7 +980,8 @@ function renderDesignSystem(canvas: Canvas): string {
     return !!m && Object.prototype.hasOwnProperty.call(m, name);
   };
   const sourceOf = (cat: string, name: string): TokenLayer => {
-    if (has(canvas.variables, cat, name)) return 'canvas';
+    // A retired scaffold seed is not the canvas's value (FR-C6).
+    if (has(withoutRetiredSeeds(canvas.variables), cat, name)) return 'canvas';
     if (has(projectDS, cat, name)) return 'project';
     if (has(workspaceDS, cat, name)) return 'workspace';
     return 'default';
