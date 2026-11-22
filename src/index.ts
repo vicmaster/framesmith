@@ -945,7 +945,7 @@ server.tool(
 // --- set_variables ---
 server.tool(
   'set_variables',
-  'Set design variables (tokens) for a canvas. Merges with existing variables.',
+  'Set design variables (tokens) for a canvas. Merges with existing variables. A name defined in both spacing and radius resolves by the property it sits on: cornerRadius reads radius first, every other property reads spacing first (under the dark preset cornerRadius "$md" is 8, gap "$md" is 16).',
   {
     canvasId: z.string().describe('Canvas ID'),
     variables: z.object({
