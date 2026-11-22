@@ -152,5 +152,39 @@ check('perturbation registry names stable', PERTURBATION_NAMES.join(',') === 'lo
     html.includes('text-overflow: ellipsis') && html.includes('white-space: nowrap') && html.includes('min-width: 0'));
 }
 
+// ── Phase 32 FR-D4 / Q6: counts are big-numbers slots ───────────────────────
+{
+  const counts = (nav: unknown, tab: unknown): SceneNode => doc([
+    { id: 'nv', type: 'nav-item', label: 'Inbox', count: nav } as SceneNode,
+    { id: 'tb', type: 'tabs', items: [{ label: 'Open', count: tab, active: true }, { label: 'Done' }] } as SceneNode,
+  ]);
+  const countsOf = (root: SceneNode) => [root.children![0].count, (root.children![1].items as Array<{ count?: unknown }>)[0].count];
+  const big = applyPerturbation('big-numbers', counts(42, '7'));
+  check('FR-D4: big-numbers widens a numeric nav-item count and a string tab count to 999+', JSON.stringify(countsOf(big.root)) === '["999+","999+"]' && big.touched.sort().join(',') === 'nv,tb', JSON.stringify([countsOf(big.root), big.touched]));
+  const edge = applyPerturbation('big-numbers', counts('12+', 0));
+  check('Q6: "12+" and 0 widen too', JSON.stringify(countsOf(edge.root)) === '["999+","999+"]', JSON.stringify(countsOf(edge.root)));
+  for (const name of ['long-text', 'i18n'] as const) {
+    const r = applyPerturbation(name, counts(42, 'New'));
+    check(`Q6: ${name} touches no count (numeric or word)`, JSON.stringify(countsOf(r.root)) === '[42,"New"]', JSON.stringify(countsOf(r.root)));
+    check(`Q6 twin: ${name} still stretches the labels beside them`, r.touched.includes('nv') && r.touched.includes('tb'), r.touched.join(','));
+  }
+  for (const name of ['long-text', 'i18n'] as const) {
+    const w = applyPerturbation(name, counts('New', 'New'));
+    check(`Q6 (verify): ${name} leaves a word count alone on the nav-item and the tab`, JSON.stringify(countsOf(w.root)) === '["New","New"]', JSON.stringify(countsOf(w.root)));
+  }
+  const blank = applyPerturbation('long-text', doc([{ id: 'b', type: 'button', label: '  ' } as SceneNode, { id: 'n', type: 'button', label: Number.NaN } as unknown as SceneNode]));
+  check('Q6 (verify): a blank label and a NaN label are never perturbed', blank.touched.length === 0, JSON.stringify(blank.touched));
+  const word = applyPerturbation('big-numbers', counts('New', '3 new'));
+  check('Q6: big-numbers leaves word counts alone', word.touched.length === 0 && JSON.stringify(countsOf(word.root)) === '["New","3 new"]', JSON.stringify(word));
+  const odd = applyPerturbation('big-numbers', counts(Number.NaN, -3));
+  check('Q6: NaN and -3 are untouched', odd.touched.length === 0, JSON.stringify(odd.touched));
+  const k = applyPerturbation('big-numbers', counts('1.2K', '$5'));
+  check('Q6 (verify fix): a count badge widens to 999+, never a 12-character figure', JSON.stringify(countsOf(k.root)) === '["999+","999+"]', JSON.stringify(countsOf(k.root)));
+  const kText = applyPerturbation('big-numbers', doc([text('1.2K')]));
+  check('Q6 twin: a "1.2K" text node still takes its widest figure', texts(kText.root)[0] === '1,520,847.33', texts(kText.root)[0]);
+  const label = applyPerturbation('big-numbers', doc([{ id: 'b', type: 'button', label: 5 } as unknown as SceneNode]));
+  check('Q6: a number on another listed path is a slot too', label.touched.join(',') === 'b' && label.root.children![0].label === '999+', JSON.stringify(label));
+}
+
 console.log(allPass ? '\nAll stress tests passed.' : '\nSOME TESTS FAILED');
 process.exit(allPass ? 0 : 1);

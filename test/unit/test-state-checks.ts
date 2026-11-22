@@ -191,8 +191,23 @@ const inspector = (): SceneNode[] => [panel([
   check('R4 twin: a strong underline passes', f.length === 0, show(f));
   f = of(await issues(tabs('contained')), ACTIVE);
   check('R4: a contained tab draws no indicator mark', f.length === 0, show(f));
-  f = of(await issues([panel([{ id: 'tr', type: 'tree-row', label: 'src', depth: 0, active: true, iconColor: '#c9d6f2', icon: 'folder' }])]), ACTIVE);
-  check('R4: a tree-row draws no indicator mark', f.length === 0, show(f));
+  // Phase 32 FR-D2 / Q4: an active tree-row's bar is measured as a nav-item's.
+  const tree = (extra: Partial<SceneNode> = {}): SceneNode[] => [panel([{ id: 'tr', type: 'tree-row', label: 'src', depth: 2, active: true, fill: '#EAF0FD', iconColor: '#7d91ff', icon: 'folder', ...extra }])];
+  f = of(await issues(tree()), ACTIVE);
+  check('FR-D2: a 2.5:1 tree-row bar warns, naming the tree-row', f.length === 1 && f[0].severity === 'warning' && f[0].nodeId === 'tr' && /2\.50:1 at rest/.test(f[0].message) && /active tree-row "src"/.test(f[0].message), show(f));
+  f = of(await issues(tree({ iconColor: '#1e3a8a' })), ACTIVE);
+  check('FR-D2 twin: a strong tree-row bar passes', f.length === 0, show(f));
+  f = of(await issues(tree({ active: false })), ACTIVE);
+  check('Q4: an inactive tree-row draws no bar and pairs nothing', f.length === 0, show(f));
+  f = of(await issues(tree({ disabled: true })), ACTIVE);
+  check('Q4: a disabled active tree-row is skipped', f.length === 0, show(f));
+  f = of(await issues(tree({ iconColor: '#FFFFFF', fill: '#6d7a95', color: '#FFFFFF' }), { state: { hover: 0.3 } }), ACTIVE);
+  check('Q4: a hover-only tree-row failure warns naming hover', f.length === 1 && /in hover/.test(f[0].message) && !/at rest/.test(f[0].message), show(f));
+  f = of(await issues(tree({ iconColor: '#FFFFFF', fill: '#6d7a95', color: '#FFFFFF' }), { state: { hover: 0 } }), ACTIVE);
+  check('Q4 twin: with no hover layer it passes', f.length === 0, show(f));
+  const sysTree = generateDesignSystem('#2563EB', 'technical', { surface: 'desktop-app' }).variables;
+  f = of(await issues([panel([{ id: 'tr', type: 'tree-row', label: 'src', active: true, icon: 'folder' }], { fill: '$bg-surface' })], sysTree), ACTIVE);
+  check('FR-D2: a default active tree-row under a generated system passes in both themes', f.length === 0, show(f));
 }
 
 // ── R5 / FR-H3: desktop-app-disabled, and the disabled exclusion (R6) ──────
@@ -257,7 +272,26 @@ const inspector = (): SceneNode[] => [panel([
   check('V4 fix: an unresolved checkbox draws no outline and is measured as the backdrop', pairs[1]?.node.id === 'cb' && pairs[1].boundary.join(',') === '255,255,255', JSON.stringify(pairs));
   const errored = boundaryPairs({ id: 'r', type: 'frame', children: [{ id: 'ti', type: 'text-input', error: 'Required' }] });
   check('R7: with an error the fallback is #DC2626', errored[0]?.color === '#DC2626', JSON.stringify(errored));
-  check('R7: a select is not measured (not in FR-H4)', boundaryPairs({ id: 'r', type: 'frame', children: [{ id: 's', type: 'select', stroke: '#EEEEEE' }] }).length === 0);
+
+  // Phase 32 FR-D1 / Q2: a select is measured as a text-input.
+  const sys = generateDesignSystem('#2563EB', 'technical', { surface: 'desktop-app' }).variables;
+  const select = (extra: Partial<SceneNode> = {}): SceneNode[] => [panel([{ id: 's', type: 'select', value: 'Option', ...extra }], { fill: '$bg-surface' })];
+  f = of(await issues(select(), sys), BOUNDARY);
+  check('FR-D1: a default select under a generated system passes ($border-strong) in both themes', f.length === 0, show(f));
+  f = of(await issues(select({ stroke: '$border' }), sys), BOUNDARY);
+  check('FR-D1: a select on $border warns at 1.46:1, naming its border and fill', f.length >= 1 && f[0].nodeId === 's' && /select's border/.test(f[0].message) && /1\.46:1/.test(f[0].message) && /its fill does not stand out/.test(f[0].message), show(f));
+  f = of(await issues(select({ stroke: '#EEEEEE', fill: '#1e3a8a' }), sys), BOUNDARY);
+  check('Q2: a faint border passes when the fill clears 3:1', f.length === 0, show(f));
+  f = of(await issues(select({ stroke: '#EEEEEE', disabled: true }), sys), BOUNDARY);
+  check('Q2: a disabled select is not measured', f.length === 0, show(f));
+  f = of(await issues(select({ stroke: '#EEEEEE', state: 'disabled' }), sys), BOUNDARY);
+  check('Q2: a select in state disabled is not measured', f.length === 0, show(f));
+  f = of(await issues(select({ stroke: '#EEEEEE' }), sys, 'web'), BOUNDARY);
+  check('Q2: a web canvas does not measure the select', f.length === 0, show(f));
+  f = of(await issues(select({ stroke: '#EEEEEE' }), { colors: { border: '#c1c1c1' } }), BOUNDARY);
+  check('Q2: the finding says to define border-strong when the canvas has none', f.length === 1 && /set_variables\(\{ colors: \{ "border-strong"/.test(f[0].suggestion ?? ''), show(f));
+  const unset = boundaryPairs({ id: 'r', type: 'frame', fill: '#FFFFFF', children: [{ id: 's', type: 'select' }] });
+  check('Q2: an unresolved select draws no border and is measured as the backdrop', unset[0]?.node.id === 's' && unset[0].color === 'none' && unset[0].boundary.join(',') === '255,255,255' && !unset[0].field, JSON.stringify(unset));
 }
 
 // ── R2: the model's arithmetic ────────────────────────────────────────────
@@ -522,9 +556,9 @@ for (const personality of PERSONALITY_NAMES) {
   f = of(await issues([panel([{ id: 'tb', type: 'tabs', items: [{ label: 'A' }] }])], { colors: { 'focus-ring': '#8ea2ff' } }), FOCUS);
   check('M twin: an enabled tabs node is measured', f.length === 1, show(f));
   f = of(await issues([panel([{ id: 'nv', type: 'nav-item', label: 'x', active: true, iconColor: '#c9d6f2', icon: 'folder' }])]), ACTIVE);
-  check('M twin: a nav-item with the tree-row\'s faint colours does warn', f.length === 1, show(f));
+  check('M twin: a nav-item with faint colours does warn', f.length === 1, show(f));
   f = of(await issues([panel([{ id: 'ti', type: 'text-input', stroke: '#EEEEEE' }])]), BOUNDARY);
-  check('M twin: a text-input with the select\'s faint stroke warns', f.length === 1, show(f));
+  check('M twin: a text-input with a faint stroke warns', f.length === 1, show(f));
 
   // color-math edges.
   check('M: a percent alpha over 100% clamps to 1', parseAlpha('rgba(0,0,0,150%)') === 1);

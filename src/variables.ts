@@ -332,7 +332,8 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
   const accent = v.colors?.accent ?? v.colors?.primary ?? CONTROL_FALLBACK.accent;
   const border = v.colors?.border ?? CONTROL_FALLBACK.border;
   // Phase 31 FR-B8 — an unchecked box, ring or track is the control's only
-  // boundary: it takes $border-strong (3:1) when the design system has it.
+  // boundary, as is a select's border (Phase 32 FR-D1): it takes
+  // $border-strong (3:1) when the design system has it.
   // Without the token the render is unchanged.
   const boundary = v.colors?.['border-strong'] ?? border;
 
@@ -350,9 +351,9 @@ function applyControlDefaults(node: SceneNode, v: DesignVariables): void {
     if (node.stroke === undefined) node.stroke = node.checked ? accent : boundary;
     if (node.fill === undefined) node.fill = accent;
   } else {
-    // select
+    // select — its border is its only edge too (Phase 32 FR-D1).
     if (node.fill === undefined) node.fill = v.colors?.['bg-surface'] ?? v.colors?.surface ?? CONTROL_FALLBACK.surface;
-    if (node.stroke === undefined) node.stroke = border;
+    if (node.stroke === undefined) node.stroke = boundary;
     if (node.color === undefined) node.color = v.colors?.['text-primary'] ?? CONTROL_FALLBACK.text;
   }
 }

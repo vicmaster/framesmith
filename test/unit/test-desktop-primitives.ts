@@ -120,6 +120,40 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('…and keeps $border without it (render unchanged)', /#EEEEEE/.test(ctl({ border: '#EEEEEE' })) && !/#556677/.test(ctl({ border: '#EEEEEE' })));
 }
 
+// ── Phase 32 FR-D1 / Q1: a select's border is $border-strong when it exists ─
+{
+  const sel = (colors?: Record<string, string>, extra: Partial<SceneNode> = {}) => html({ id: 's', name: 's', type: 'select', value: 'Option', ...extra }, colors);
+  check('FR-D1: a select\'s border is $border-strong when the token exists', /border: 1px solid #556677/.test(sel({ 'border-strong': '#556677', border: '#EEEEEE' })));
+  check('FR-D1 twin: without it the select keeps $border (render unchanged)', /border: 1px solid #EEEEEE/.test(sel({ border: '#EEEEEE' })) && !/#556677/.test(sel({ border: '#EEEEEE' })));
+  check('Q1: an explicit select stroke wins over $border-strong', /border: 1px solid #ABCDEF/.test(sel({ 'border-strong': '#556677' }, { stroke: '#ABCDEF' })) && !/#556677/.test(sel({ 'border-strong': '#556677' }, { stroke: '#ABCDEF' })));
+}
+
+// ── Phase 32 Q1: the two realisations holding a select seed $border-strong ──
+{
+  for (const name of ['editor-inspector-app', 'settings-app']) {
+    const unthemed = applyStructure(createCanvas(`q1-${name}`, undefined, {}, { type: 'desktop-app', device: 'window-1440' }), name, { existingColors: new Set() });
+    check(`Q1: ${name} stamped unthemed seeds $border-strong`, unthemed.seededColors.includes('border-strong'), unthemed.seededColors.join(','));
+    const afterPreset = applyStructure(createCanvas(`q1p-${name}`, undefined, {}, { type: 'desktop-app', device: 'window-1440' }), name, { existingColors: new Set(['border']) });
+    check(`Q1 twin: ${name} stamped on a canvas with $border seeds none (a named limit)`, !afterPreset.seededColors.includes('border-strong'), afterPreset.seededColors.join(','));
+  }
+}
+
+// ── Phase 32 Q3: the tree-row bar's markup ─────────────────────────────────
+{
+  const BAR = /<div style="position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 1px; background-color: #ABCDEF"><\/div>/;
+  const row = (extra: Partial<SceneNode>, surface: Surface = app) => {
+    const c = canvasWith([{ id: 'r', name: 'r', type: 'tree-row', label: 'src', depth: 1, iconColor: '#ABCDEF', ...extra } as SceneNode], surface);
+    return renderToHtml(resolveVariables(c.root, c.variables), 1440, 900, c);
+  };
+  const rowStyle = (h: string) => /data-node-id="r"[^>]*style="([^"]*)"/.exec(h)?.[1] ?? '';
+  check('Q3: an active tree-row draws the nav-item bar and anchors it with position: relative', BAR.test(row({ active: true })) && /position: relative/.test(rowStyle(row({ active: true }))), rowStyle(row({ active: true })));
+  check('Q3 twin: an inactive tree-row draws no bar and keeps static flow (no position: relative)', !BAR.test(row({})) && !/position:/.test(rowStyle(row({}))), rowStyle(row({})));
+  const abs = rowStyle(row({ active: true, position: 'absolute', x: 40, y: 20 }));
+  check('Q3: a positioned active tree-row keeps its own position and no relative', /position: absolute/.test(abs) && !/position: relative/.test(abs), abs);
+  check('Q3: a disabled active tree-row still draws the bar (as a nav-item does)', BAR.test(row({ active: true, disabled: true })));
+  check('Q3: the bar draws on a web canvas too', BAR.test(row({ active: true }, { type: 'web' })));
+}
+
 // ── D3: the census ─────────────────────────────────────────────────────────
 {
   check('the clickable set holds the eight-minus-two desktop primitives', ['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row'].every((t) => CLICKABLE_PRIMITIVES.has(t)) && !CLICKABLE_PRIMITIVES.has('divider') && !CLICKABLE_PRIMITIVES.has('property-row'));

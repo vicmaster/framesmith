@@ -220,8 +220,8 @@ export function indicatorPairs(root: SceneNode): IndicatorPair[] {
     out.push({ node, what, indicator, rest: at(rest), ...(readable(ink) ? { hover: at(paint(ink, rest, hover)) } : {}) });
   };
   (function walk(n: SceneNode) {
-    if (n.type === 'nav-item' && n.active && !isDisabled(n)) {
-      pair(n, `nav-item ${label(n.label, n.id)}`, n.iconColor ?? FALLBACK.accent, n.fill, n.color ?? FALLBACK.text, ownOpacity(n), behind(n, parentOf));
+    if ((n.type === 'nav-item' || n.type === 'tree-row') && n.active && !isDisabled(n)) {
+      pair(n, `${n.type} ${label(n.label, n.id)}`, n.iconColor ?? FALLBACK.accent, n.fill, n.color ?? FALLBACK.text, ownOpacity(n), behind(n, parentOf));
     } else if (n.type === 'tabs' && n.variant !== 'contained' && !isDisabled(n)) {
       const backdrop = behind(n, parentOf);
       tabsItems(n).forEach((it, i) => {
@@ -269,14 +269,16 @@ export function boundaryPairs(root: SceneNode): BoundaryPair[] {
   const parentOf = parentsOf(root);
   const out: BoundaryPair[] = [];
   (function walk(n: SceneNode) {
-    const measured = !isDisabled(n) && (n.type === 'text-input' || ((n.type === 'checkbox' || n.type === 'toggle' || n.type === 'radio') && !n.checked));
+    const field = n.type === 'text-input' || n.type === 'select';
+    const measured = !isDisabled(n) && (field || ((n.type === 'checkbox' || n.type === 'toggle' || n.type === 'radio') && !n.checked));
     if (measured) {
       // An unset text-input stroke draws its fallback; the controls' unset
       // boundary is invalid CSS, which draws nothing.
       const color = n.type === 'text-input' ? n.stroke ?? (typeof n.error === 'string' && n.error.trim() ? FALLBACK.danger : FALLBACK.border) : n.type === 'toggle' ? n.fill : n.stroke;
       const backdrop = behind(n, parentOf);
       // The field's own fill (a radio draws none; a toggle's fill is its track).
-      const fill = n.type === 'text-input' ? n.fill ?? FALLBACK.surface : n.type === 'checkbox' ? n.fill : undefined;
+      // A select's unset fill draws nothing, like its unset stroke.
+      const fill = n.type === 'text-input' ? n.fill ?? FALLBACK.surface : n.type === 'checkbox' || n.type === 'select' ? n.fill : undefined;
       // A boundary that draws nothing (unset, an unresolved $token,
       // transparent, none) is measured as what shows there: an invisible
       // outline is the worst boundary, not one to skip.
@@ -384,13 +386,14 @@ export function checkBoundaries(root: SceneNode, theme?: 'dark'): EvaluationIssu
     const ratio = roundedRatio(p.boundary, p.backdrop);
     if (ratio >= NON_TEXT_MIN) return [];
     if (p.field && roundedRatio(p.field, p.backdrop) >= NON_TEXT_MIN) return [];
-    const part = p.node.type === 'toggle' ? 'track' : p.node.type === 'text-input' ? 'border' : 'outline';
+    const field = p.node.type === 'text-input' || p.node.type === 'select';
+    const part = p.node.type === 'toggle' ? 'track' : field ? 'border' : 'outline';
     return [{
       category: 'color', rule: STATE_RULES.boundary, severity: 'warning' as const, nodeId: p.node.id, nodeName: p.node.name, ...darkTag(theme),
-      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: nothing else shows the control's edge${p.node.type === 'text-input' || p.node.type === 'checkbox' ? ' (its fill does not stand out either)' : ''}, and WCAG 1.4.11 needs 3:1.`,
+      message: `This ${p.node.type}'s ${part} ${p.color} measures ${ratio.toFixed(2)}:1 against ${rgbToHex(p.backdrop)}${inTheme(theme)}: nothing else shows the control's edge${field || p.node.type === 'checkbox' ? ' (its fill does not stand out either)' : ''}, and WCAG 1.4.11 needs 3:1.`,
       suggestion: theme === 'dark'
         ? 'Fix it in the dark token layer: a dark $border-strong that clears 3:1 against the surface behind the control.'
-        : 'Use $border-strong for the boundary (generate_design_system writes one at 3:1 against bg-primary and bg-surface), or set a stronger stroke.',
+        : 'Use $border-strong for the boundary, or set a stronger stroke. A canvas without the token needs it defined first: set_variables({ colors: { "border-strong": … } }), or generate_design_system, which writes one at 3:1 against bg-primary and bg-surface.',
     }];
   });
 }

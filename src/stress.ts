@@ -40,9 +40,10 @@ const LONG_TOKEN = 'Rindfleischetikettierungsüberwachung';
 /** Phase 30 slice C — the text props of primitives that carry their own copy,
  * as paths into the node (`[]` walks an array). `fixed` marks a fixed
  * vocabulary (tab and nav action labels): on mobile, long-text leaves it alone
- * while i18n still perturbs it, since those labels really are localised. Read
- * generically, so a new primitive is one row. */
-export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean }[] = [
+ * while i18n still perturbs it, since those labels really are localised.
+ * `dataOnly` marks a figure slot (a count badge, which never truncates): only
+ * big-numbers touches it. Read generically, so a new primitive is one row. */
+export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean; dataOnly?: boolean }[] = [
   { type: 'button', path: 'label' },
   { type: 'list-row', path: 'title' },
   { type: 'list-row', path: 'subtitle' },
@@ -54,7 +55,9 @@ export const PRIMITIVE_TEXT_PROPS: { type: string; path: string; fixed?: boolean
   // Phase 31 slice B — the desktop-app vocabulary.
   { type: 'link', path: 'label' },
   { type: 'nav-item', path: 'label' },
+  { type: 'nav-item', path: 'count', dataOnly: true },
   { type: 'tabs', path: 'items[].label' },
+  { type: 'tabs', path: 'items[].count', dataOnly: true },
   { type: 'tree-row', path: 'label' },
   { type: 'menu-row', path: 'label' },
   { type: 'menu-row', path: 'shortcut' },
@@ -73,10 +76,12 @@ interface TextSlot {
   node: SceneNode;
   value: string;
   fixed: boolean;
+  dataOnly: boolean;
   set: (value: string) => void;
 }
 
-/** Every non-blank string at `path` under `obj` (`a.b`, `items[].label`). */
+/** Every non-blank string or finite number (as its string) at `path` under
+ * `obj` (`a.b`, `items[].label`). */
 function propSlots(obj: unknown, path: string[], out: Array<{ value: string; set: (v: string) => void }>): void {
   if (!obj || typeof obj !== 'object' || path.length === 0) return;
   const [head, ...rest] = path;
@@ -89,18 +94,20 @@ function propSlots(obj: unknown, path: string[], out: Array<{ value: string; set
     return;
   }
   if (rest.length > 0) { propSlots(value, rest, out); return; }
-  if (typeof value === 'string' && value.trim()) out.push({ value, set: (v) => { record[key] = v; } });
+  const set = (v: string) => { record[key] = v; };
+  if (typeof value === 'string' && value.trim()) out.push({ value, set });
+  else if (typeof value === 'number' && Number.isFinite(value)) out.push({ value: String(value), set });
 }
 
 function walkTexts(root: SceneNode, visit: (slot: TextSlot) => void): void {
   if (root.type === 'text' && typeof root.content === 'string' && root.content.trim()) {
-    visit({ node: root, value: root.content, fixed: false, set: (v) => { root.content = v; } });
+    visit({ node: root, value: root.content, fixed: false, dataOnly: false, set: (v) => { root.content = v; } });
   }
   for (const prop of PRIMITIVE_TEXT_PROPS) {
     if (prop.type !== root.type) continue;
     const found: Array<{ value: string; set: (v: string) => void }> = [];
     propSlots(root, prop.path.split('.'), found);
-    for (const f of found) visit({ node: root, value: f.value, fixed: prop.fixed === true, set: f.set });
+    for (const f of found) visit({ node: root, value: f.value, fixed: prop.fixed === true, dataOnly: prop.dataOnly === true, set: f.set });
   }
   root.children?.forEach((c) => walkTexts(c, visit));
 }
@@ -186,7 +193,7 @@ export function applyPerturbation(name: PerturbationName, root: SceneNode, opts:
 
   if (name === 'long-text' || name === 'i18n') {
     walkTexts(clone, (slot) => {
-      if (isDataLike(slot.value)) return; // live figures get big-numbers instead
+      if (slot.dataOnly || isDataLike(slot.value)) return; // live figures get big-numbers instead
       if (name === 'long-text') {
         if (mobile && (slot.fixed || slot.value.trim().length <= 3)) return;
         slot.set(`${stretch(slot.value, 2.2)} ${LONG_TOKEN}`);
@@ -202,7 +209,9 @@ export function applyPerturbation(name: PerturbationName, root: SceneNode, opts:
   if (name === 'big-numbers') {
     walkTexts(clone, (slot) => {
       if (!isDataLike(slot.value)) return;
-      const widened = widenNumber(slot.value);
+      // A count badge never truncates: its widest realistic form is 999+, not
+      // the 12-character figure a "1.2K" stat would take.
+      const widened = slot.dataOnly && widenNumber(slot.value) !== null ? '999+' : widenNumber(slot.value);
       if (widened === null || widened === slot.value) return;
       slot.set(widened);
       touch(slot.node.id);

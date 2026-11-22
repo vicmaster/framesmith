@@ -1580,10 +1580,15 @@ function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
   if (typeof node.expanded === 'boolean') attrs += ` aria-expanded="${node.expanded}"`;
   if (node.active) attrs += ' aria-selected="true"';
   const chevron = typeof node.expanded === 'boolean' ? iconHtml(node.expanded ? 'chevron-down' : 'chevron-right', 14, secondary) : '';
+  // nav-item's bar, at the row's edge whatever the depth (Phase 32 FR-D2).
+  const bar = node.active
+    ? `<div style="${css(['position: absolute', 'left: 0', 'top: 6px', 'bottom: 6px', 'width: 2px', 'border-radius: 1px', `background-color: ${node.iconColor ?? FALLBACK.accent}`])}"></div>`
+    : '';
   const st = stateParts(renderState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
-    ...positionStyles(node, rc), 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
+    // Only an active row anchors a bar; an inactive one keeps its old flow.
+    ...positionStyles(node, rc), node.active && !node.position ? 'position: relative' : undefined, 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
     `height: ${typeof node.height === 'number' ? node.height : TREE_ROW_HEIGHT}px`, rowWidth(node),
     `padding: 0 8px 0 ${8 + depth * TREE_INDENT}px`, 'border-radius: 6px',
     node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? FALLBACK.text}`,
@@ -1593,7 +1598,7 @@ function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
   ]);
   const slot = `<span style="flex-shrink: 0; width: 14px; display: flex">${chevron}</span>`;
   const glyph = iconHtml(node.icon, 16, node.active ? node.iconColor ?? FALLBACK.accent : secondary);
-  return `<div${attrs} style="${box}">${slot}${glyph}<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(text(node.label), '')}</span></div>`;
+  return `<div${attrs} style="${box}">${bar}${slot}${glyph}<span style="flex: 1 1 0; min-width: 0; display: flex">${titledLabel(text(node.label), '')}</span></div>`;
 }
 
 function renderMenuRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
