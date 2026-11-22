@@ -594,6 +594,8 @@ Reference an elevation token from a node as `shadow: "$elevation.raised"` (resol
 
 Then use in nodes: `{ fill: "$primary", padding: "$md", cornerRadius: "$sm", transition: "$motion.fast" }`
 
+A name defined in both `spacing` and `radius` (the presets define `sm`, `md` and `lg` in both) resolves by the property it sits on: `cornerRadius` reads `radius` first, so `cornerRadius: "$sm"` above is 4; every other property reads `spacing` first, so `padding: "$md"` is 16.
+
 `get_variables` leaves out a colour still holding an old scaffold seed (`accent-tint` `#152A47`, `success-tint` `#0F2E1B`, `warning-tint` `#33260A`, `danger-tint` `#3A1715`, `neutral-tint` `#25282D`, `danger` `#F87171`, matched by name and value, any case): it counts as unset, so an inherited value or the derived one shows through, and the canvas's `sha256r:` version hash moves once (an approval recorded on it reads STALE). The stored JSON is untouched. A `$ref` no token defines is an `unknown-token` warning (see `canvas_evaluate`); copy props (`content`, `label`, `value`…) never resolve.
 
 ### `workspace_set_design_system` / `workspace_get_design_system` / `workspace_apply_preset`

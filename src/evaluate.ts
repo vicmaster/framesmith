@@ -1074,7 +1074,7 @@ function checkUnknownTokens(canvas: Canvas, tokens: DesignVariables): Evaluation
       issues.push({ ...base, message: `"${ref}" on ${path} is ${KIND_NAMES[kind]}, not ${KIND_NAMES[accepts[0]]}${where}.`, suggestion: `Use ${KIND_NAMES[accepts[0]]}${examples}.${fromOverride}` });
       return;
     }
-    const value = lookupToken(name, tokens);
+    const value = lookupToken(name, tokens, site.key);
     if (kind && typeof value === 'string' && value.startsWith('$')) {
       issues.push({ ...base, message: `Token "${ref}" on ${path} is defined as another ref ("${value}"), which the resolver does not follow, so it renders raw${where}.`, suggestion: `Set "${name}" to a value, or write "${value}" here instead.${fromOverride}` });
       return;

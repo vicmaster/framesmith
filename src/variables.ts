@@ -187,7 +187,7 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
         if (node.letterSpacing === undefined && typo.letterSpacing !== undefined) node.letterSpacing = typo.letterSpacing;
         continue;
       }
-      const resolved = lookupToken(tokenName, variables);
+      const resolved = lookupToken(tokenName, variables, key);
       if (resolved !== undefined) {
         // Phase 27 — an elevation ref on `shadow` resolves to the structured
         // shadows array (the renderer's plural path); explicit `shadows` wins.
@@ -208,7 +208,7 @@ function deepResolve(node: SceneNode, variables: DesignVariables): SceneNode {
     if (Array.isArray(arr)) {
       (node as unknown as Record<string, unknown>)[key] = arr.map((entry) => {
         if (typeof entry !== 'string' || !entry.startsWith('$')) return entry;
-        const resolved = lookupToken(entry.slice(1), variables);
+        const resolved = lookupToken(entry.slice(1), variables, key);
         return resolved !== undefined ? resolved : entry;
       });
     }
@@ -566,11 +566,15 @@ function onFill(fill: string | undefined): string {
   return 1.05 / (l + 0.05) >= (l + 0.05) / (lum('111827') + 0.05) ? '#FFFFFF' : '#111827';
 }
 
-export function lookupToken(name: string, variables: DesignVariables): unknown {
-  // Check each category
+/** Resolves a token name. `prop` is the property the ref sits on:
+ * cornerRadius reads the radius scale before spacing, so a design system that
+ * defines `md` in both renders a radius, not a spacing step. */
+export function lookupToken(name: string, variables: DesignVariables, prop?: string): unknown {
   if (variables.colors?.[name] !== undefined) return variables.colors[name];
-  if (variables.spacing?.[name] !== undefined) return variables.spacing[name];
-  if (variables.radius?.[name] !== undefined) return variables.radius[name];
+
+  const scales = prop === 'cornerRadius' ? [variables.radius, variables.spacing] : [variables.spacing, variables.radius];
+  for (const scale of scales) if (scale?.[name] !== undefined) return scale[name];
+
   if (variables.typography?.[name] !== undefined) {
     // For typography, return the fontSize as a simple value
     return variables.typography[name].fontSize;
