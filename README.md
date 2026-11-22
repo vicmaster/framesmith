@@ -1081,7 +1081,7 @@ Content stress test — does the design survive real data? Re-renders the canvas
 |---|---|
 | `long-text` | Non-data text ×2.2 plus one long unbroken token (the wrap-breaker) |
 | `i18n` | Text ×1.4 — the German/Finnish expansion rule |
-| `big-numbers` | Data-like text to its widest realistic form: `9` → `999+`, `$1.5M` → `$1,520,847.33` |
+| `big-numbers` | Data-like text to its widest realistic form: `9` → `999+`, `$1.5M` → `$1,520,847.33`; also a `nav-item`'s and a tab's `count` |
 | `empty` | Detected tables lose their data rows (and runs of two or more consecutive `list-row`s are emptied; on a desktop-app canvas also runs of `nav-item`, `tree-row`, `menu-row` or `property-row`, and card grids) |
 | `many` | Data rows ×3 (and `list-row` runs ×3; on a desktop-app canvas also runs of `nav-item`, `tree-row`, `menu-row` or `property-row`, and card grids, a grid of three or more same-shaped children). Copies drop `active`, so a tripled list keeps one current row |
 

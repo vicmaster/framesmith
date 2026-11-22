@@ -6,7 +6,7 @@
 // Usage: npx tsx test/browser/test-desktop-primitives-render.ts
 
 import '../env.js';
-import { computeLayout, shutdown, type LayoutRect } from '../../src/screenshot.js';
+import { computeLayout, shutdown, withPage, type LayoutRect } from '../../src/screenshot.js';
 import { renderToHtml } from '../../src/renderer.js';
 import { resolveVariables } from '../../src/variables.js';
 import { applyPerturbation, compareLayouts } from '../../src/stress.js';
@@ -124,6 +124,43 @@ for (const name of ['long-text', 'i18n'] as const) {
   const warnings = findings.filter((f) => f.severity === 'warning');
   check(`${name}: no clip or overflow warnings on the desktop-app primitives`, warnings.length === 0, JSON.stringify(warnings.slice(0, 4)));
   if (name === 'long-text') check(`${name}: labels report designed truncation`, findings.some((f) => f.severity === 'info'), `${findings.length} findings`);
+}
+
+// ── Phase 32 FR-D2 / Q3: an active tree-row's bar, at x = 0 at every depth ──
+{
+  const rows: SceneNode[] = [
+    ...[0, 1, 2].map((d): SceneNode => ({ id: `ta${d}`, name: `ta${d}`, type: 'tree-row', label: `depth ${d}`, depth: d, active: true, width: 300 })),
+    { id: 'tin', name: 'tin', type: 'tree-row', label: 'inactive', depth: 1, width: 300 },
+    { id: 'host', name: 'host', type: 'frame', width: 400, height: 80, children: [
+      { id: 'tpos', name: 'tpos', type: 'tree-row', label: 'positioned', depth: 2, active: true, width: 200, position: 'absolute', x: 40, y: 20 },
+    ] },
+  ];
+  const c = canvasOf(rows, system);
+  const html = renderToHtml(resolveVariables(structuredClone(c.root), system), 1440, 900, c);
+  const bars = await withPage(async (page) => {
+    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
+    return page.evaluate(`(() => {
+      const out = {};
+      for (const id of ['ta0', 'ta1', 'ta2', 'tin', 'tpos']) {
+        const row = document.querySelector('[data-node-id="' + id + '"]');
+        const rr = row.getBoundingClientRect();
+        const bar = Array.from(row.children).find((el) => getComputedStyle(el).position === 'absolute' && el.getBoundingClientRect().width === 2);
+        const br = bar ? bar.getBoundingClientRect() : null;
+        out[id] = { dx: br ? br.left - rr.left : null, w: br ? br.width : null, h: br ? br.height : null, rowH: rr.height, rowLeft: rr.left, bg: bar ? getComputedStyle(bar).backgroundColor : null };
+      }
+      return out;
+    })()`) as Promise<Record<string, { dx: number | null; w: number | null; h: number | null; rowH: number; rowLeft: number; bg: string | null }>>;
+  });
+  for (const d of [0, 1, 2]) {
+    const b = bars[`ta${d}`];
+    check(`FR-D2: an active tree-row at depth ${d} draws its 2px bar at x = 0`, b.dx !== null && Math.abs(b.dx) <= 0.5 && b.w === 2 && b.h === b.rowH - 12, JSON.stringify(b));
+  }
+  const accent = system.colors?.accent ?? '';
+  const rgb = `rgb(${[1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16)).join(', ')})`;
+  check('FR-D2: the bar is the accent', bars.ta0.bg === rgb, `${bars.ta0.bg} vs ${accent}`);
+  check('Q3 twin: an inactive tree-row draws no bar', bars.tin.dx === null, JSON.stringify(bars.tin));
+  check('Q3: a positioned tree-row anchors its bar to its own box', bars.tpos.dx !== null && Math.abs(bars.tpos.dx) <= 0.5 && bars.tpos.rowLeft > 40, JSON.stringify(bars.tpos));
 }
 
 await shutdown();

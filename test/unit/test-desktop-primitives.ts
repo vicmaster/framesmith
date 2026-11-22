@@ -120,6 +120,14 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('…and keeps $border without it (render unchanged)', /#EEEEEE/.test(ctl({ border: '#EEEEEE' })) && !/#556677/.test(ctl({ border: '#EEEEEE' })));
 }
 
+// ── Phase 32 FR-D1 / Q1: a select's border is $border-strong when it exists ─
+{
+  const sel = (colors?: Record<string, string>, extra: Partial<SceneNode> = {}) => html({ id: 's', name: 's', type: 'select', value: 'Option', ...extra }, colors);
+  check('FR-D1: a select\'s border is $border-strong when the token exists', /border: 1px solid #556677/.test(sel({ 'border-strong': '#556677', border: '#EEEEEE' })));
+  check('FR-D1 twin: without it the select keeps $border (render unchanged)', /border: 1px solid #EEEEEE/.test(sel({ border: '#EEEEEE' })) && !/#556677/.test(sel({ border: '#EEEEEE' })));
+  check('Q1: an explicit select stroke wins over $border-strong', /border: 1px solid #ABCDEF/.test(sel({ 'border-strong': '#556677' }, { stroke: '#ABCDEF' })) && !/#556677/.test(sel({ 'border-strong': '#556677' }, { stroke: '#ABCDEF' })));
+}
+
 // ── D3: the census ─────────────────────────────────────────────────────────
 {
   check('the clickable set holds the eight-minus-two desktop primitives', ['link', 'text-input', 'nav-item', 'tabs', 'tree-row', 'menu-row'].every((t) => CLICKABLE_PRIMITIVES.has(t)) && !CLICKABLE_PRIMITIVES.has('divider') && !CLICKABLE_PRIMITIVES.has('property-row'));

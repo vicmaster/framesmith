@@ -83,7 +83,9 @@ function scene(state: ElementState, opts: { panelFill?: string; navInk?: string 
         { id: 'nv', type: 'nav-item', label: 'Home', active: true, state, ...(opts.navInk ? { color: opts.navInk } : {}) },
         { id: 'tl', type: 'tabs', items: [{ label: 'Design', active: true, state }, { label: 'Layout' }] },
         { id: 'tc', type: 'tabs', variant: 'contained', items: [{ label: 'All', active: true, state }, { label: 'Starred' }] },
+        { id: 'tr', type: 'tree-row', label: 'src', depth: 1, expanded: true, icon: 'folder', active: true, state },
         { id: 'ti', type: 'text-input', placeholder: 'Search', width: 200 },
+        { id: 'se', type: 'select', value: 'Option', width: 200 },
         { id: 'cb', type: 'checkbox' },
         { id: 'tg', type: 'toggle', state },
         { id: 'b2', type: 'button', label: 'Cancel', size: 'sm', variant: 'secondary', state },
@@ -128,9 +130,11 @@ for (const t of THEMES) {
   const ind = indicatorPairs(rest);
   const nav = ind.find((p) => p.node.id === 'nv')!;
   const tab = ind.find((p) => p.node.id === 'tl')!;
+  const row = ind.find((p) => p.node.id === 'tr')!;
   const marks = (r: Record<string, Rect>) => [
     [r.nv.left + 1, mid(r.nv)], [r.nv.right - 8, r.nv.top + 3],
     [(r.tab0.left + r.tab0.right) / 2, r.tab0.bottom - 1], [(r.tab0.left + r.tab0.right) / 2, r.tab0.top + 3],
+    [r.tr.left + 1, mid(r.tr)], [r.tr.right - 8, r.tr.top + 3],
   ] as Array<[number, number]>;
   for (const state of ['rest', 'hover'] as const) {
     const px = await sample(htmlOf(resolved(state, t.vars, t.theme)), marks);
@@ -138,6 +142,8 @@ for (const t of THEMES) {
     same(`${t.name} ${state}: the nav-item fill beside it`, nav[state]!.fill, px[1]);
     same(`${t.name} ${state}: the line tab underline`, tab[state]!.indicator, px[2]);
     same(`${t.name} ${state}: the line tab fill above it`, tab[state]!.fill, px[3]);
+    same(`${t.name} ${state}: the tree-row bar (Phase 32 FR-D2)`, row?.[state]?.indicator, px[4]);
+    same(`${t.name} ${state}: the tree-row fill beside it`, row?.[state]?.fill, px[5]);
   }
 
   // ── every button variant: its layer in hover, focus and pressed, its ring ──
@@ -158,11 +164,14 @@ for (const t of THEMES) {
   const field = bounds.find((p) => p.node.id === 'ti')!;
   const box = bounds.find((p) => p.node.id === 'cb')!;
   const track = bounds.find((p) => p.node.id === 'tg')!;
-  const edge = await sample(htmlOf(rest), (r) => [[r.field0.left, mid(r.field0)], [r.field0.left - 3, mid(r.field0)], [r.cb.left, mid(r.cb)], [r.tg.right - 4, mid(r.tg)]]);
+  const select = bounds.find((p) => p.node.id === 'se');
+  const edge = await sample(htmlOf(rest), (r) => [[r.field0.left, mid(r.field0)], [r.field0.left - 3, mid(r.field0)], [r.cb.left, mid(r.cb)], [r.tg.right - 4, mid(r.tg)], [r.se.left, mid(r.se)], [r.se.left - 3, mid(r.se)]]);
   same(`${t.name}: a text-input border`, field.boundary, edge[0]);
   same(`${t.name}: the backdrop outside it`, field.backdrop, edge[1]);
   same(`${t.name}: a checkbox outline`, box.boundary, edge[2]);
   same(`${t.name}: a toggle track`, track.boundary, edge[3]);
+  same(`${t.name}: a select border (Phase 32 FR-D1)`, select?.boundary, edge[4]);
+  same(`${t.name}: the backdrop outside it`, select?.backdrop, edge[5]);
 }
 
 // ── disabled with the token pair: a toggle track, a button container ──

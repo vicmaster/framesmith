@@ -388,8 +388,9 @@ I(row, { type: "button", label: "Post", size: "sm", maxWidth: "100%" })
     ['Archive', archive.id, { base: true, bigNumbers: true }],
     ['Comment open', commentVariant.id, { base: false, bigNumbers: true }],
     ['Confirm delete', confirmVariant.id, { base: false, bigNumbers: true }],
-    // An empty archive shows no figures, so big-numbers has nothing to widen.
-    ['Archive empty', emptyVariant.id, { base: false, bigNumbers: false }],
+    // An empty archive still shows the sidebar counts, which big-numbers
+    // widens (Phase 32 FR-D4: counts are stress slots).
+    ['Archive empty', emptyVariant.id, { base: false, bigNumbers: true }],
   ];
   const canvases: Record<string, { root: Node }> = {};
   for (const [name, id, opts] of six) canvases[name] = await judge(name, id, projectId, opts);
