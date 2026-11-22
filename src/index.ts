@@ -467,7 +467,7 @@ const designVariablesSchema = z.object({
 // --- workspace_set_design_system ---
 server.tool(
   'workspace_set_design_system',
-  'Set the workspace-level design system (inherited by every project + canvas under it). Merges per-category with existing tokens — pass `{ colors: { primary: "#..." } }` to update colors without resetting spacing/radius/typography.',
+  'Set the workspace-level design system (inherited by every project + canvas under it). Merges per-category with existing tokens — pass `{ colors: { primary: "#..." } }` to update colors without resetting spacing/radius/typography. A name defined in both spacing and radius resolves by property: cornerRadius reads radius first, every other property reads spacing first.',
   {
     workspaceId: z.string().describe('Workspace ID'),
     variables: designVariablesSchema.describe('Design tokens to set'),
@@ -510,7 +510,7 @@ server.tool(
 // --- project_set_design_system ---
 server.tool(
   'project_set_design_system',
-  'Set the project-level design system, which sits between the parent workspace and individual canvases in the resolution chain. Merges per-category with existing project tokens.',
+  'Set the project-level design system, which sits between the parent workspace and individual canvases in the resolution chain. Merges per-category with existing project tokens. A name defined in both spacing and radius resolves by property: cornerRadius reads radius first, every other property reads spacing first.',
   {
     projectId: z.string().describe('Project ID'),
     variables: designVariablesSchema.describe('Design tokens to set'),
