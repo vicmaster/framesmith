@@ -209,7 +209,9 @@ export function applyPerturbation(name: PerturbationName, root: SceneNode, opts:
   if (name === 'big-numbers') {
     walkTexts(clone, (slot) => {
       if (!isDataLike(slot.value)) return;
-      const widened = widenNumber(slot.value);
+      // A count badge never truncates: its widest realistic form is 999+, not
+      // the 12-character figure a "1.2K" stat would take.
+      const widened = slot.dataOnly && widenNumber(slot.value) !== null ? '999+' : widenNumber(slot.value);
       if (widened === null || widened === slot.value) return;
       slot.set(widened);
       touch(slot.node.id);

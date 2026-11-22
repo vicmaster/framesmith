@@ -1587,7 +1587,8 @@ function renderTreeRow(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const st = stateParts(renderState(node), node.stateStyle, node.color ?? FALLBACK.text, { authored: node.opacity });
   const box = css([
     ringVar(node.stateStyle),
-    ...positionStyles(node, rc), node.position ? undefined : 'position: relative', 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
+    // Only an active row anchors a bar; an inactive one keeps its old flow.
+    ...positionStyles(node, rc), node.active && !node.position ? 'position: relative' : undefined, 'display: flex', 'align-items: center', 'gap: 6px', 'flex-shrink: 0', 'box-sizing: border-box',
     `height: ${typeof node.height === 'number' ? node.height : TREE_ROW_HEIGHT}px`, rowWidth(node),
     `padding: 0 8px 0 ${8 + depth * TREE_INDENT}px`, 'border-radius: 6px',
     node.fill ? `background-color: ${node.fill}` : undefined, `color: ${node.color ?? FALLBACK.text}`,
