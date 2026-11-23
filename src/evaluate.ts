@@ -2209,6 +2209,10 @@ function primitiveTargets(
  * TAPPABLE_PRIMITIVES (that would drop them from the 24px census). */
 const PHONE_FIELDS = new Set(['link', 'text-input']);
 
+/** A size for a finding: whole pixels, or one decimal when rounding would
+ * hide a shortfall (43.5 never prints as 44). */
+const pxText = (v: number): number => (Number.isInteger(v) ? v : Math.round(v * 10) / 10);
+
 /** Phase 32 R2/R7 — every touch target a node carries on a phone: the
  * tappable primitives, a link or text-input, and an overlay's own controls
  * (a modal's close button and actions, a toast's action, at its controlSize).
@@ -2220,13 +2224,10 @@ function phoneTargets(
   if (TAPPABLE_PRIMITIVES.has(node.type)) return primitiveTargets(node, parentOf, rootWidth);
   const fixFor = (t: { w?: number; h: number }, tall: string, wide: string) =>
     [t.h < floor ? tall : '', t.w !== undefined && t.w < floor ? wide : ''].filter(Boolean).join(' ');
+  // A link below the floor is always too short: with a numeric height it is
+  // never narrower than tall, so height alone clears both dimensions.
   if (node.type === 'link') {
-    const labelled = typeof node.label === 'string' ? node.label.trim() !== '' : typeof node.label === 'number';
-    return desktopTargets(node).map((t) => ({
-      ...t,
-      fix: fixFor(t, `Give the link height: ${floor}, or make it a button (size "md").`,
-        labelled || node.width !== undefined ? `Widen it to ${floor} or drop its width.` : `Give it width: ${floor} (it hugs its glyphs).`),
-    }));
+    return desktopTargets(node).map((t) => ({ ...t, fix: `Give the link height: ${floor} (it is never narrower than its height), or make it a button (size "md").` }));
   }
   if (node.type === 'text-input') {
     return desktopTargets(node).map((t) => ({ ...t, fix: fixFor(t, 'Use size "lg" (44px).', `Widen it to ${floor} or drop its width (a field spans its container).`) }));
@@ -2446,7 +2447,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${t.what} has a ${t.w === undefined ? '?' : Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${t.what} has a ${t.w === undefined ? '?' : pxText(t.w)}×${pxText(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             ...(t.fix ? { suggestion: t.fix } : {}),
           });
         }
@@ -2468,7 +2469,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${node.type} has a ${Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${node.type} has a ${pxText(t.w)}×${pxText(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             suggestion: `Grow the control, or put it alone in a row (a horizontal frame) at least ${touch.floor}px tall — a lone control's row is its target.`,
           });
         }

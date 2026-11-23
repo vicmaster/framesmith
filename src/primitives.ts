@@ -252,8 +252,13 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
     // A link never renders shorter than 24 (min-height), whatever its height.
     // A px width is its width; without a label and with no width (or "auto")
     // it hugs its glyphs, so its width is known (slice C); a fluid or token
-    // width stays unknown.
-    case 'link': return [{ what: 'link', w: w ?? pxWidth(n.width) ?? (hugsWidth(n.width) && !hasText(n.label) ? linkGlyphWidth(n) : undefined), h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
+    // width stays unknown. Phase 32: with a numeric height it is never
+    // narrower than tall (min-width), so a known width is at least that.
+    case 'link': {
+      const lh = Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT));
+      const lw = w ?? pxWidth(n.width) ?? (hugsWidth(n.width) && !hasText(n.label) ? linkGlyphWidth(n) : undefined);
+      return [{ what: 'link', w: lw !== undefined && isNum(n.height) ? Math.max(lw, lh) : lw, h: lh, disabled }];
+    }
     // A text-input's height comes from its size and rows (the renderer ignores `height`).
     case 'text-input': return [{ what: 'text-input', w, h: textInputHeight(n), disabled }];
     case 'nav-item': return [{ what: 'nav-item', w: n.collapsed ? NAV_ITEM_HEIGHT : w, h: h(NAV_ITEM_HEIGHT), disabled }];

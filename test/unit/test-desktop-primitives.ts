@@ -54,6 +54,18 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
 {
   const h = html({ id: 'l', name: 'l', type: 'link', label: 'View all', external: true });
   check('a link renders at least 24 tall with role=link and its label as a title', /min-height: 24px/.test(h) && /role="link"/.test(h) && /title="View all"/.test(h));
+  // Phase 32 round 1: a link with a numeric height is never narrower than
+  // tall (as a button); one without a height keeps its markup.
+  const linkStyle = (extra: Partial<SceneNode>) => {
+    const c = canvasWith([{ id: 'lk', name: 'lk', type: 'link', label: 'OK', ...extra } as SceneNode], app);
+    return /data-node-id="lk"[^>]*style="([^"]*)"/.exec(renderToHtml(c.root, 1440, 900, c))?.[1] ?? '';
+  };
+  check('a link with height 44 gets min-width 44, centred', /height: 44px; min-width: 44px; justify-content: center/.test(linkStyle({ height: 44 })), linkStyle({ height: 44 }));
+  check('a link with height 10 renders 24 tall, so min-width 24', /min-width: 24px/.test(linkStyle({ height: 10 })), linkStyle({ height: 10 }));
+  check('twin: a link without a height has no min-width', !/min-width/.test(linkStyle({})) && !/justify-content/.test(linkStyle({})));
+  check('twin: a link with a height and a set width keeps its label left-aligned', /min-width: 44px/.test(linkStyle({ height: 44, width: 200 })) && !/justify-content/.test(linkStyle({ height: 44, width: 200 })));
+  check('census: a glyph-only link with height 24 measures 24 wide; without a height, its 14px glyph', desktopTargets({ id: 'g', type: 'link', icon: 'x', height: 24 } as SceneNode)[0].w === 24 && desktopTargets({ id: 'g', type: 'link', icon: 'x' } as SceneNode)[0].w === 14);
+  check('census: a numeric width below a numeric height measures the height', desktopTargets({ id: 'g', type: 'link', label: 'x', width: 10, height: 30 } as SceneNode)[0].w === 30);
   const t = html({ id: 't', name: 't', type: 'text', content: 'Read the guide or ask us.', links: [{ start: 9, end: 14 }, { start: 10, end: 12 }, { start: 30, end: 40 }], title: 'Help copy' });
   check('inline links underline their ranges; overlapping and out-of-range ones are dropped', (t.match(/data-fs-inline-link/g) ?? []).length === 1 && />guide</.test(t) && /Read the /.test(t) && /or ask us\.</.test(t), t.slice(t.indexOf('<p'), t.indexOf('</p>') + 4));
   check('a text node renders its title attribute', /<p[^>]*title="Help copy"/.test(t));

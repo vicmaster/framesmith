@@ -8,6 +8,7 @@
 import '../env.js';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { overlayTargets, desktopTargets, textInputHeight } from '../../src/primitives.js';
+import { tokenRefs } from '../../src/variables.js';
 import type { Canvas, SceneNode } from '../../src/types.js';
 
 let allPass = true;
@@ -57,14 +58,20 @@ const toast = (extra: Partial<SceneNode> = {}): SceneNode => ({ id: 't', name: '
   check('R2: the link suggestion names height', /height: 44/.test(link[0]?.suggestion ?? ''), link[0]?.suggestion);
   const tall = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Forgot password?', height: 44 }]);
   check('R2 twin: height: 44 clears the link', tall.length === 0, tall.map((i) => i.message).join(' | '));
+  // Round 1 (spec change to R2): a link with a numeric height is never
+  // narrower than tall, so height 44 clears width too, whatever its width.
   const glyph = await touch([{ id: 'l', name: 'l', type: 'link', icon: 'settings', ariaLabel: 'Settings', height: 44 }]);
-  check('R2: a glyph-only link at height 44 still errors on width (14 wide)', glyph.length === 1 && /14×44px/.test(glyph[0].message) && /width: 44/.test(glyph[0].suggestion ?? '') && !/height: 44/.test(glyph[0].suggestion ?? ''), glyph.map((i) => `${i.message} / ${i.suggestion}`).join(' | '));
-  const glyphOk = await touch([{ id: 'l', name: 'l', type: 'link', icon: 'settings', ariaLabel: 'Settings', height: 44, width: 44 }]);
-  check('R2 twin: a glyph-only link at 44×44 passes', glyphOk.length === 0);
+  check('R2: a glyph-only link at height 44 is 44 wide (min-width) and passes', glyph.length === 0, glyph.map((i) => i.message).join(' | '));
+  const glyph32 = await touch([{ id: 'l', name: 'l', type: 'link', icon: 'settings', ariaLabel: 'Settings', height: 32 }]);
+  check('R2 twin: a glyph-only link at height 32 is 32×32 and errors, suggesting height 44', glyph32.length === 1 && /32×32px/.test(glyph32[0].message) && /height: 44/.test(glyph32[0].suggestion ?? ''), glyph32.map((i) => `${i.message} / ${i.suggestion}`).join(' | '));
+  const glyphBare = await touch([{ id: 'l', name: 'l', type: 'link', icon: 'settings', ariaLabel: 'Settings' }]);
+  check('R2 twin: a glyph-only link with no height hugs its glyph (14×24) and errors', glyphBare.length === 1 && /14×24px/.test(glyphBare[0].message));
   const narrow = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 44, width: 30 }]);
-  check('R2: a labelled link 30 wide errors on width, suggestion says widen or drop', narrow.length === 1 && /Widen it to 44 or drop its width/.test(narrow[0].suggestion ?? ''), narrow.map((i) => i.suggestion).join(' | '));
-  const px = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 44, width: '30px' }]);
-  check('R2: a link\'s px-string width is read', px.length === 1 && /30×44px/.test(px[0].message));
+  check('R2: a labelled link with width 30 and height 44 renders 44 wide and passes', narrow.length === 0, narrow.map((i) => i.message).join(' | '));
+  const px = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 32, width: '30px' }]);
+  check('R2: a link\'s px-string width is read (30px at height 32 measures 32×32)', px.length === 1 && /32×32px/.test(px[0].message), px.map((i) => i.message).join(' | '));
+  const half = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 43.5, width: 43.5 }]);
+  check('R2: a fractional size is printed to one decimal, not rounded up to the floor', half.length === 1 && /43\.5×43\.5px/.test(half[0].message), half.map((i) => i.message).join(' | '));
 
   const md = await touch([label('lb'), { id: 'i', name: 'i', type: 'text-input', placeholder: 'you@example.com' }]);
   check('R2: a default (40px) text-input errors on a phone, suggesting size "lg"', md.length === 1 && md[0].nodeId === 'i' && /40px touch target/.test(md[0].message) && /size "lg"/.test(md[0].suggestion ?? ''), md.map((i) => `${i.message} / ${i.suggestion}`).join(' | '));
@@ -140,6 +147,21 @@ const toast = (extra: Partial<SceneNode> = {}): SceneNode => ({ id: 't', name: '
   check('R5: "constructor" and 44 measure as the defaults (four errors)', ctor.length === 4);
   const noAction = await touch([toast({ action: undefined })]);
   check('twin: a toast without an action has no target', noAction.length === 0);
+}
+
+// ── Verify round 1: mutation survivors ─────────────────────────────────────
+{
+  check('controlSize is never read as a token ref', tokenRefs({ id: 'm', type: 'modal', controlSize: '$md' } as unknown as SceneNode).length === 0);
+  const arr = ['md'] as unknown as SceneNode['controlSize'];
+  check('an array controlSize is the default (not coerced to "md")', overlayTargets(modal({ controlSize: arr }))[0].h === 32 && overlayTargets(toast({ controlSize: arr }))[0].h === 24);
+  const tall = await touch([label('lb'), { id: 'i', name: 'i', type: 'text-input', width: 44 }]);
+  check('a 44-wide md text-input fails on height only (exact suggestion)', tall.length === 1 && tall[0].suggestion === 'Use size "lg" (44px).', tall[0]?.suggestion);
+  const both = await touch([label('lb'), { id: 'i', name: 'i', type: 'text-input', size: 'sm', width: 20 }]);
+  check('a text-input failing both ways gets both fixes, one space apart', both.length === 1 && both[0].suggestion === 'Use size "lg" (44px). Widen it to 44 or drop its width (a field spans its container).', both[0]?.suggestion);
+  const toastFix = (await touch([toast()]))[0]?.suggestion;
+  check('the toast suggestion names the toast', toastFix === 'Set controlSize: "md" (44px) on the toast.', toastFix);
+  const linkFix = (await touch([{ id: 'l', name: 'l', type: 'link', icon: 'settings', ariaLabel: 'Settings', width: 'auto' }]))[0]?.suggestion;
+  check('a link\'s suggestion is height alone, whatever its width', linkFix === 'Give the link height: 44 (it is never narrower than its height), or make it a button (size "md").', linkFix);
 }
 
 if (!allPass) {

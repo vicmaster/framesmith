@@ -1442,6 +1442,12 @@ function renderLink(node: SceneNode, rc: RenderCtx, attrs: string): string {
     ringVar(node.stateStyle),
     ...positionStyles(node, rc), 'display: inline-flex', 'flex-shrink: 0', 'align-items: center', 'gap: 4px',
     `min-height: ${LINK_MIN_HEIGHT}px`, typeof node.height === 'number' ? `height: ${node.height}px` : undefined,
+    // Phase 32 — with a numeric height, never narrower than tall (as a
+    // button), so a short label still gets a square target; a link that
+    // hugs its content centres it in that box (a set width keeps its
+    // left-aligned label).
+    ...(typeof node.height === 'number' ? [`min-width: ${Math.max(LINK_MIN_HEIGHT, node.height)}px`] : []),
+    typeof node.height === 'number' && (node.width === undefined || node.width === 'auto') ? 'justify-content: center' : undefined,
     node.width !== undefined ? `width: ${cssLength(node.width)}` : 'max-width: 100%',
     `color: ${color}`, `font-size: ${typeof node.fontSize === 'number' ? node.fontSize : 14}px`,
     `font-weight: ${node.fontWeight ?? 500}`, 'cursor: pointer',
