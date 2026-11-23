@@ -72,6 +72,10 @@ const toast = (extra: Partial<SceneNode> = {}): SceneNode => ({ id: 't', name: '
   check('R2: a link\'s px-string width is read (30px at height 32 measures 32×32)', px.length === 1 && /32×32px/.test(px[0].message), px.map((i) => i.message).join(' | '));
   const half = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 43.5, width: 43.5 }]);
   check('R2: a fractional size is printed to one decimal, not rounded up to the floor', half.length === 1 && /43\.5×43\.5px/.test(half[0].message), half.map((i) => i.message).join(' | '));
+  const frac = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 41.7 }]);
+  check('twin: a fraction that rounds below the floor prints whole (42, as before)', frac.length === 1 && /\?×42px/.test(frac[0].message), frac.map((i) => i.message).join(' | '));
+  const near = await touch([{ id: 'l', name: 'l', type: 'link', label: 'Go', height: 43.96 }]);
+  check('a fraction just under the floor never prints as the floor (43.9)', near.length === 1 && /\?×43\.9px/.test(near[0].message), near.map((i) => i.message).join(' | '));
 
   const md = await touch([label('lb'), { id: 'i', name: 'i', type: 'text-input', placeholder: 'you@example.com' }]);
   check('R2: a default (40px) text-input errors on a phone, suggesting size "lg"', md.length === 1 && md[0].nodeId === 'i' && /40px touch target/.test(md[0].message) && /size "lg"/.test(md[0].suggestion ?? ''), md.map((i) => `${i.message} / ${i.suggestion}`).join(' | '));

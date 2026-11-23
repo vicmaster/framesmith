@@ -2209,9 +2209,9 @@ function primitiveTargets(
  * TAPPABLE_PRIMITIVES (that would drop them from the 24px census). */
 const PHONE_FIELDS = new Set(['link', 'text-input']);
 
-/** A size for a finding: whole pixels, or one decimal when rounding would
- * hide a shortfall (43.5 never prints as 44). */
-const pxText = (v: number): number => (Number.isInteger(v) ? v : Math.round(v * 10) / 10);
+/** A size for a finding: whole pixels, or one decimal (rounded down) when
+ * rounding would hide a shortfall (43.5 never prints as 44 below 44). */
+const pxText = (v: number, floor: number): number => (v < floor && Math.round(v) >= floor ? Math.floor(v * 10) / 10 : Math.round(v));
 
 /** Phase 32 R2/R7 — every touch target a node carries on a phone: the
  * tappable primitives, a link or text-input, and an overlay's own controls
@@ -2447,7 +2447,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${t.what} has a ${t.w === undefined ? '?' : pxText(t.w)}×${pxText(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${t.what} has a ${t.w === undefined ? '?' : pxText(t.w, touch.floor)}×${pxText(t.h, touch.floor)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             ...(t.fix ? { suggestion: t.fix } : {}),
           });
         }
@@ -2469,7 +2469,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${node.type} has a ${pxText(t.w)}×${pxText(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${node.type} has a ${pxText(t.w, touch.floor)}×${pxText(t.h, touch.floor)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             suggestion: `Grow the control, or put it alone in a row (a horizontal frame) at least ${touch.floor}px tall — a lone control's row is its target.`,
           });
         }
