@@ -300,6 +300,33 @@ const tech = generateDesignSystem('#2563EB', 'technical').variables;
   check('fast mode reads a nested overlay\'s y as root coordinates (warns at y 10, not 310)', (await safe(nested, 'fast')).some((i) => i.nodeId === 'pt2'));
 }
 
+// ── Phase 32 R5: controlSize, as rendered on a phone ────────────────────────
+{
+  const dialog = (size?: string): Canvas => ({
+    id: 'c', name: 'c', projectId: 'p', components: {}, variables: {}, createdAt: '', lastModified: '',
+    root: { id: 'document', type: 'document', name: 'D', width: 390, height: 844, fill: '#FFFFFF', layout: 'vertical', safeArea: { top: 47, bottom: 34 }, children: [
+      { id: 'm', name: 'm', type: 'modal', title: 'Delete file?', actions: [{ label: 'Cancel' }, { label: 'Delete', variant: 'destructive' }], children: [{ id: 'mt', name: 'mt', type: 'text', content: 'This cannot be undone.' }], ...(size ? { controlSize: size } : {}) },
+      { id: 't', name: 't', type: 'toast', text: 'Saved', action: { label: 'Undo' }, ...(size ? { controlSize: size } : {}) },
+    ] },
+    metadata: { surface: { type: 'mobile', device: 'iphone-390' } },
+  } as Canvas);
+  /** Each rendered overlay control's box: [overlay id, width, height]. */
+  const boxes = (c: Canvas) => withPage(async (page) => {
+    await page.setViewport({ width: 390, height: 844 });
+    await page.setContent(renderToHtml(c.root, 390, 844, c), { waitUntil: 'load' });
+    return page.evaluate(() => [...document.querySelectorAll('[data-node-id="m"] [data-focusable], [data-node-id="t"] [data-focusable]')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return [el.closest('[data-node-id="m"],[data-node-id="t"]')?.getAttribute('data-node-id'), Math.round(r.width), Math.round(r.height)] as [string, number, number];
+    }));
+  });
+  const def = await boxes(dialog());
+  check('R5: by default the modal\'s close and actions render 32 tall (close 32 square), the toast action 24', def.length === 4
+    && def.filter(([o]) => o === 'm').every(([, , h]) => h === 32) && def.some(([o, w, h]) => o === 'm' && w === 32 && h === 32)
+    && def.filter(([o]) => o === 't').every(([, , h]) => h === 24), JSON.stringify(def));
+  const md = await boxes(dialog('md'));
+  check('R5: controlSize "md" renders every control 44 tall, the close button 44 square', md.length === 4 && md.every(([, , h]) => h === 44) && md.some(([o, w]) => o === 'm' && w === 44), JSON.stringify(md));
+}
+
 // ── Round 1 mutation gaps (rendered) ────────────────────────────────────────
 {
   const long = 'A tooltip with enough words in it to wrap well past its maximum width of two hundred and forty pixels';

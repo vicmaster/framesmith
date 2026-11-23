@@ -30,7 +30,7 @@ export const COPY_PROPS = new Set([
   'name', 'content', 'text', 'title', 'subtitle', 'label', 'time', 'placeholder', 'value', 'shortcut',
   'error', 'ariaLabel', 'count', 'closeLabel', 'centerValue', 'centerLabel',
   // Enums.
-  'variant', 'size', 'detent', 'appearance', 'iconPosition', 'orientation', 'state',
+  'variant', 'size', 'controlSize', 'detent', 'appearance', 'iconPosition', 'orientation', 'state',
 ]);
 
 // Phase 31 slice B — the desktop-app vocabulary's geometry, on the 24 / 32 /
@@ -45,7 +45,7 @@ export const TREE_INDENT = 16;
 export const MENU_ROW_HEIGHT = 32;
 export const PROPERTY_ROW_HEIGHT = 32;
 export const PROPERTY_LABEL_WIDTH = 96;
-export const TEXT_INPUT_HEIGHT = { sm: 32, md: 40 } as const;
+export const TEXT_INPUT_HEIGHT = { sm: 32, md: 40, lg: 44 } as const;
 /** One line of a multi-line text-input (13px type at 20px leading). */
 export const TEXT_INPUT_LINE = 20;
 
@@ -98,10 +98,15 @@ export const MENU_MIN_WIDTH = 192;
 export const POPOVER_WIDTH = { xs: 192, sm: 320, md: 480, lg: 640 } as const;
 export const MODAL_WIDTH = { sm: 480, md: 640, lg: 960 } as const;
 export const DRAWER_WIDTH = { sm: 320, md: 480 } as const;
-/** The modal's header close button and its actions (sm buttons), and a
- * toast's action (an xs button). */
-export const MODAL_CONTROL = 32;
-export const TOAST_ACTION = 24;
+/** Phase 32 FR-E2 — the button size of a modal's close button and actions
+ * (default sm, 32) or a toast's action (default xs, 24): its `controlSize`
+ * when that is a button size name, else the default. An own-key test, so an
+ * inherited name such as "constructor" is the default too. */
+export function overlayControlSize(n: SceneNode): keyof typeof BUTTON_HEIGHT {
+  const v = n.controlSize;
+  if (typeof v === 'string' && Object.hasOwn(BUTTON_HEIGHT, v)) return v as keyof typeof BUTTON_HEIGHT;
+  return n.type === 'toast' ? 'xs' : 'sm';
+}
 
 /** A modal's width: a numeric width, else its size (default md). */
 export function modalWidth(n: SceneNode): number {
@@ -128,16 +133,18 @@ export function modalActions(n: SceneNode): Array<NonNullable<SceneNode['actions
 }
 
 /** The pointer targets an overlay renders under its own node id: a modal's
- * close button and actions, a toast's action. */
+ * close button and actions, a toast's action, each at its `controlSize`. */
 export function overlayTargets(n: SceneNode): Array<{ what: string; w?: number; h: number; disabled: boolean }> {
+  const h = BUTTON_HEIGHT[overlayControlSize(n)];
   if (n.type === 'modal') {
+    // The close button is icon-only, so square.
     return [
-      { what: 'modal close button', w: MODAL_CONTROL, h: MODAL_CONTROL, disabled: false },
-      ...modalActions(n).map((a) => ({ what: `modal action "${String(a.label).trim()}"`, h: MODAL_CONTROL, disabled: isDisabled(a) })),
+      { what: 'modal close button', w: h, h, disabled: false },
+      ...modalActions(n).map((a) => ({ what: `modal action "${String(a.label).trim()}"`, h, disabled: isDisabled(a) })),
     ];
   }
   if (n.type === 'toast' && n.action && typeof n.action === 'object' && hasText(n.action.label)) {
-    return [{ what: `toast action "${String(n.action.label).trim()}"`, h: TOAST_ACTION, disabled: isDisabled(n.action) }];
+    return [{ what: `toast action "${String(n.action.label).trim()}"`, h, disabled: isDisabled(n.action) }];
   }
   return [];
 }
@@ -211,7 +218,7 @@ export function textInputRows(n: SceneNode): number {
 }
 
 export function textInputHeight(n: SceneNode): number {
-  const base = TEXT_INPUT_HEIGHT[n.size === 'sm' ? 'sm' : 'md'];
+  const base = TEXT_INPUT_HEIGHT[n.size === 'sm' || n.size === 'lg' ? n.size : 'md'];
   const rows = textInputRows(n);
   return rows > 1 ? Math.max(base, rows * TEXT_INPUT_LINE + 12) : base;
 }
@@ -245,8 +252,13 @@ export function desktopTargets(n: SceneNode): Array<{ what: string; w?: number; 
     // A link never renders shorter than 24 (min-height), whatever its height.
     // A px width is its width; without a label and with no width (or "auto")
     // it hugs its glyphs, so its width is known (slice C); a fluid or token
-    // width stays unknown.
-    case 'link': return [{ what: 'link', w: w ?? pxWidth(n.width) ?? (hugsWidth(n.width) && !hasText(n.label) ? linkGlyphWidth(n) : undefined), h: Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT)), disabled }];
+    // width stays unknown. Phase 32: with a numeric height it is never
+    // narrower than tall (min-width), so a known width is at least that.
+    case 'link': {
+      const lh = Math.max(LINK_MIN_HEIGHT, h(LINK_MIN_HEIGHT));
+      const lw = w ?? pxWidth(n.width) ?? (hugsWidth(n.width) && !hasText(n.label) ? linkGlyphWidth(n) : undefined);
+      return [{ what: 'link', w: lw !== undefined && isNum(n.height) ? Math.max(lw, lh) : lw, h: lh, disabled }];
+    }
     // A text-input's height comes from its size and rows (the renderer ignores `height`).
     case 'text-input': return [{ what: 'text-input', w, h: textInputHeight(n), disabled }];
     case 'nav-item': return [{ what: 'nav-item', w: n.collapsed ? NAV_ITEM_HEIGHT : w, h: h(NAV_ITEM_HEIGHT), disabled }];

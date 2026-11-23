@@ -2204,6 +2204,42 @@ function primitiveTargets(
   return [];
 }
 
+/** Phase 32 R2 — a link and a text-input are phone tappables, measured by
+ * the box the 24px census uses (desktopTargets), without joining
+ * TAPPABLE_PRIMITIVES (that would drop them from the 24px census). */
+const PHONE_FIELDS = new Set(['link', 'text-input']);
+
+/** A size for a finding: whole pixels, or one decimal (rounded down) when
+ * rounding would hide a shortfall (43.5 never prints as 44 below 44). */
+const pxText = (v: number, floor: number): number => (v < floor && Math.round(v) >= floor ? Math.floor(v * 10) / 10 : Math.round(v));
+
+/** Phase 32 R2/R7 — every touch target a node carries on a phone: the
+ * tappable primitives, a link or text-input, and an overlay's own controls
+ * (a modal's close button and actions, a toast's action, at its controlSize).
+ * Disabled targets count (the phone census never exempted them). The fix
+ * names the dimension that fails. */
+function phoneTargets(
+  node: SceneNode, parentOf: Map<string, SceneNode | null>, rootWidth: number, floor: number,
+): Array<{ what: string; w?: number; h: number; fix: string }> {
+  if (TAPPABLE_PRIMITIVES.has(node.type)) return primitiveTargets(node, parentOf, rootWidth);
+  const fixFor = (t: { w?: number; h: number }, tall: string, wide: string) =>
+    [t.h < floor ? tall : '', t.w !== undefined && t.w < floor ? wide : ''].filter(Boolean).join(' ');
+  // A link below the floor is always too short: with a numeric height it is
+  // never narrower than tall, so height alone clears both dimensions.
+  if (node.type === 'link') {
+    return desktopTargets(node).map((t) => ({ ...t, fix: `Give the link height: ${floor} (it is never narrower than its height), or make it a button (size "md").` }));
+  }
+  if (node.type === 'text-input') {
+    return desktopTargets(node).map((t) => ({ ...t, fix: fixFor(t, 'Use size "lg" (44px).', `Widen it to ${floor} or drop its width (a field spans its container).`) }));
+  }
+  return overlayTargets(node).map((t) => ({
+    ...t,
+    fix: node.type === 'modal'
+      ? 'Set controlSize: "md" (44px) on the modal — or use a sheet for a bottom panel.'
+      : 'Set controlSize: "md" (44px) on the toast.',
+  }));
+}
+
 /** One pointer target for the 24px census: its id, what to call it, the
  * effective size after the padded-row step, and whether it is disabled. */
 interface PointerTarget { node: SceneNode; what: string; w: number; h: number; disabled: boolean }
@@ -2389,9 +2425,10 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
   const parentOf = new Map<string, SceneNode | null>();
   for (const en of entries) parentOf.set(en.node.id, en.parent);
   // On a phone a row holds "one control" only when no tappable primitive
-  // shares it either — a checkbox beside a button doesn't own the row.
+  // shares it either — a checkbox beside a button doesn't own the row. A link
+  // and a text-input are phone tappables too (Phase 32 R4).
   const countControls = (n: SceneNode): number => {
-    let c = CONTROL_TYPES.has(n.type) || (touch !== undefined && TAPPABLE_PRIMITIVES.has(n.type)) ? 1 : 0;
+    let c = CONTROL_TYPES.has(n.type) || (touch !== undefined && (TAPPABLE_PRIMITIVES.has(n.type) || PHONE_FIELDS.has(n.type))) ? 1 : 0;
     for (const ch of n.children ?? []) c += countControls(ch);
     return c;
   };
@@ -2400,8 +2437,8 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
     || (n.children ?? []).some(hasText);
 
   for (const { node } of entries) {
-    if (touch && TAPPABLE_PRIMITIVES.has(node.type)) {
-      for (const t of primitiveTargets(node, parentOf, rootWidth)) {
+    if (touch) {
+      for (const t of phoneTargets(node, parentOf, rootWidth, touch.floor)) {
         if ((t.w !== undefined && t.w < touch.floor) || t.h < touch.floor) {
           score -= 25;
           issues.push({
@@ -2410,7 +2447,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${t.what} has a ${t.w === undefined ? '?' : Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${t.what} has a ${t.w === undefined ? '?' : pxText(t.w, touch.floor)}×${pxText(t.h, touch.floor)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             ...(t.fix ? { suggestion: t.fix } : {}),
           });
         }
@@ -2432,7 +2469,7 @@ function checkUsability(entries: NodeEntry[], rootWidth: number, touch?: { floor
             severity: 'error',
             nodeId: node.id,
             nodeName: node.name,
-            message: `${node.type} has a ${Math.round(t.w)}×${Math.round(t.h)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
+            message: `${node.type} has a ${pxText(t.w, touch.floor)}×${pxText(t.h, touch.floor)}px touch target — below the ${touch.floor}px floor on a phone (Apple HIG; WCAG 2.5.5).`,
             suggestion: `Grow the control, or put it alone in a row (a horizontal frame) at least ${touch.floor}px tall — a lone control's row is its target.`,
           });
         }

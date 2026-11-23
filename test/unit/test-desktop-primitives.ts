@@ -54,6 +54,18 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
 {
   const h = html({ id: 'l', name: 'l', type: 'link', label: 'View all', external: true });
   check('a link renders at least 24 tall with role=link and its label as a title', /min-height: 24px/.test(h) && /role="link"/.test(h) && /title="View all"/.test(h));
+  // Phase 32 round 1: a link with a numeric height is never narrower than
+  // tall (as a button); one without a height keeps its markup.
+  const linkStyle = (extra: Partial<SceneNode>) => {
+    const c = canvasWith([{ id: 'lk', name: 'lk', type: 'link', label: 'OK', ...extra } as SceneNode], app);
+    return /data-node-id="lk"[^>]*style="([^"]*)"/.exec(renderToHtml(c.root, 1440, 900, c))?.[1] ?? '';
+  };
+  check('a link with height 44 gets min-width 44, centred', /height: 44px; min-width: 44px; justify-content: center/.test(linkStyle({ height: 44 })), linkStyle({ height: 44 }));
+  check('a link with height 10 renders 24 tall, so min-width 24', /min-width: 24px/.test(linkStyle({ height: 10 })), linkStyle({ height: 10 }));
+  check('twin: a link without a height has no min-width', !/min-width/.test(linkStyle({})) && !/justify-content/.test(linkStyle({})));
+  check('twin: a link with a height and a set width keeps its label left-aligned', /min-width: 44px/.test(linkStyle({ height: 44, width: 200 })) && !/justify-content/.test(linkStyle({ height: 44, width: 200 })));
+  check('census: a glyph-only link with height 24 measures 24 wide; without a height, its 14px glyph', desktopTargets({ id: 'g', type: 'link', icon: 'x', height: 24 } as SceneNode)[0].w === 24 && desktopTargets({ id: 'g', type: 'link', icon: 'x' } as SceneNode)[0].w === 14);
+  check('census: a numeric width below a numeric height measures the height', desktopTargets({ id: 'g', type: 'link', label: 'x', width: 10, height: 30 } as SceneNode)[0].w === 30);
   const t = html({ id: 't', name: 't', type: 'text', content: 'Read the guide or ask us.', links: [{ start: 9, end: 14 }, { start: 10, end: 12 }, { start: 30, end: 40 }], title: 'Help copy' });
   check('inline links underline their ranges; overlapping and out-of-range ones are dropped', (t.match(/data-fs-inline-link/g) ?? []).length === 1 && />guide</.test(t) && /Read the /.test(t) && /or ask us\.</.test(t), t.slice(t.indexOf('<p'), t.indexOf('</p>') + 4));
   check('a text node renders its title attribute', /<p[^>]*title="Help copy"/.test(t));
@@ -179,8 +191,17 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('a sole checkbox inside a property-row is measured by the row (passes)', owned.length === 0, JSON.stringify(owned.map((i) => i.message)));
   const two = await usab({ id: 'pr2', name: 'pr2', type: 'property-row', label: 'Flags', children: [{ id: 'f1', name: 'f1', type: 'frame', layout: 'horizontal', children: [{ id: 'c1', name: 'c1', type: 'checkbox' }, { id: 'c2', name: 'c2', type: 'checkbox' }] }] });
   check('two checkboxes in one property-row are measured bare (fast warnings)', two.length === 2);
-  const phone = (await evaluateCanvas(canvasWith([{ id: 'l', name: 'l', type: 'link', label: 'Go' }], { type: 'mobile', device: 'iphone-390' }), { mode: 'fast', categories: ['usability'] })).issues;
-  check('mobile: desktop primitives are not phone tappables (no touch-target finding)', !phone.some((i) => i.rule === 'mobile-touch-target'));
+  // Phase 32 R2: a link is a phone tappable now (44px census); nav-item and
+  // the other desktop-app rows are not.
+  const onPhone = async (n: SceneNode) => (await evaluateCanvas(canvasWith([n], { type: 'mobile', device: 'iphone-390' }), { mode: 'fast', categories: ['usability'] })).issues;
+  const phoneLink = await onPhone({ id: 'l', name: 'l', type: 'link', label: 'Go' });
+  check('mobile: a 24px link is a mobile-touch-target error (Phase 32 R2)', phoneLink.some((i) => i.rule === 'mobile-touch-target' && i.nodeId === 'l'));
+  const phoneNav = await onPhone({ id: 'n', name: 'n', type: 'nav-item', label: 'Go' });
+  check('mobile twin: a nav-item is still not a phone tappable', !phoneNav.some((i) => i.rule === 'mobile-touch-target'));
+  // Phase 32 R1: text-input size "lg" is 44, in the census and the render.
+  check('R1: desktopTargets measures a lg text-input at 44', desktopTargets({ id: 'i', name: 'i', type: 'text-input', size: 'lg' } as SceneNode)[0].h === 44);
+  const lgHtml = (() => { const c = canvasWith([{ id: 'i', name: 'i', type: 'text-input', size: 'lg', value: 'x' }], app); return renderToHtml(c.root, 1440, 900, c); })();
+  check('R1: a lg text-input renders a 44px field at 14px type', /height: 44px; min-height: 44px;[^"]*font-size: 14px/.test(lgHtml));
 }
 
 // ── Verify round 1 fixes ───────────────────────────────────────────────────

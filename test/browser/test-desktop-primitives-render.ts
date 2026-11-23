@@ -163,6 +163,32 @@ for (const name of ['long-text', 'i18n'] as const) {
   check('Q3: a positioned tree-row anchors its bar to its own box', bars.tpos.dx !== null && Math.abs(bars.tpos.dx) <= 0.5 && bars.tpos.rowLeft > 40, JSON.stringify(bars.tpos));
 }
 
+// ── Phase 32 round 1: a link with a numeric height is never narrower than tall
+{
+  const row = (links: SceneNode[]): Canvas => ({
+    id: 'c', name: 'c', projectId: 'p', components: {}, variables: {}, createdAt: '', lastModified: '',
+    root: { id: 'document', type: 'document', name: 'D', width: 390, height: 300, fill: '#FFFFFF', layout: 'vertical', children: [
+      { id: 'r', name: 'r', type: 'frame', layout: 'horizontal', gap: 8, alignItems: 'center', children: links },
+      { id: 'col', name: 'col', type: 'frame', layout: 'vertical', alignItems: 'center', children: [{ id: 'skip', name: 'skip', type: 'link', label: 'Skip', height: 44 }] },
+    ] },
+    metadata: { surface: { type: 'mobile', device: 'iphone-390' } },
+  } as Canvas);
+  const c = row([
+    { id: 'ok', name: 'ok', type: 'link', label: 'OK', height: 44 },
+    { id: 'edit', name: 'edit', type: 'link', label: 'Edit', height: 44 },
+    { id: 'gl', name: 'gl', type: 'link', icon: 'settings', ariaLabel: 'Settings', height: 44 },
+    { id: 'w30', name: 'w30', type: 'link', label: 'Go', height: 44, width: 30 },
+    { id: 'bare', name: 'bare', type: 'link', label: 'OK' },
+  ]);
+  const rects = new Map<string, LayoutRect>();
+  const index = (r: LayoutRect) => { rects.set(r.nodeId, r); r.children?.forEach(index); };
+  (await computeLayout(renderToHtml(c.root, 390, 300, c), undefined, 25, { width: 390, height: 300 })).forEach(index);
+  const size = (id: string) => `${Math.round(rects.get(id)?.width ?? -1)}×${Math.round(rects.get(id)?.height ?? -1)}`;
+  check('a short labelled link at height 44 renders at least 44 wide (OK, Edit, Skip in a centred column)', ['ok', 'edit', 'skip'].every((id) => (rects.get(id)?.width ?? 0) >= 44 && rects.get(id)?.height === 44), ['ok', 'edit', 'skip'].map(size).join(' '));
+  check('a glyph-only link and a width-30 link at height 44 render 44 wide', size('gl') === '44×44' && size('w30') === '44×44', `${size('gl')} ${size('w30')}`);
+  check('twin: a link without a height still hugs its label (narrower than 44)', (rects.get('bare')?.width ?? 99) < 44 && rects.get('bare')?.height === 24, size('bare'));
+}
+
 await shutdown();
 console.log(allPass ? '\nALL PASS' : '\nSOME FAILED');
 process.exit(allPass ? 0 : 1);

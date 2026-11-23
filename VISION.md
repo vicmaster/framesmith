@@ -555,8 +555,8 @@ The mobile attempt (2026-09-07) built one iOS screen end to end on v2.2.0 and go
 
 All seven slices are merged and the acceptance re-run passed. The phase is closed.
 
-- [ ] Follow-up — `link` and `text-input` join the mobile 44px touch census. Phase 31 slice B added both primitives for app screens; on a phone canvas they are not measured today, so a 32px text-input passes silently.
-- [ ] Follow-up — overlay controls on a phone. Phase 31 slice E's `modal` close button and actions (32px) and `toast` action (24px) are drawn at fixed pointer sizes and are not in the mobile 44px touch census, so a modal on a phone canvas passes silently; meeting 44px needs a size option on the overlay (render never depends on type), and the census then measures it. Until then the docs send phone dialogs to `sheet`.
+- [x] Follow-up — `link` and `text-input` join the mobile 44px touch census. Phase 31 slice B added both primitives for app screens; on a phone canvas they are not measured today, so a 32px text-input passes silently (done in Phase 32 slice E: both are measured, and `text-input` gained `size: "lg"`, 44)
+- [x] Follow-up — overlay controls on a phone. Phase 31 slice E's `modal` close button and actions (32px) and `toast` action (24px) are drawn at fixed pointer sizes and are not in the mobile 44px touch census, so a modal on a phone canvas passes silently; meeting 44px needs a size option on the overlay (render never depends on type), and the census then measures it. Until then the docs send phone dialogs to `sheet` (done in Phase 32 slice E: `controlSize` on `modal` and `toast`, measured at 44 on a phone)
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-30-SPEC.md`](docs/specs/PHASE-30-SPEC.md). Deliberately out of scope: an Android profile, tablet and other types, a tappable flag on frames, a thumb-reach rule, interaction and flows, mobile import, and mobile commerce archetypes (those come next, on the anatomy/realisation split this phase creates)._
 
@@ -591,7 +591,7 @@ Phases 30 and 31 closed with seven follow-ups open, and five of them are quiet f
 - [x] Slice B — one tree: instances expanded and resolved once, so the renderer and every rule (contrast, spacing and cliché included) see the same thing inside a component, and findings there name the instance
 - [x] Slice C — tokens: an `unknown-token` warning for any `$ref` the merged tokens do not define or that is the wrong kind, with a rename autofix when only one name is close; copy props never resolve; tints and `danger` derive from the applied palette, on new stamps and on canvases holding the old seeds
 - [x] Slice D — desktop-app checks: `select` gets a `$border-strong` boundary and joins the boundary check, an active `tree-row` draws a bar the indicator check measures, and stress widens `nav-item` and `tabs` counts
-- [ ] Slice E — phone targets: `link` and `text-input` (with a new 44px `size: "lg"`) join the 44px census, and `modal` and `toast` take a `controlSize` the census measures
+- [x] Slice E — phone targets: `link` and `text-input` (with a new 44px `size: "lg"`) join the 44px census, and `modal` and `toast` take a `controlSize` the census measures
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-32-SPEC.md`](docs/specs/PHASE-32-SPEC.md). Deliberately out of scope: a test framework, splitting `src/index.ts` and `src/evaluate.ts`, rewriting "Phase N" comments in `src/`, cross-instance autofix, and an indicator bar on contained tabs._
 

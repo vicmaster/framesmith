@@ -11,6 +11,7 @@
 // Usage: npx tsx test/unit/test-overlays.ts
 
 import '../env.js';
+import { createHash } from 'node:crypto';
 import { evaluateCanvas } from '../../src/evaluate.js';
 import { renderToHtml } from '../../src/renderer.js';
 import { resolveVariables } from '../../src/variables.js';
@@ -359,6 +360,40 @@ const modal = (extra: Partial<SceneNode> = {}): SceneNode => ({
   check('coverage raises nothing for missing overlay states', !r.issues.some((i) => i.category === 'coverage'));
   const none = await evaluateCanvas(getCanvas(base.id)!, { mode: 'fast', designedStates: [] });
   check('twin: without the variant coverage still raises nothing (no demand)', !none.issues.some((i) => i.category === 'coverage') && none.coverage?.missing.length === 0);
+}
+
+// ── Phase 32 R5/R6: controlSize ────────────────────────────────────────────
+{
+  // R6: without controlSize (or at the defaults, or with an invalid value) a
+  // modal and a toast render byte-identical to 09ec388, on every type.
+  const BASE = 'e4793bebbbedcc2e3ed925e57f15ddbf754273abc96a159e68ab4f01f1ceb842';
+  const pairHash = (surface: Surface, m: object, t: object) => {
+    const c = canvasWith([
+      { id: 'm', name: 'm', type: 'modal', title: 'Delete file?', actions: [{ label: 'Cancel' }, { label: 'Delete', variant: 'primary' }], children: [{ id: 'mt', name: 'mt', type: 'text', content: 'Gone for good.' }], ...m } as SceneNode,
+      { id: 't', name: 't', type: 'toast', text: 'Saved', action: { label: 'Undo' }, ...t } as SceneNode,
+    ], surface);
+    return createHash('sha256').update(renderToHtml(resolveVariables(c.root, c.variables), 1440, 900, c)).digest('hex');
+  };
+  const surfaces: Surface[] = [{ type: 'web' }, { type: 'mobile', device: 'iphone-390' }, app];
+  const variants: Array<[string, object, object]> = [
+    ['absent', {}, {}], ['at the defaults', { controlSize: 'sm' }, { controlSize: 'xs' }],
+    ['invalid', { controlSize: 'xl' }, { controlSize: 44 }], ['an inherited key', { controlSize: 'constructor' }, { controlSize: 'toString' }],
+  ];
+  for (const surface of surfaces) {
+    for (const [what, m, t] of variants) {
+      const h = pairHash(surface, m, t);
+      check(`R6: ${surface.type}, controlSize ${what}: byte-identical to 09ec388`, h === BASE, h);
+    }
+  }
+  const toastNode = (extra: object = {}): SceneNode => ({ id: 't', name: 't', type: 'toast', text: 'Saved', action: { label: 'Undo' }, ...extra } as SceneNode);
+  const mdHtml = htmlOf(canvasWith([modal({ controlSize: 'md' }), toastNode({ controlSize: 'md' })], app));
+  const close = /<[^>]*data-fs-modal-close[^>]*>/.exec(mdHtml)?.[0] ?? '';
+  check('R5: controlSize md draws a 44px square close button', /height: 44px/.test(close) && /min-width: 44px/.test(close), close.slice(0, 400));
+  const tall = (html: string) => html.match(/<[^>]*data-focusable[^>]*>/g)?.filter((b) => /height: 44px/.test(b)) ?? [];
+  check('R5: md modal actions, close button and the toast action all render 44px', tall(mdHtml).length === 4, String(tall(mdHtml).length));
+  check('R5: their labels follow the size (16px at md)', tall(mdHtml).filter((b) => !/data-fs-modal-close/.test(b)).every((b) => /font-size: 16px/.test(b)));
+  const defHtml = htmlOf(canvasWith([modal(), toastNode()], app));
+  check('R5 twin: by default no overlay control is 44px', tall(defHtml).length === 0);
 }
 
 console.log(allPass ? '\nAll checks passed.' : '\nSome checks FAILED.');

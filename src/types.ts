@@ -353,7 +353,8 @@ export interface SceneNode {
   /** button label. */
   label?: string;
   iconPosition?: 'leading' | 'trailing';
-  /** button: xs 24 / sm 32 / md 44 / lg 52; tabs and text-input: sm 32 / md 40;
+  /** button: xs 24 / sm 32 / md 44 / lg 52; tabs: sm 32 / md 40; text-input:
+   * sm 32 / md 40 / lg 44;
    * modal: sm 480 / md 640 / lg 960; popover: xs 192 / sm 320 / md 480 / lg 640;
    * drawer: sm 320 / md 480. */
   size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -421,6 +422,11 @@ export interface SceneNode {
   tone?: 'neutral' | 'success' | 'warning' | 'danger';
   /** toast: one action, a ghost text button. */
   action?: ToastAction;
+  /** Phase 32 FR-E2 — modal: the close button's and actions' button size
+   * (default sm, 32); toast: the action's (default xs, 24). xs 24 / sm 32 /
+   * md 44 / lg 52; "md" meets the 44px phone floor. Any other value is the
+   * default. */
+  controlSize?: 'xs' | 'sm' | 'md' | 'lg';
   /** drawer: a scrim behind it (default false; a modal always has one). */
   scrim?: boolean;
 
