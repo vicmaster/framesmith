@@ -8,7 +8,7 @@ import {
   BUTTON_FONT, BUTTON_PADDING, CHROME_EDGE, FAB_RAISE, FAB_SIZE, FLOATING_INSET, NAV_ACTION, NAV_BAR_HEIGHT, NAV_BAR_LARGE_HEIGHT, TAB_BAND,
   buttonHeight, chromeHeight, chromeReservation, effectivePosition, listRowMinHeight, navBarHeight, rootInsets,
   LINK_MIN_HEIGHT, LINK_ICON, LINK_EXTERNAL, NAV_ITEM_HEIGHT, TABS_HEIGHT, TREE_ROW_HEIGHT, TREE_INDENT, MENU_ROW_HEIGHT, PROPERTY_ROW_HEIGHT, PROPERTY_LABEL_WIDTH,
-  tabsItems, textInputHeight, textInputRows,
+  tabsItems, textInputHeight, textInputRows, overlayControlSize,
   OVERLAY_TYPES, OVERLAY_Z, TOOLTIP_MAX_WIDTH, MENU_MIN_WIDTH, drawerWidth, modalActions, modalWidth, popoverWidth,
   STATE_LAYERS, elementState,
 } from './primitives.js';
@@ -1766,7 +1766,7 @@ function actionButton(node: SceneNode, a: NonNullable<SceneNode['actions']>[numb
   const fill = a.fill ?? (filled ? (variant === 'destructive' ? FALLBACK.danger : FALLBACK.accent) : 'transparent');
   const stroke = a.stroke ?? (variant === 'secondary' ? node.stroke ?? FALLBACK.border : undefined);
   return {
-    id: node.id, type: 'button', size: 'sm', label: String(a.label).trim(), variant, maxWidth: 240, fill,
+    id: node.id, type: 'button', size: overlayControlSize(node), label: String(a.label).trim(), variant, maxWidth: 240, fill,
     color: a.color ?? (filled ? '#FFFFFF' : variant === 'ghost' ? FALLBACK.accent : node.color ?? FALLBACK.text),
     ...(stroke ? { stroke } : {}),
     state: a.state, disabled: a.disabled, stateStyle: node.stateStyle,
@@ -1790,7 +1790,7 @@ function renderModal(node: SceneNode, rc: RenderCtx, attrs: string): string {
     node.opacity !== undefined ? `opacity: ${node.opacity}` : undefined,
   ]);
   const close = renderButton({
-    id: node.id, type: 'button', size: 'sm', icon: 'x', variant: 'ghost', fill: 'transparent',
+    id: node.id, type: 'button', size: overlayControlSize(node), icon: 'x', variant: 'ghost', fill: 'transparent',
     color: node.secondaryColor ?? FALLBACK.secondary, ariaLabel: text(node.closeLabel) || 'Close', stateStyle: node.stateStyle,
   }, rc, ' tabindex="0" data-focusable data-fs-modal-close', true);
   const header = `<div style="${css(['display: flex', 'align-items: center', 'gap: 12px', 'flex-shrink: 0', 'padding: 12px 12px 4px 20px'])}"><div style="flex: 1 1 0; min-width: 0; display: flex">${title ? titledLabel(title, 'font-size: 16px; font-weight: 600; line-height: 24px') : ''}</div>${close}</div>`;
@@ -1827,7 +1827,7 @@ function renderToast(node: SceneNode, rc: RenderCtx, attrs: string): string {
   const message = `<span style="flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere">${escapeHtml(text(node.text))}</span>`;
   const action = label
     ? renderButton({
-      id: node.id, type: 'button', size: 'xs', label, variant: 'ghost', fill: 'transparent', color: node.action?.color ?? FALLBACK.accent, maxWidth: 160,
+      id: node.id, type: 'button', size: overlayControlSize(node), label, variant: 'ghost', fill: 'transparent', color: node.action?.color ?? FALLBACK.accent, maxWidth: 160,
       state: node.action?.state, disabled: node.action?.disabled, stateStyle: node.stateStyle,
     }, rc, ' tabindex="0" data-focusable', true)
     : '';

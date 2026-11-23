@@ -179,8 +179,17 @@ const html = (n: SceneNode, colors?: Record<string, string>) => {
   check('a sole checkbox inside a property-row is measured by the row (passes)', owned.length === 0, JSON.stringify(owned.map((i) => i.message)));
   const two = await usab({ id: 'pr2', name: 'pr2', type: 'property-row', label: 'Flags', children: [{ id: 'f1', name: 'f1', type: 'frame', layout: 'horizontal', children: [{ id: 'c1', name: 'c1', type: 'checkbox' }, { id: 'c2', name: 'c2', type: 'checkbox' }] }] });
   check('two checkboxes in one property-row are measured bare (fast warnings)', two.length === 2);
-  const phone = (await evaluateCanvas(canvasWith([{ id: 'l', name: 'l', type: 'link', label: 'Go' }], { type: 'mobile', device: 'iphone-390' }), { mode: 'fast', categories: ['usability'] })).issues;
-  check('mobile: desktop primitives are not phone tappables (no touch-target finding)', !phone.some((i) => i.rule === 'mobile-touch-target'));
+  // Phase 32 R2: a link is a phone tappable now (44px census); nav-item and
+  // the other desktop-app rows are not.
+  const onPhone = async (n: SceneNode) => (await evaluateCanvas(canvasWith([n], { type: 'mobile', device: 'iphone-390' }), { mode: 'fast', categories: ['usability'] })).issues;
+  const phoneLink = await onPhone({ id: 'l', name: 'l', type: 'link', label: 'Go' });
+  check('mobile: a 24px link is a mobile-touch-target error (Phase 32 R2)', phoneLink.some((i) => i.rule === 'mobile-touch-target' && i.nodeId === 'l'));
+  const phoneNav = await onPhone({ id: 'n', name: 'n', type: 'nav-item', label: 'Go' });
+  check('mobile twin: a nav-item is still not a phone tappable', !phoneNav.some((i) => i.rule === 'mobile-touch-target'));
+  // Phase 32 R1: text-input size "lg" is 44, in the census and the render.
+  check('R1: desktopTargets measures a lg text-input at 44', desktopTargets({ id: 'i', name: 'i', type: 'text-input', size: 'lg' } as SceneNode)[0].h === 44);
+  const lgHtml = (() => { const c = canvasWith([{ id: 'i', name: 'i', type: 'text-input', size: 'lg', value: 'x' }], app); return renderToHtml(c.root, 1440, 900, c); })();
+  check('R1: a lg text-input renders a 44px field at 14px type', /height: 44px; min-height: 44px;[^"]*font-size: 14px/.test(lgHtml));
 }
 
 // ── Verify round 1 fixes ───────────────────────────────────────────────────
