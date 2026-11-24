@@ -24,7 +24,7 @@ function check(name: string, cond: boolean, extra?: string) {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-const browser = await puppeteer.launch({ headless: true, executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || process.env.FRAMESMITH_CHROME_PATH || undefined });
+const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage();
 const focused = (p: Page) => p.evaluate(() => {
   const el = document.activeElement as HTMLElement | null;
