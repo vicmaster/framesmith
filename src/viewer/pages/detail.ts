@@ -7,7 +7,7 @@ import { resolveGenre, type EvaluationResult, type EvaluationIssue } from '../..
 import { isPresetName } from '../../genre.js';
 import { openFeedbackCount } from '../../feedback.js';
 import { withoutRetiredSeeds } from '../../variables.js';
-import { baseCss, COMPONENTS_CSS } from '../styles.js';
+import { baseCss } from '../styles.js';
 import { FAVICON_HTML } from '../components.js';
 import { artboardSize, esc, PHONE } from '../shared.js';
 import { evalFor, gradeFor, scoreColor, sevColor } from '../scores.js';
@@ -312,7 +312,6 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
 ${FAVICON_HTML}
 <style>
   ${baseCss()}
-  ${COMPONENTS_CSS}
   body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   .toolbar { height: 52px; background: var(--sidebar); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; padding: 0 20px; gap: 14px; flex-shrink: 0; }
   /* Grouped clusters of related buttons with subtle vertical dividers

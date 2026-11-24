@@ -82,8 +82,9 @@ function tryListen(httpServer: Server, port: number): Promise<number> {
 }
 
 export async function startViewer(port: number): Promise<number> {
-  // Warm the viewer's own fonts in the background: a cold cache renders the
-  // fallback stack until the next page load picks the faces up.
+  // Warm the viewer's own fonts in the background, once. Pages read the cache
+  // on every render, so a warm-up that lands after the first page shows on the
+  // next load; offline, the fallback stack draws until the viewer restarts.
   for (const family of VIEWER_FONT_FAMILIES) resolveFamily(family).catch(() => {});
 
   const httpServer = createServer(async (req, res) => {

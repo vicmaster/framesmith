@@ -12,7 +12,7 @@ import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } from '../..
 import { createCanvas, archiveCanvas } from '../../src/scene-graph.js';
 import { parseAndExecute } from '../../src/operations.js';
 import { resolveFamily } from '../../src/fonts.js';
-import { startViewer } from '../../src/viewer.js';
+import { startViewer, renderProjectPage } from '../../src/viewer.js';
 import { baseCss, COMPONENTS_CSS } from '../../src/viewer/styles.js';
 import { COMPONENTS_JS, renderDialog, renderMenu, renderTabs, icon } from '../../src/viewer/components.js';
 import { VIEWER_FONT_FAMILIES } from '../../src/viewer/tokens.js';
@@ -118,6 +118,23 @@ await page.keyboard.press('Enter');
 const results = await page.evaluate(() => (window as unknown as { results: boolean[] }).results);
 check('dialog: resolves false on cancel and true on confirm', results.join() === 'false,true', results.join());
 
+// ── FR-A3 offline: an empty font cache renders the fallback stack ────────────
+// env.js points FRAMESMITH_HOME at an empty temp dir, so nothing is cached yet.
+{
+  loadPersistedWorkspaces();
+  ensureDefaultWorkspaceAndProject();
+  const cold = (await renderProjectPage(DEFAULT_PROJECT_ID, 0))!;
+  check('fonts offline: no @font-face is declared with an empty cache', !cold.includes('@font-face'));
+  const coldErrors: string[] = [];
+  const onError = (e: unknown) => coldErrors.push(String(e));
+  page.on('pageerror', onError);
+  await page.setContent(cold, { waitUntil: 'load' });
+  const family = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+  check('fonts offline: the body falls back to system-ui', family.includes('system-ui'), family);
+  check('fonts offline: the page renders with no script error', coldErrors.length === 0, coldErrors.join(' | '));
+  page.off('pageerror', onError);
+}
+
 // ── a live viewer for FR-A5 and FR-A3 ────────────────────────────────────────
 loadPersistedWorkspaces();
 ensureDefaultWorkspaceAndProject();
@@ -151,6 +168,24 @@ check('narrow: the toggle opens the drawer', (await sidebarLeft()) > 0);
 await page.mouse.click(380, 400);
 await new Promise((r) => setTimeout(r, 400));
 check('narrow: the backdrop closes it', (await sidebarLeft()) <= 0);
+// FR-A5: the detail page's inspector stacks at 720px or less, and its toolbar
+// wraps at 640px or less.
+await page.setViewport({ width: 700, height: 900 });
+await page.goto(`${base}/canvas/${canvas.id}`, { waitUntil: 'load' });
+const stacked = await page.evaluate(() => {
+  const inspector = document.getElementById('inspector')!.getBoundingClientRect();
+  const viewport = document.getElementById('viewport')!.getBoundingClientRect();
+  return { inspectorWidth: inspector.width, inspectorTop: inspector.top, viewportBottom: viewport.bottom, page: document.documentElement.clientWidth };
+});
+check('narrow: at 700px the inspector stacks under the preview, full width', stacked.inspectorWidth >= stacked.page - 1 && stacked.inspectorTop >= stacked.viewportBottom - 1, JSON.stringify(stacked));
+const toolbarHeight = async (width: number) => {
+  await page.setViewport({ width, height: 900 });
+  await page.goto(`${base}/canvas/${canvas.id}`, { waitUntil: 'load' });
+  return page.$eval('.toolbar', (t) => t.getBoundingClientRect().height);
+};
+const wide = await toolbarHeight(1440);
+const wrapped = await toolbarHeight(600);
+check('narrow: at 600px the detail toolbar wraps onto more rows', wrapped > wide * 1.5, `${wide} → ${wrapped}`);
 await page.setViewport({ width: 1440, height: 900 });
 
 // FR-A3: with the cache warm, the design system's faces load from the font route.

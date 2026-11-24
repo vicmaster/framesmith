@@ -1380,6 +1380,7 @@ The standalone viewer:
 - **Canvas detail** (`/canvas/:id`) — full rendered design with responsive viewport buttons (Mobile / Tablet / Desktop), Compare mode, Fit toggle, and JSON inspector; a canvas declared `mobile` opens 1:1 in a device frame with a Safe area toggle instead of the viewport, Compare and Fit buttons
 - **Raw HTML** (`/canvas/:id/html`) — the rendered HTML for embedding or inspection
 - **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
+- **Fonts** (`/assets/fonts/<file>`) — the viewer's own faces (Inter, Space Grotesk), served from the font cache (`~/.framesmith/fonts/`)
 - **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
 
 Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and the viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.

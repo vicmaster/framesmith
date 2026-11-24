@@ -22,13 +22,15 @@ const FALLBACK_STACK = "system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
 const BODY_FAMILY = TYPE_ROLES.body.fontFamily ?? 'Inter';
 const DISPLAY_FAMILY = TYPE_ROLES.title.fontFamily ?? BODY_FAMILY;
 
+const FONT_FORMATS: Record<string, string> = { woff2: 'woff2', woff: 'woff', ttf: 'truetype', otf: 'opentype' };
+
 /** @font-face rules for the design system's families, from the font cache
  * only (no network at render). A family that is not cached gets no rule and
  * the fallback stack draws it. Read per render so a cache warmed after start
  * is picked up. */
 export function fontFaceCss(): string {
   return VIEWER_FONT_FAMILIES.flatMap((family) => cachedFontFaces(family).map((face) =>
-    `@font-face { font-family: '${face.family}'; src: url('/assets/fonts/${face.file}') format('woff2'); font-weight: ${face.weight ?? '400'}; font-style: ${face.style ?? 'normal'}; font-display: swap; }`,
+    `@font-face { font-family: '${face.family}'; src: url('/assets/fonts/${face.file}') format('${FONT_FORMATS[face.file.split('.').pop() ?? ''] ?? 'woff2'}'); font-weight: ${face.weight ?? '400'}; font-style: ${face.style ?? 'normal'}; font-display: swap; }`,
   )).join('\n');
 }
 

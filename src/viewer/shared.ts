@@ -12,8 +12,6 @@ export function scriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
-
-
 /** Phase 21 — id → { name, type } for every node, embedded in the detail page
  * so the comment-mode breadcrumb can label ancestors without extra requests. */
 export function buildNodeIndex(root: SceneNode): Record<string, { name?: string; type: string }> {
@@ -25,7 +23,6 @@ export function buildNodeIndex(root: SceneNode): Record<string, { name?: string;
   walk(root);
   return index;
 }
-
 
 /** The root's artboard size, defaulting the way every render path does. */
 export function artboardSize(canvas: Canvas): { w: number; h: number } {
