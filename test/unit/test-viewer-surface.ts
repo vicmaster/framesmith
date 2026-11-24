@@ -96,8 +96,8 @@ check('mobile detail: bottom band 34', phoneDetail.includes('safe-band--bottom" 
 for (const id of ['bp-mobile', 'bp-tablet', 'bp-desktop', 'bp-compare', 'btn-fit', 'compare-grid']) {
   check(`mobile detail: no #${id}`, !phoneDetail.includes(`id="${id}"`));
 }
-check('mobile detail: label names the device', phoneDetail.includes('390 x 844 &middot; iphone-390'));
-check('mobile detail: comment and JSON stay', phoneDetail.includes('id="btn-comment"') && phoneDetail.includes('id="btn-json"'));
+check('mobile detail: label names the device', phoneDetail.includes('390 × 844 · iphone-390'));
+check('mobile detail: comment and JSON stay', phoneDetail.includes('id="btn-comment"') && phoneDetail.includes('data-action="json"'));
 
 // Without root.safeArea (a canvas made mobile by canvas_set_type) the bands
 // come from the profile; with custom insets they follow the root, per side.
@@ -135,10 +135,10 @@ check('preview: overflow stays scrollable to the left edge', /\.viewport \{[^}]*
 // --- FR-F2: web breakpoints from the profile table ---
 const p = DEVICE_PROFILES['iphone-390'];
 const webDetail = await viewer.renderDetailPage(sg.getCanvas(desktop.id)!, 3001);
-check('web detail: Mobile button uses the profile size', webDetail.includes(`setViewport(${p.width}, ${p.height}, 'mobile')`));
+check('web detail: Mobile tab uses the profile size', webDetail.includes(`id="bp-mobile" data-tab="mobile" data-w="${p.width}" data-h="${p.height}"`));
 check('web detail: compare cell uses the profile size', webDetail.includes(`html?w=${p.width}&h=${p.height}`) && webDetail.includes(`--bp-w: ${p.width}; --bp-h: ${p.height};`));
 check('web detail: no device frame', !webDetail.includes('class="device"') && !webDetail.includes('id="btn-safe"'));
-check('web detail: active state follows the pressed button', webDetail.includes("document.getElementById('bp-' + bp).classList.add('active')"));
+check('web detail: the selected tab follows the chosen breakpoint', webDetail.includes("const on = b.id === 'bp-' + bp;") && webDetail.includes("b.setAttribute('aria-selected', on ? 'true' : 'false')"));
 check('web detail: switching clears only breakpoint buttons', !webDetail.includes("querySelectorAll('.btn').forEach(b => b.classList.remove('active'))"));
 
 // A profile-sized canvas with no declared type is still web: framed only on declaration.
