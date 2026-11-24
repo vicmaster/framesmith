@@ -168,7 +168,7 @@ const GALLERY_CSS = `
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-lg); align-items: start; }
   .card { position: relative; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--elevation-flat); transition: border-color 0.15s, box-shadow 0.15s; }
   .card:hover { border-color: var(--border-strong); box-shadow: var(--elevation-raised); }
-  .card:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .card:has(.card-name:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .card[hidden] { display: none; }
   .thumb { width: 100%; overflow: hidden; background: var(--bg-elevated); position: relative; border-bottom: 1px solid var(--border); }
   .thumb iframe { border: none; transform-origin: 0 0; transform: scale(var(--thumb-scale, 0.222)); pointer-events: none; position: absolute; top: 0; left: 0; }
@@ -189,7 +189,7 @@ const GALLERY_CSS = `
   .empty-title { font-size: var(--font-body); font-weight: 600; color: var(--text-primary); }
   .empty-hint { font-size: var(--font-label); max-width: 480px; }
   .empty-hint code { background: var(--neutral-tint); padding: 2px 6px; border-radius: 4px; font-size: var(--font-label); color: var(--text-primary); }
-  @media (max-width: 640px) { .header-side .summary { display: none; } .grid-pane { padding: var(--space-md); } .grid { grid-template-columns: 1fr; } }`;
+  @media (max-width: 640px) { .main-header { height: auto; min-height: 48px; flex-wrap: wrap; row-gap: 2px; padding-top: var(--space-xs); padding-bottom: var(--space-xs); } .filter-bar .tablist { overflow-x: auto; max-width: 100%; } .grid-pane { padding: var(--space-md); } .grid { grid-template-columns: 1fr; } }`;
 
 /** Backwards-compatible alias: renders the default project. The previous
  *  `renderGalleryPage` was a flat all-canvases view; the new model is

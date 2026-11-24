@@ -72,7 +72,7 @@ Run `npx -p framesmith framesmith-viewer` to start the standalone browser viewer
 
 > Above: a canvas in the detail view with the **Quality inspector** on the right — the same `canvas_evaluate` score the agent sees, with per-category bars and the issue list; the tabs along the top switch to the **Design-system** and **Feedback** panels. The toolbar exposes breakpoint previews, Compare, Fit, JSON, a **Comment** toggle for point-and-tell feedback, and lifecycle actions.
 
-**Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a color-coded score badge so weak canvases stand out at a glance. The score matches what your agent sees over MCP (same fast-mode evaluation, relaxed by the canvas's stored genre and applied preset) — it's computed for display only and never written back.
+**Quality panel.** The canvas detail view shows a read-only **quality inspector** on the right: the heuristic `canvas_evaluate` score (0–100), per-category bars, and the issue list — each cliché tell with its `category · tell` badge, severity, and suggestion. Issues that `canvas_autofix` can resolve carry an **auto-fixable** tag, and clicking any issue **highlights its node** in the live preview. Every gallery card also shows a score chip on its thumbnail: neutral at 96 and above, amber at 95 or below (the quality bar), so canvases under the bar stand out at a glance. The project header sums it up as "N canvases · M below the bar". The score matches what your agent sees over MCP (same fast-mode evaluation, relaxed by the canvas's stored genre and applied preset) — it's computed for display only and never written back.
 
 ![framesmith point-and-tell feedback — a newsletter signup card in the detail view with Comment mode active: a popover anchored to the clicked paragraph shows breadcrumb chips (Body · Signup Card · Document · whole page) and a typed note, while the Feedback inspector tab on the right lists one open comment on "Fine Print" and one resolved comment with the agent's reply beneath it.](https://raw.githubusercontent.com/vicmaster/framesmith/master/docs/framesmith-feedback.png?v=1.8)
 
@@ -214,7 +214,7 @@ Clone a screen into a linked **state variant** — the empty / loading / error v
 | `canvasId` | string | The base canvas (a variant id also works — it resolves to the root base; variants never nest) |
 | `state` | string | The state this variant designs — `empty` / `loading` / `error` for data states, `menu-open` / `comment-open` / `confirm-delete` / `toast` for overlay states; free string accepted |
 
-Returns `{ canvasId, name, state, of, idMap }` — `idMap` maps every base node id to its clone, so follow-up edits target the right nodes immediately. One canvas per state per base (a duplicate state errors). The viewer shows a screen and its variants as one card with state chips; `canvas_list` rolls designed states onto the base row.
+Returns `{ canvasId, name, state, of, idMap }` — `idMap` maps every base node id to its clone, so follow-up edits target the right nodes immediately. One canvas per state per base (a duplicate state errors). The viewer's project page shows a screen and its variants as one card, with the designed-state count in the card's meta line ("… · 3 states"); the detail page lists the states as chips; `canvas_list` rolls designed states onto the base row.
 
 ### `canvas_move` / `canvas_archive` / `canvas_unarchive` / `canvas_delete`
 
@@ -1375,13 +1375,13 @@ The standalone viewer:
 ### Routes & API
 
 - **Gallery** (`/`) — browse all canvases as clickable cards with live thumbnails
-- **Project** (`/project/:id`) — same gallery but scoped to one project
+- **Project** (`/project/:id`) — one project's canvases as cards (score chip, type, size, edit date, state count), with a Live / Offline status, a search field (`?q=`) and Web / Mobile / Desktop app tabs (`?type=`) kept in the URL
 - **Archive** (`/archive`) — soft-deleted canvases with restore / permadelete actions
 - **Canvas detail** (`/canvas/:id`) — full rendered design with responsive viewport buttons (Mobile / Tablet / Desktop), Compare mode, Fit toggle, and JSON inspector; a canvas declared `mobile` opens 1:1 in a device frame with a Safe area toggle instead of the viewport, Compare and Fit buttons
 - **Raw HTML** (`/canvas/:id/html`) — the rendered HTML for embedding or inspection
-- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access
+- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`) — programmatic access; each `/api/canvases` row carries the canvas's resolved `type` and `genre`
 - **Fonts** (`/assets/fonts/<file>`) — the viewer's own faces (Inter, Space Grotesk), served from the font cache (`~/.framesmith/fonts/`)
-- **Live auto-refresh** — the viewer polls for changes every 2 seconds, so the browser updates automatically as your agent runs `batch_design`
+- **Live auto-refresh** — the canvas page polls every 2 seconds and the project page every 3, so the browser updates as your agent runs `batch_design`; the project page reloads on any edit, rename, genre, type or state change
 
 Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and the viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 

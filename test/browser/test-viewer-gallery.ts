@@ -7,7 +7,7 @@
 import '../env.js';
 import { createServer } from 'node:net';
 import puppeteer, { type Page } from 'puppeteer';
-import { getCanvas, listCanvases, touchCanvas, addVariant } from '../../src/scene-graph.js';
+import { getCanvas, listCanvases, touchCanvas, addVariant, setCanvasGenre, setCanvasType } from '../../src/scene-graph.js';
 import { parseAndExecute } from '../../src/operations.js';
 import { startViewer } from '../../src/viewer.js';
 import { evalFor } from '../../src/viewer/scores.js';
@@ -112,6 +112,18 @@ addVariant(store.ids.pricing, 'empty');
 await settle();
 check('a new state variant reloads the gallery', await reloaded());
 check('…and the card counts it', (await meta(store.ids.pricing))?.endsWith(' · 1 state') === true, String(await meta(store.ids.pricing)));
+
+// Genre and type live in metadata, outside versionHash; the key carries both.
+await mark();
+setCanvasGenre(store.ids['stat-led'], 'data');
+await settle();
+check('a genre change reloads the gallery', await reloaded());
+
+await mark();
+setCanvasType(store.ids['editorial-longform'], { type: 'mobile' });
+await settle();
+check('a type change reloads the gallery', await reloaded());
+check('…and the card shows the new type', (await meta(store.ids['editorial-longform']))?.startsWith('Mobile · ') === true, String(await meta(store.ids['editorial-longform'])));
 
 await page.setOfflineMode(true);
 await new Promise((r) => setTimeout(r, 3500));
