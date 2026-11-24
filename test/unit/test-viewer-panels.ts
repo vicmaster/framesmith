@@ -39,18 +39,18 @@ I(page, { type:"text", content:"A short honest description.", fontSize:16, color
   const html = await renderDetailPage(c, 3001);
 
   assert(html.includes('class="inspector"'), 'detail page includes the inspector panel');
-  assert(/insp-score-num">\d+/.test(html), 'inspector shows a numeric overall score');
-  assert(html.includes('insp-cat-fill'), 'inspector renders category bars');
-  assert(html.includes('cliche · pure-black-white'), 'a cliché tell renders its category · tell badge');
-  assert(html.includes('cliche · slop-copy'), 'the slop-copy tell renders too');
+  assert(/<span class="score-value">\d+<\/span>/.test(html), 'inspector shows a numeric overall score');
+  assert(html.includes('class="meter-fill"'), 'inspector renders category meters');
+  assert(html.includes('Cliché · pure-black-white'), 'a cliché tell renders as its category · tell');
+  assert(html.includes('Cliché · slop-copy'), 'the slop-copy tell renders too');
   assert(html.includes('auto-fixable'), 'a fixable issue (pure-black ink) shows the auto-fixable tag');
-  assert(html.includes('data-issue-node='), 'issues wire data-issue-node for click-to-highlight');
+  assert(html.includes('class="issue-nodes" data-nodes='), 'issues wire their nodes for "Show n nodes"');
   assert(html.includes('function highlightNode'), 'the highlight script is present');
   assert(html.includes('data-node-id'), 'the highlight script targets data-node-id in the render');
 
   console.log('\n── detail page: design-system pane ──');
   assert(html.includes('data-tab="design"'), 'the Design system tab is present and switchable');
-  assert(html.includes('data-pane="design"'), 'the design-system pane is rendered');
+  assert(html.includes('id="insp-design" role="tabpanel"'), 'the design-system panel is rendered');
   assert(html.includes('ds-chip'), 'colors render as swatches');
   assert(html.includes('>primary<'), 'a color token name is shown');
   assert(html.includes('from canvas'), 'attribution labels the dominant token layer');
@@ -59,7 +59,7 @@ I(page, { type:"text", content:"A short honest description.", fontSize:16, color
   console.log('\n── empty canvas: no panel ──');
   const empty = createCanvas('empty-fixture');
   const emptyHtml = await renderDetailPage(empty, 3001);
-  assert(!emptyHtml.includes('class="inspector"'), 'an empty canvas shows no inspector (nothing to score)');
+  assert(emptyHtml.includes('An empty canvas has no score yet.'), 'an empty canvas says it has no score yet');
 
   console.log('\n── gallery: score badge per card ──');
   // Both fixtures landed in the default project; render it and check the badge.

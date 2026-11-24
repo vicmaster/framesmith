@@ -4,6 +4,7 @@ import type { Canvas } from '../../types.js';
 import { listFeedback } from '../../feedback.js';
 import { evalCacheKey } from '../scores.js';
 import { buildNodeIndex, scriptJson } from '../shared.js';
+import { feedbackKey as feedbackKeyOf } from '../feedback-key.js';
 import { LIGHT } from '../tokens.js';
 import { COMPONENTS_JS, icon } from '../components.js';
 
@@ -26,7 +27,8 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     // Phase 21 — point-and-tell: initial feedback entries + node labels for
     // the breadcrumb. Kept fresh client-side via GET /api/canvas/:id/feedback.
     const FB_INIT = ${scriptJson(listFeedback(canvas, { includeResolved: true }))};
-    const NODE_INDEX = ${scriptJson(buildNodeIndex(canvas.root))};
+    let NODE_INDEX = ${scriptJson(buildNodeIndex(canvas.root))};
+    let feedbackKey = ${scriptJson(feedbackKeyOf(canvas))};
 
     // Auto-refresh polling, and the Live / Offline status (FR-C1).
     const liveEl = document.getElementById('live');
@@ -50,7 +52,12 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
           lastModified = meta.lastModified;
           contentKey = meta.contentKey || contentKey;
           refreshFrames();
+          refreshInspector();
           if (!document.getElementById('json-panel').hidden) loadJson();
+        }
+        if (meta.feedbackKey && meta.feedbackKey !== feedbackKey) {
+          feedbackKey = meta.feedbackKey;
+          loadFeedback();
         }
       } catch {
         setLive(false);
@@ -281,13 +288,15 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         const actions = document.createElement('div');
         actions.className = 'fb-actions';
         const resolveBtn = document.createElement('button');
-        resolveBtn.className = 'fb-btn';
+        resolveBtn.type = 'button';
+        resolveBtn.className = 'btn btn--secondary';
         resolveBtn.textContent = 'Resolve';
         resolveBtn.onclick = (e) => { e.stopPropagation(); fbAction('/feedback/' + entry.id + '/resolve', 'POST'); };
         const delBtn = document.createElement('button');
-        delBtn.className = 'fb-btn fb-btn--danger';
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn--ghost';
         delBtn.textContent = 'Delete';
-        delBtn.onclick = (e) => { e.stopPropagation(); if (confirm('Delete this comment?')) fbAction('/feedback/' + entry.id, 'DELETE'); };
+        delBtn.onclick = async (e) => { e.stopPropagation(); if (await fsDialog.open('fb-delete-dialog')) fbAction('/feedback/' + entry.id, 'DELETE'); };
         actions.appendChild(resolveBtn);
         actions.appendChild(delBtn);
         card.appendChild(actions);
@@ -306,12 +315,15 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
 
     function renderFeedbackPane(entries) {
       const pane = document.getElementById('fb-pane');
-      const badge = document.getElementById('fb-badge');
       if (!pane) return;
       pane.replaceChildren();
       const open = entries.filter((e) => !e.resolvedAt);
       const done = entries.filter((e) => e.resolvedAt);
-      if (badge) { badge.textContent = String(open.length); badge.hidden = open.length === 0; }
+      // The open count on the Feedback tab and the Comment button.
+      const tabCount = document.querySelector('#tab-feedback .tab-count');
+      if (tabCount) tabCount.textContent = String(open.length);
+      const commentCount = document.getElementById('comment-count');
+      if (commentCount) { commentCount.textContent = String(open.length); commentCount.hidden = open.length === 0; }
       if (!open.length && !done.length) {
         const empty = document.createElement('div');
         empty.className = 'fb-empty';
@@ -381,7 +393,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         if (!chain.includes(id)) chain.push(id);
         el = el.parentElement && el.parentElement.closest('[data-node-id]');
       }
-      openPopover(chain, e);
+      openPopover(chain);
     }
 
     function hookFrame() {
@@ -392,97 +404,71 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       setFrameCommentAffordance(commentMode);
     }
 
-    function toggleComment() {
-      commentMode = !commentMode;
-      document.getElementById('btn-comment').classList.toggle('active', commentMode);
-      document.getElementById('btn-comment').setAttribute('aria-pressed', commentMode ? 'true' : 'false');
-      if (!commentMode) closePopover();
+    // FR-D3 — Comment opens the popover under the button and turns comment
+    // mode on; clicking an element in the preview pins the comment to it.
+    const pop = document.getElementById('comment-pop');
+    const chipsEl = document.getElementById('fb-chips');
+    const textEl = document.getElementById('comment-text');
+    let popoverSelected = null; // nodeId, or null for the whole page
+
+    function setCommentMode(on) {
+      commentMode = on;
+      const btn = document.getElementById('btn-comment');
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+      pop.hidden = !on;
+      if (on) { textEl.focus(); } else { setAnchor([]); textEl.value = ''; }
       hookFrame();
     }
+    function toggleComment() { setCommentMode(!commentMode); }
+    function closePopover() { if (commentMode) setCommentMode(false); }
 
-    let popoverEl = null;
-    let popoverSelected = null; // nodeId or null = whole page
-
-    function closePopover() {
-      if (popoverEl) { popoverEl.remove(); popoverEl = null; }
-      highlightNode(null, false);
-    }
-
-    function openPopover(chain, clickEvent) {
-      closePopover();
+    /** Fill the anchor chips from a clicked element's chain (nearest first). */
+    function setAnchor(chain) {
+      chipsEl.replaceChildren();
       popoverSelected = chain.length ? chain[0] : null;
-      const pop = document.createElement('div');
-      pop.className = 'fb-popover';
-      const chips = document.createElement('div');
-      chips.className = 'fb-chips';
-      const allChips = [];
+      chipsEl.hidden = chain.length === 0;
+      highlightNode(popoverSelected, !!popoverSelected);
+      if (!chain.length) return;
+      const chips = [];
       const makeChip = (label, nodeId, title) => {
-        const chip = document.createElement('span');
+        const chip = document.createElement('button');
+        chip.type = 'button';
         chip.className = 'fb-chip';
         chip.textContent = label;
-        if (title) chip.title = title;
+        chip.title = title;
+        chip.setAttribute('aria-pressed', nodeId === popoverSelected ? 'true' : 'false');
         chip.onclick = () => {
           popoverSelected = nodeId;
-          allChips.forEach((c) => c.classList.remove('sel'));
-          chip.classList.add('sel');
+          chips.forEach((c) => c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'));
           highlightNode(nodeId, !!nodeId);
         };
-        allChips.push(chip);
-        chips.appendChild(chip);
-        return chip;
+        chips.push(chip);
+        chipsEl.appendChild(chip);
       };
-      chain.slice(0, 5).forEach((nodeId) => makeChip(nodeLabel(nodeId), nodeId, 'Anchor the comment to this element'));
-      makeChip('whole page', null, 'A general note not tied to one element');
-      const selIdx = chain.length ? 0 : allChips.length - 1;
-      allChips[selIdx].classList.add('sel');
-      if (popoverSelected) highlightNode(popoverSelected, true);
-      pop.appendChild(chips);
-      const ta = document.createElement('textarea');
-      ta.placeholder = 'Tell the agent what to change…';
-      pop.appendChild(ta);
-      const actions = document.createElement('div');
-      actions.className = 'fb-pop-actions';
-      const cancel = document.createElement('button');
-      cancel.className = 'fb-btn';
-      cancel.textContent = 'Cancel';
-      cancel.onclick = closePopover;
-      const save = document.createElement('button');
-      save.className = 'fb-btn';
-      save.textContent = 'Save comment';
-      save.onclick = async () => {
-        const comment = ta.value.trim();
-        if (!comment) { ta.focus(); return; }
-        try {
-          const res = await fetch('/api/canvas/' + canvasId + '/feedback', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(popoverSelected ? { nodeId: popoverSelected, comment } : { comment }),
-          });
-          if (!res.ok) throw new Error('Request failed: ' + res.status);
-          closePopover();
-          loadFeedback();
-          const fbTab = document.querySelector('.insp-tab[data-tab="feedback"]');
-          if (fbTab) fbTab.click();
-        } catch (err) { alert('Could not save comment: ' + err.message); }
-      };
-      actions.appendChild(cancel);
-      actions.appendChild(save);
-      pop.appendChild(actions);
-      document.body.appendChild(pop);
-      popoverEl = pop;
-      // Position near the click, mapping iframe coords → page coords (handles
-      // Fit-mode scaling); clamp so the popover stays on-screen.
-      const frame = document.getElementById('frame');
-      const rect = frame.getBoundingClientRect();
-      const win = frame.contentWindow;
-      const sx = win && win.innerWidth ? rect.width / win.innerWidth : 1;
-      const sy = win && win.innerHeight ? rect.height / win.innerHeight : 1;
-      const px = rect.left + clickEvent.clientX * sx;
-      const py = rect.top + clickEvent.clientY * sy;
-      pop.style.left = Math.max(8, Math.min(px, window.innerWidth - 316)) + 'px';
-      pop.style.top = Math.max(60, Math.min(py + 8, window.innerHeight - pop.offsetHeight - 8)) + 'px';
-      ta.focus();
+      chain.slice(0, 5).forEach((nodeId) => makeChip(nodeLabel(nodeId), nodeId, 'Pin the comment to this element'));
+      makeChip('whole page', null, 'A note about the whole page');
     }
+    function openPopover(chain) { if (!commentMode) setCommentMode(true); setAnchor(chain); textEl.focus(); }
+
+    document.getElementById('comment-cancel').addEventListener('click', closePopover);
+    pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closePopover(); document.getElementById('btn-comment').focus(); } });
+    document.getElementById('comment-save').addEventListener('click', async () => {
+      const comment = textEl.value.trim();
+      if (!comment) { textEl.focus(); return; }
+      try {
+        const res = await fetch('/api/canvas/' + canvasId + '/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(popoverSelected ? { nodeId: popoverSelected, comment } : { comment }),
+        });
+        if (!res.ok) throw new Error('Request failed: ' + res.status);
+        closePopover();
+        loadFeedback();
+        document.getElementById('tab-feedback').click();
+      } catch (err) { alert('Could not save comment: ' + err.message); }
+    });
 
     // An Escape the menu, dialog or JSON panel already handled keeps the draft.
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) closePopover(); });
@@ -493,7 +479,8 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     // Phase 19 Slice A — click an issue to outline its node in the preview.
     // The render carries data-node-id on every element; iframes are same-origin
     // so we toggle an outline directly in their documents.
-    function highlightNode(nodeId, on) {
+    function highlightNode(nodeId, on) { highlightNodes(on && nodeId ? [nodeId] : []); }
+    function highlightNodes(nodeIds) {
       const frames = [];
       const main = document.getElementById('frame');
       if (main && getComputedStyle(main).display !== 'none') frames.push(main);
@@ -505,33 +492,42 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         doc.querySelectorAll('[data-fs-hl]').forEach((n) => {
           n.style.outline = ''; n.style.outlineOffset = ''; n.removeAttribute('data-fs-hl');
         });
-        if (on && nodeId) {
+        let first = null;
+        for (const nodeId of nodeIds) {
           const t = doc.querySelector('[data-node-id="' + (window.CSS && CSS.escape ? CSS.escape(nodeId) : nodeId) + '"]');
-          if (t) {
-            t.style.outline = '2px solid ' + HIGHLIGHT; t.style.outlineOffset = '1px';
-            t.setAttribute('data-fs-hl', '1');
-            t.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          }
+          if (!t) continue;
+          t.style.outline = '2px solid ' + HIGHLIGHT; t.style.outlineOffset = '1px';
+          t.setAttribute('data-fs-hl', '1');
+          first = first || t;
         }
+        if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     }
-    document.querySelectorAll('.insp-issue[data-issue-node]').forEach((el) => {
-      el.addEventListener('click', () => {
-        const wasSel = el.classList.contains('sel');
-        document.querySelectorAll('.insp-issue.sel').forEach((o) => o.classList.remove('sel'));
-        if (wasSel) { highlightNode(null, false); return; }
-        el.classList.add('sel');
-        highlightNode(el.getAttribute('data-issue-node'), true);
-      });
+    // FR-D1 — "Show n nodes" outlines an issue's nodes; delegated, so it works
+    // after a live swap of the Quality panel.
+    document.getElementById('inspector').addEventListener('click', (e) => {
+      const btn = e.target.closest && e.target.closest('.issue-nodes');
+      if (!btn) return;
+      const on = btn.getAttribute('aria-pressed') !== 'true';
+      document.querySelectorAll('.issue-nodes[aria-pressed="true"]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      highlightNodes(on ? JSON.parse(btn.dataset.nodes) : []);
     });
 
-    // Phase 19 Slice B — inspector tab switching (Quality / Design system).
-    document.querySelectorAll('.insp-tab[data-tab]').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const name = tab.getAttribute('data-tab');
-        document.querySelectorAll('.insp-tab[data-tab]').forEach((t) => t.classList.toggle('active', t === tab));
-        document.querySelectorAll('.insp-tabpane').forEach((p) => { p.hidden = p.getAttribute('data-pane') !== name; });
-      });
-    });
+    // FR-D4 — swap the Quality and Design system panels (and the node index)
+    // when the canvas changes, keeping the scroll position.
+    async function refreshInspector() {
+      try {
+        const res = await fetch('/canvas/' + canvasId + '/inspector', { cache: 'no-store' });
+        if (!res.ok) return;
+        const parts = await res.json();
+        const inspector = document.getElementById('inspector');
+        const top = inspector.scrollTop;
+        document.getElementById('insp-quality').innerHTML = parts.quality;
+        document.getElementById('insp-design').innerHTML = parts.design;
+        NODE_INDEX = parts.nodeIndex;
+        inspector.scrollTop = top;
+      } catch { /* the panels keep their last state */ }
+    }
 `;
 }

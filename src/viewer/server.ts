@@ -14,7 +14,8 @@ import { cachedFontFile, resolveFamily } from '../fonts.js';
 import { evalCacheKey } from './scores.js';
 import { renderProjectPage } from './pages/project.js';
 import { renderArchivePage } from './pages/archive.js';
-import { renderDetailPage } from './pages/detail.js';
+import { renderDetailPage, renderInspectorParts } from './pages/detail.js';
+import { feedbackKey } from './feedback-key.js';
 import { VIEWER_FONT_FAMILIES } from './tokens.js';
 
 let runningPort: number | null = null;
@@ -135,6 +136,8 @@ export async function startViewer(port: number): Promise<number> {
           height: canvas.root.height,
           type: resolveSurface(canvas).type,
           safeArea: canvas.root.safeArea,
+          // Phase 33 FR-D4 — changes when a comment is added, resolved or deleted.
+          feedbackKey: feedbackKey(canvas),
         }));
         return;
       }
@@ -160,6 +163,17 @@ export async function startViewer(port: number): Promise<number> {
       }
 
       // Canvas JSON
+      // Phase 33 FR-D4 — the inspector's Quality and Design system panels and
+      // the node index, for the detail page's live swap.
+      const inspectorMatch = path.match(/^\/canvas\/([^/]+)\/inspector$/);
+      if (inspectorMatch) {
+        const canvas = getCanvas(inspectorMatch[1]);
+        if (!canvas) { res.writeHead(404); res.end('Not found'); return; }
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(await renderInspectorParts(canvas)));
+        return;
+      }
+
       const jsonMatch = path.match(/^\/canvas\/([^/]+)\/json$/);
       if (jsonMatch) {
         const canvas = getCanvas(jsonMatch[1]);

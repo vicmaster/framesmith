@@ -149,6 +149,14 @@ Its design system is the project's: seed `#B45309`, personality `technical`, 14p
 
 **Slice D — inspector and comments.** The Quality tab (FR-D1), the restyled Design system and Feedback tabs and the removed Import tab (FR-D2), the comment popover (FR-D3), and the live inspector with its route and `feedbackKey` (FR-D4). Tests rewritten: `test-viewer-panels.ts` (inspector selectors), `test-viewer-feedback.ts` (`data-tab="feedback"`, `btn-comment`, `FB_INIT`), `test-eval-cache-key.ts:104` (it reads the provenance chip from the toolbar; the chip moves into the Quality tab). New: `test/browser/test-viewer-inspector.ts`, with an MCP-driven check of FR-D4 in `test/e2e/`.
 
+**Slice D — as built.**
+- **D1: the inspector is always there.** An empty canvas used to get no inspector; it now gets one whose Quality tab says it has no score yet, so the Feedback tab is reachable on an empty canvas too.
+- **D2: `/canvas/:id/inspector` returns JSON**, `{ quality, design, nodeIndex }`: the two server-rendered panels and the node index. The Feedback list stays client-rendered from `/api/canvas/:id/feedback`, so comment text never passes through `innerHTML`. `feedbackKey` lives in `src/viewer/feedback-key.ts`, shared by the page, its script and `/meta`.
+- **D3: the popover is the comment mode.** It is static markup under the Comment button; opening it turns comment mode on, a click in the preview fills its anchor chips without moving it, and Cancel, Escape or a save closes it and leaves comment mode. Deleting a comment confirms in the shared dialog.
+- **D4: the critique row says when the rubric asked for revision** ("Vision critique 82/100 · needs revision"), as the old toolbar chip did.
+- **D5: the 80/60 helpers are gone.** `gradeFor`, `scoreColor` and `sevColor` are deleted (slice B's B5).
+- **D6: the end-to-end check pins the viewer port.** Left to itself the MCP server reuses any viewer on 3001–3020, which would be the user's own, so `test/e2e/test-viewer-live-mcp.ts` sets `FRAMESMITH_VIEWER_PORT` to a free port.
+
 **Slice E — archive, docs, acceptance.** `pages/archive.ts` (FR-E1, FR-E2), docs and screenshots (FR-E3), and the side-by-side acceptance (FR-E4). Tests rewritten: `test-archive-view.ts` (archive page half). `test/manual/test-viewer.ts` and `test-viewer-navbar.ts` follow the new markup. New: `test/browser/test-viewer-archive.ts`.
 
 Tests that read data, not markup, are untouched: `test-viewer-perf.ts`, `test-dual-theme.ts`, `test-viewer-resolves-workspace-tokens.ts`, `test-skeleton.ts`, `test-viewer-repo-aggregation.ts`, `test-viewer-repo-lifecycle.ts`, `test-viewer-watch.ts`. Each slice PR states that `test-viewer-perf.ts` still holds its 4x-store bound, since the gallery now renders more per card.
