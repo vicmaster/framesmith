@@ -1,0 +1,1243 @@
+{
+  "components": {},
+  "createdAt": "2026-11-24T14:06:51.684Z",
+  "id": "qRWWv0R6i5",
+  "lastModified": "2026-11-24T14:08:17.789Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-11-24T14:01:46.956Z",
+      "axes": {
+        "alignment": "split",
+        "density": "dense",
+        "heroTreatment": "split",
+        "rhythm": "asymmetric"
+      },
+      "structure": "editor-inspector-app"
+    },
+    "surface": {
+      "device": "window-1440",
+      "type": "desktop-app"
+    },
+    "variant": {
+      "at": "2026-11-24T14:06:51.685Z",
+      "of": "rbSmuMnACt",
+      "state": "confirm-delete"
+    }
+  },
+  "name": "Canvas detail · confirm-delete",
+  "projectId": "3tm2S1pJhP",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "alignItems": "center",
+            "borderBottom": {
+              "color": "$border",
+              "width": 1
+            },
+            "children": [
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "icon": "arrow-left",
+                        "id": "4xkqfBwCoB",
+                        "label": "Pattern library",
+                        "type": "link"
+                      }
+                    ],
+                    "id": "QQ1eRmVZxV",
+                    "minWidth": 0,
+                    "name": "Parent",
+                    "type": "frame"
+                  },
+                  {
+                    "icon": "chevron-right",
+                    "iconColor": "$text-secondary",
+                    "iconSize": 14,
+                    "id": "c82r8VUiUF",
+                    "type": "icon"
+                  },
+                  {
+                    "color": "$text-primary",
+                    "content": "dashboard",
+                    "fontSize": "$label",
+                    "fontWeight": 600,
+                    "id": "pcc7p-jsjo",
+                    "minWidth": 0,
+                    "textOverflow": "ellipsis",
+                    "title": "dashboard",
+                    "type": "text"
+                  },
+                  {
+                    "color": "$text-secondary",
+                    "content": "1440 × 900",
+                    "fontSize": "$caption",
+                    "id": "8t961Ao7E4",
+                    "maxWidth": 120,
+                    "minWidth": 0,
+                    "name": "Canvas size",
+                    "textOverflow": "ellipsis",
+                    "title": "1440 × 900",
+                    "type": "text"
+                  }
+                ],
+                "gap": "$space-xs",
+                "id": "-KlJbm4yuW",
+                "layout": "horizontal",
+                "minWidth": 0,
+                "name": "Breadcrumb",
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "id": "oYdq2XDW6_",
+                    "items": [
+                      {
+                        "label": "Mobile"
+                      },
+                      {
+                        "label": "Tablet"
+                      },
+                      {
+                        "active": true,
+                        "label": "Desktop"
+                      },
+                      {
+                        "label": "Compare"
+                      }
+                    ],
+                    "minWidth": 0,
+                    "name": "Breakpoint tabs",
+                    "size": "sm",
+                    "type": "tabs",
+                    "variant": "contained",
+                    "width": "100%"
+                  }
+                ],
+                "id": "0XuiSwlo-o",
+                "maxWidth": 320,
+                "minWidth": 320,
+                "name": "Breakpoints",
+                "type": "frame",
+                "width": 320
+              },
+              {
+                "alignItems": "center",
+                "children": [
+                  {
+                    "icon": "message-square",
+                    "id": "TC0_f_Y28F",
+                    "label": "Comment",
+                    "maxWidth": 160,
+                    "minWidth": 0,
+                    "name": "Comment button",
+                    "size": "sm",
+                    "type": "button",
+                    "variant": "secondary"
+                  },
+                  {
+                    "ariaLabel": "More actions",
+                    "icon": "ellipsis",
+                    "id": "-aYomSz7D8",
+                    "name": "More actions",
+                    "size": "sm",
+                    "type": "button",
+                    "variant": "ghost"
+                  }
+                ],
+                "gap": "$space-xs",
+                "id": "uHg9KlWJlc",
+                "justifyContent": "end",
+                "layout": "horizontal",
+                "minWidth": "max-content",
+                "name": "Actions",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "gap": "$space-md",
+            "height": 48,
+            "id": "h0DkQLEWP9",
+            "justifyContent": "space-between",
+            "layout": "horizontal",
+            "minHeight": 48,
+            "name": "Header",
+            "padding": [
+              0,
+              "$space-md"
+            ],
+            "type": "frame",
+            "width": "100%"
+          },
+          {
+            "children": [
+              {
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "ariaLabel": "Zoom in",
+                        "color": "$text-secondary",
+                        "icon": "zoom-in",
+                        "id": "F4mUp7DB7H",
+                        "size": "xs",
+                        "type": "button",
+                        "variant": "ghost"
+                      },
+                      {
+                        "ariaLabel": "Zoom out",
+                        "color": "$text-secondary",
+                        "icon": "zoom-out",
+                        "id": "86p6TuhZXp",
+                        "size": "xs",
+                        "type": "button",
+                        "variant": "ghost"
+                      },
+                      {
+                        "ariaLabel": "Fit to window",
+                        "color": "$text-secondary",
+                        "icon": "scan",
+                        "id": "8Be5lTl5RS",
+                        "name": "Fit",
+                        "size": "xs",
+                        "type": "button",
+                        "variant": "ghost"
+                      }
+                    ],
+                    "cornerRadius": "$radius-sm",
+                    "fill": "$bg-surface",
+                    "gap": "$space-2xs",
+                    "id": "mygb4MV-6F",
+                    "layout": "horizontal",
+                    "name": "Tools",
+                    "padding": "$space-2xs",
+                    "stroke": "$border",
+                    "strokeWidth": 1,
+                    "type": "frame",
+                    "width": "fit-content"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "cornerRadius": "$radius-sm",
+                        "height": 600,
+                        "id": "yA7XvK9mV5",
+                        "maxWidth": "100%",
+                        "name": "Canvas preview",
+                        "objectFit": "contain",
+                        "shadow": "$elevation.floating",
+                        "src": "asset:ba13d2cf176e0c0b.jpg",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "image",
+                        "width": 960
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Web · 1440 × 900 · No state variants yet",
+                        "fontSize": "$label",
+                        "id": "zGCMc0d3bi",
+                        "maxWidth": "100%",
+                        "name": "Preview caption",
+                        "textOverflow": "ellipsis",
+                        "title": "Web · 1440 × 900 · No state variants yet",
+                        "type": "text"
+                      }
+                    ],
+                    "cornerRadius": "$radius-md",
+                    "fill": "transparent",
+                    "gap": "$space-sm",
+                    "height": "100%",
+                    "id": "6tfEHfRVDL",
+                    "justifyContent": "center",
+                    "layout": "vertical",
+                    "name": "Work surface",
+                    "stroke": null,
+                    "strokeWidth": 0,
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "gap": "$space-sm",
+                "id": "0NpV3gxdpC",
+                "layout": "vertical",
+                "minHeight": 0,
+                "minWidth": 0,
+                "name": "Work area",
+                "overflow": "auto",
+                "padding": "$space-lg",
+                "type": "frame",
+                "width": "70%"
+              },
+              {
+                "id": "M8twGoE65z",
+                "orientation": "vertical",
+                "type": "divider"
+              },
+              {
+                "children": [
+                  {
+                    "id": "pe51EGM_eR",
+                    "items": [
+                      {
+                        "active": true,
+                        "label": "Quality"
+                      },
+                      {
+                        "label": "Design system"
+                      },
+                      {
+                        "count": 2,
+                        "label": "Feedback"
+                      }
+                    ],
+                    "minWidth": 0,
+                    "name": "Inspector tabs",
+                    "size": "sm",
+                    "type": "tabs",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "alignItems": "center",
+                        "children": [
+                          {
+                            "alignItems": "baseline",
+                            "children": [
+                              {
+                                "color": "$text-primary",
+                                "content": "95",
+                                "fontSize": "$display",
+                                "fontWeight": 600,
+                                "id": "T2K2i1d077",
+                                "lineHeight": 1,
+                                "name": "Score value",
+                                "tabularNums": true,
+                                "type": "text"
+                              },
+                              {
+                                "color": "$text-secondary",
+                                "content": "/ 100",
+                                "fontSize": "$label",
+                                "id": "za7ZD_OyfP",
+                                "name": "Score scale",
+                                "type": "text"
+                              }
+                            ],
+                            "gap": "$space-2xs",
+                            "id": "MmPGSnd6Mv",
+                            "layout": "horizontal",
+                            "name": "Figure",
+                            "type": "frame"
+                          },
+                          {
+                            "color": "$warning",
+                            "content": "Below the bar",
+                            "cornerRadius": "$radius-sm",
+                            "fill": "$warning-tint",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "XAQzGc3KwF",
+                            "maxWidth": 160,
+                            "minWidth": 0,
+                            "name": "Verdict",
+                            "padding": [
+                              2,
+                              8
+                            ],
+                            "textOverflow": "ellipsis",
+                            "title": "Below the bar",
+                            "type": "text"
+                          }
+                        ],
+                        "gap": "$space-sm",
+                        "id": "QU01A64qsN",
+                        "justifyContent": "space-between",
+                        "layout": "horizontal",
+                        "name": "Score line",
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Coverage holds it back. The data table has no empty or loading state yet.",
+                        "fontSize": "$label",
+                        "id": "Fgyc6prRzG",
+                        "minWidth": 0,
+                        "name": "Score reason",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$space-xs",
+                    "id": "fu9sUVPwYp",
+                    "layout": "vertical",
+                    "name": "Score",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$warning",
+                                    "height": 4,
+                                    "id": "22rWf3qbej",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "30%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "097bD0Q4eR",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$warning",
+                                "content": "30",
+                                "fontSize": "$label",
+                                "fontWeight": 600,
+                                "id": "q2I2cyUpYf",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "3wABKBLD1H",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "vehW68SbUD",
+                        "label": "Coverage",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "ZIwBZn3grM",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "h5oGAJ4tN1",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "WdAEabOCuD",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "BQBUBlUa_v",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "tD399660m0",
+                        "label": "Spacing",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "tKT-UK7FfJ",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "0G5d_cAb5t",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "Lo4Ht9m3lC",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "vGCFMZjEAr",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "ykTkuSHT4I",
+                        "label": "Color",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "NyWQREOPMn",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "_PfQFVlZ59",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "xx7wlyh5ws",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "gyo7P8UfOX",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "XiaeqCW0Ad",
+                        "label": "Typography",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "QPyYttWWIq",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "7kwo9Pg6YC",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "8GZ_VOmTAs",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "Az2HhNeEvS",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "TieE34SwIT",
+                        "label": "Structure",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "6iEMnXdqBW",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "rgRzVorQaX",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "FGUBcu8wON",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "a5e-iMgpBq",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "07V-JBV99q",
+                        "label": "Consistency",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "cCa8XiOm0A",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "AbzlLWvfZc",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "YVhkxXcWcT",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "MjxXBLm2uR",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "4j7KmghV3o",
+                        "label": "Usability",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      },
+                      {
+                        "children": [
+                          {
+                            "alignItems": "center",
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "cornerRadius": "$radius-sm",
+                                    "fill": "$border-strong",
+                                    "height": 4,
+                                    "id": "vdK8AGlI3O",
+                                    "name": "Meter fill",
+                                    "type": "rectangle",
+                                    "width": "100%"
+                                  }
+                                ],
+                                "cornerRadius": "$radius-sm",
+                                "fill": "$neutral-tint",
+                                "height": 4,
+                                "id": "rHfKXZeTRo",
+                                "name": "Meter",
+                                "type": "frame",
+                                "width": "100%"
+                              },
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "fontWeight": 500,
+                                "id": "wmyc4mim7i",
+                                "minWidth": 28,
+                                "name": "Category score",
+                                "tabularNums": true,
+                                "textAlign": "right",
+                                "type": "text",
+                                "width": 28
+                              }
+                            ],
+                            "gap": "$space-sm",
+                            "id": "Cn3cH5fHI9",
+                            "layout": "horizontal",
+                            "name": "Category value",
+                            "type": "frame",
+                            "width": "100%"
+                          }
+                        ],
+                        "id": "5ZthP941w0",
+                        "label": "Cliché",
+                        "labelWidth": 96,
+                        "name": "Category",
+                        "type": "property-row"
+                      }
+                    ],
+                    "gap": 0,
+                    "id": "2WkoA-Ps59",
+                    "layout": "vertical",
+                    "name": "Categories",
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "alignItems": "baseline",
+                    "borderTop": {
+                      "color": "$border",
+                      "width": 1
+                    },
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "Issues",
+                        "fontSize": "$body",
+                        "fontWeight": 600,
+                        "id": "fcfc1zkZYI",
+                        "name": "Issues title",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "18 findings in 7 groups",
+                        "fontSize": "$caption",
+                        "id": "1jpQ_UrLfo",
+                        "minWidth": 0,
+                        "name": "Issues count",
+                        "textOverflow": "ellipsis",
+                        "title": "18 findings in 7 groups",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$space-sm",
+                    "id": "BwfSLNzQkn",
+                    "justifyContent": "space-between",
+                    "layout": "horizontal",
+                    "name": "Issues header",
+                    "padding": [
+                      "$space-sm",
+                      0,
+                      0,
+                      0
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "children": [
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$warning",
+                            "content": "Coverage · warning",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "ikDJHTkE8I",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "The data table has no empty state variant.",
+                            "fontSize": "$label",
+                            "id": "VExnZDBQxq",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "nbU3raxt5t",
+                            "label": "Show 1 node",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "p5zRnfmZOC",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$warning",
+                            "content": "Coverage · warning",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "MC7uvdX8uS",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "The data table has no loading state variant.",
+                            "fontSize": "$label",
+                            "id": "jsW_qn3eH7",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "mPDd90eEMg",
+                            "label": "Show 1 node",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "zRTtIWSN69",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Typography · auto-fixable",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "rA5LiDyWdR",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "Display text at 28px with default tracking reads loose. Tighten it to -0.5.",
+                            "fontSize": "$label",
+                            "id": "tFp9uyB3gs",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "7VndZqi82A",
+                            "label": "Show 4 nodes",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "VR-AVXir3_",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Consistency · auto-fixable",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "AhYZ4aFIIG",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "Corner radius 8 equals the $md token. Reference the token instead.",
+                            "fontSize": "$label",
+                            "id": "Xd-iYsevWH",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "Pbj6PDvS-F",
+                            "label": "Show 5 nodes",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "gEO96dSTqi",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Consistency · auto-fixable",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "Ak8X-chmSb",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "Corner radius 16 equals the $lg token. Reference the token instead.",
+                            "fontSize": "$label",
+                            "id": "tAQH106f6E",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "anGIuey3gy",
+                            "label": "Show 5 nodes",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "QxBFsVO5la",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Structure · info",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "A3pl_lhohL",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "No component instances in 43 nodes. Promote a repeated subtree.",
+                            "fontSize": "$label",
+                            "id": "FsuPZ96ZxR",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "2VXy0QSuRa",
+                            "label": "Show 1 node",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "3eJBTkOTZz",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "borderBottom": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Color · info",
+                            "fontSize": "$caption",
+                            "fontWeight": 600,
+                            "id": "x95lJG7ooZ",
+                            "name": "Issue kind",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$text-primary",
+                            "content": "Weak perceptual contrast on the primary link (APCA advisory).",
+                            "fontSize": "$label",
+                            "id": "pAizPEtegt",
+                            "name": "Issue message",
+                            "type": "text"
+                          },
+                          {
+                            "fontSize": "$label",
+                            "id": "RciiPrPgUD",
+                            "label": "Show 1 node",
+                            "name": "Issue nodes",
+                            "type": "link"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "le0PMQVq5q",
+                        "layout": "vertical",
+                        "name": "Issue",
+                        "padding": [
+                          "$space-sm",
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "gap": 0,
+                    "id": "24J10DdlVg",
+                    "layout": "vertical",
+                    "name": "Issues",
+                    "padding": [
+                      0,
+                      0,
+                      0,
+                      0
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "fill": "$bg-surface",
+                "gap": "$space-lg",
+                "id": "ofW7lr8TyD",
+                "layout": "vertical",
+                "minHeight": 0,
+                "minWidth": 280,
+                "name": "Inspector",
+                "overflow": "auto",
+                "padding": [
+                  "$space-sm",
+                  "$space-md",
+                  "$space-md",
+                  "$space-md"
+                ],
+                "type": "frame",
+                "width": "30%"
+              }
+            ],
+            "height": "100%",
+            "id": "WVejghY3R6",
+            "layout": "horizontal",
+            "minHeight": 0,
+            "name": "Panes",
+            "type": "frame",
+            "width": "100%"
+          },
+          {
+            "actions": [
+              {
+                "label": "Cancel"
+              },
+              {
+                "label": "Delete canvas",
+                "variant": "destructive"
+              }
+            ],
+            "children": [
+              {
+                "color": "$text-primary",
+                "content": "The canvas is deleted for good and cannot be restored. To hide it from the gallery and keep it, archive it instead.",
+                "fontSize": "$label",
+                "type": "text"
+              }
+            ],
+            "id": "JpteNVoQsQ",
+            "name": "Delete dialog",
+            "size": "sm",
+            "title": "Delete dashboard?",
+            "type": "modal"
+          }
+        ],
+        "fill": "$bg-primary",
+        "height": "100%",
+        "id": "hWPADgfosw",
+        "layout": "vertical",
+        "name": "Shell",
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "sJ9RUabCVt",
+    "name": "Document",
+    "overflow": "hidden",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {}
+}

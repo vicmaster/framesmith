@@ -1,0 +1,471 @@
+{
+  "components": {},
+  "createdAt": "2026-11-24T14:04:04.177Z",
+  "id": "0LhfROW1xb",
+  "lastModified": "2026-11-24T14:08:17.802Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-11-24T14:04:05.688Z",
+      "axes": {
+        "alignment": "split",
+        "density": "dense",
+        "heroTreatment": "split",
+        "rhythm": "asymmetric"
+      },
+      "structure": "split-workbench-app"
+    },
+    "surface": {
+      "device": "window-1440",
+      "type": "desktop-app"
+    }
+  },
+  "name": "Archive",
+  "projectId": "3tm2S1pJhP",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "$text-primary",
+                "content": "framesmith",
+                "fontSize": "$body",
+                "fontWeight": 600,
+                "id": "swa-sidebar-brand",
+                "padding": [
+                  "$space-2xs",
+                  "$space-xs"
+                ],
+                "type": "text"
+              },
+              {
+                "color": "$text-secondary",
+                "content": "Personal",
+                "fontSize": "$caption",
+                "fontWeight": 500,
+                "id": "ZUBMIegKl9",
+                "name": "Workspace label",
+                "padding": [
+                  0,
+                  "$space-xs"
+                ],
+                "type": "text"
+              },
+              {
+                "children": [
+                  {
+                    "active": false,
+                    "count": 1,
+                    "dotColor": "$chart-1",
+                    "icon": null,
+                    "id": "swa-sidebar-nav-1",
+                    "label": "Design system",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 5,
+                    "dotColor": "$chart-2",
+                    "icon": null,
+                    "id": "swa-sidebar-nav-2",
+                    "label": "UI",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 2,
+                    "dotColor": "$chart-3",
+                    "icon": null,
+                    "id": "swa-sidebar-nav-3",
+                    "label": "Releases",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 11,
+                    "dotColor": "$chart-4",
+                    "icon": null,
+                    "id": "swa-sidebar-nav-4",
+                    "label": "Pattern library",
+                    "type": "nav-item"
+                  },
+                  {
+                    "count": 0,
+                    "dotColor": "$chart-5",
+                    "id": "Fg5Pd-15pc",
+                    "label": "Foundations",
+                    "type": "nav-item"
+                  }
+                ],
+                "gap": "$space-3xs",
+                "height": "100%",
+                "id": "swa-sidebar-nav",
+                "layout": "vertical",
+                "name": "Navigation",
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "active": true,
+                    "count": 3,
+                    "icon": "archive",
+                    "id": "swa-sidebar-more-1",
+                    "label": "Archive",
+                    "type": "nav-item"
+                  }
+                ],
+                "gap": "$space-3xs",
+                "id": "swa-sidebar-more",
+                "layout": "vertical",
+                "name": "Secondary navigation",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "fill": "$bg-surface",
+            "gap": "$space-lg",
+            "id": "swa-sidebar",
+            "layout": "vertical",
+            "minHeight": 0,
+            "minWidth": 240,
+            "name": "Sidebar",
+            "overflow": "auto",
+            "padding": "$space-sm",
+            "type": "frame",
+            "width": 240
+          },
+          {
+            "id": "swa-div-1",
+            "orientation": "vertical",
+            "type": "divider"
+          },
+          {
+            "children": [
+              {
+                "alignItems": "center",
+                "borderBottom": {
+                  "color": "$border",
+                  "width": 1
+                },
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Archive",
+                    "fontSize": "$text-lg",
+                    "fontWeight": 600,
+                    "id": "swa-header-title",
+                    "textOverflow": "ellipsis",
+                    "title": "Archive",
+                    "type": "text"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$text-secondary",
+                        "content": "3 canvases · hidden from the gallery until restored",
+                        "fontSize": "$label",
+                        "id": "y59jhjCEOg",
+                        "minWidth": 0,
+                        "name": "Archive note",
+                        "textOverflow": "ellipsis",
+                        "title": "3 canvases · hidden from the gallery until restored",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$space-xs",
+                    "id": "swa-header-actions",
+                    "layout": "horizontal",
+                    "minWidth": 0,
+                    "name": "Actions",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$space-md",
+                "height": 48,
+                "id": "swa-header",
+                "justifyContent": "space-between",
+                "layout": "horizontal",
+                "minHeight": 48,
+                "name": "Header",
+                "padding": [
+                  0,
+                  "$space-md"
+                ],
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "depth": 0,
+                            "expanded": true,
+                            "icon": "folder",
+                            "id": "xNrH5zGF70",
+                            "label": "Pattern library",
+                            "type": "tree-row"
+                          },
+                          {
+                            "active": true,
+                            "depth": 1,
+                            "icon": "file",
+                            "id": "QAUnkozL01",
+                            "label": "marquee-hero",
+                            "type": "tree-row"
+                          },
+                          {
+                            "depth": 1,
+                            "icon": "file",
+                            "id": "G_GNXVwo2x",
+                            "label": "pricing",
+                            "type": "tree-row"
+                          },
+                          {
+                            "depth": 0,
+                            "expanded": true,
+                            "icon": "folder",
+                            "id": "4yEaiYeOVG",
+                            "label": "UI",
+                            "type": "tree-row"
+                          },
+                          {
+                            "depth": 1,
+                            "icon": "file",
+                            "id": "nrkFEmQ5dz",
+                            "label": "checkout-northrail-coffee-loading",
+                            "type": "tree-row"
+                          }
+                        ],
+                        "gap": "$space-3xs",
+                        "id": "a_NSeNSDiK",
+                        "layout": "vertical",
+                        "name": "Archived canvases",
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "gap": "$space-3xs",
+                    "id": "swa-work",
+                    "layout": "vertical",
+                    "minHeight": 0,
+                    "minWidth": 0,
+                    "name": "Work area",
+                    "overflow": "auto",
+                    "padding": [
+                      "$space-md",
+                      "$space-lg"
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  },
+                  {
+                    "id": "swa-div-2",
+                    "orientation": "vertical",
+                    "type": "divider"
+                  },
+                  {
+                    "children": [
+                      {
+                        "color": "$text-primary",
+                        "content": "marquee-hero",
+                        "fontSize": "$text-lg",
+                        "fontWeight": 600,
+                        "id": "uUpZubQLl3",
+                        "minWidth": 0,
+                        "name": "Canvas name",
+                        "textOverflow": "ellipsis",
+                        "title": "marquee-hero",
+                        "type": "text"
+                      },
+                      {
+                        "cornerRadius": "$radius-sm",
+                        "height": 205,
+                        "id": "l06ieZ4od2",
+                        "name": "Archived preview",
+                        "objectFit": "cover",
+                        "src": "asset:8a87dfed22ba46eb.jpg",
+                        "stroke": "$border",
+                        "strokeWidth": 1,
+                        "type": "image",
+                        "width": "100%"
+                      },
+                      {
+                        "children": [
+                          {
+                            "children": [
+                              {
+                                "color": "$text-primary",
+                                "content": "Pattern library",
+                                "fontSize": "$label",
+                                "id": "swa-prop-1-value",
+                                "minWidth": 0,
+                                "textOverflow": "ellipsis",
+                                "title": "Pattern library",
+                                "type": "text"
+                              }
+                            ],
+                            "id": "swa-prop-1",
+                            "label": "Project",
+                            "type": "property-row"
+                          },
+                          {
+                            "children": [
+                              {
+                                "color": "$text-primary",
+                                "content": "Nov 8, 2026",
+                                "fontSize": "$label",
+                                "id": "swa-prop-2-value",
+                                "minWidth": 0,
+                                "textOverflow": "ellipsis",
+                                "title": "Nov 8, 2026",
+                                "type": "text"
+                              }
+                            ],
+                            "id": "swa-prop-2",
+                            "label": "Archived",
+                            "type": "property-row"
+                          },
+                          {
+                            "children": [
+                              {
+                                "color": "$text-primary",
+                                "content": "100",
+                                "fontSize": "$label",
+                                "id": "swa-prop-3-value",
+                                "minWidth": 0,
+                                "tabularNums": true,
+                                "textOverflow": "ellipsis",
+                                "title": "100",
+                                "type": "text"
+                              }
+                            ],
+                            "id": "swa-prop-3",
+                            "label": "Score",
+                            "type": "property-row"
+                          },
+                          {
+                            "children": [
+                              {
+                                "color": "$text-primary",
+                                "content": "1440 × 900",
+                                "fontSize": "$label",
+                                "type": "text"
+                              }
+                            ],
+                            "id": "4066YUoYem",
+                            "label": "Size",
+                            "type": "property-row"
+                          }
+                        ],
+                        "gap": 0,
+                        "id": "swa-props",
+                        "layout": "vertical",
+                        "name": "Properties",
+                        "type": "frame",
+                        "width": "100%"
+                      },
+                      {
+                        "icon": "archive-restore",
+                        "id": "Ae0KuKk3rD",
+                        "label": "Restore to Pattern library",
+                        "maxWidth": "100%",
+                        "name": "Restore button",
+                        "size": "sm",
+                        "type": "button",
+                        "width": "100%"
+                      },
+                      {
+                        "borderTop": {
+                          "color": "$border",
+                          "width": 1
+                        },
+                        "children": [
+                          {
+                            "color": "$text-secondary",
+                            "content": "Deleting removes the canvas for good. It cannot be restored.",
+                            "fontSize": "$label",
+                            "id": "1g-S2F1Vts",
+                            "type": "text"
+                          },
+                          {
+                            "color": "$danger",
+                            "icon": "trash-2",
+                            "id": "clZX5f1mL2",
+                            "label": "Delete permanently",
+                            "maxWidth": "100%",
+                            "name": "Delete permanently button",
+                            "size": "sm",
+                            "type": "button",
+                            "variant": "ghost"
+                          }
+                        ],
+                        "gap": "$space-xs",
+                        "id": "xw9lMttTTb",
+                        "layout": "vertical",
+                        "name": "Delete permanently",
+                        "padding": [
+                          "$space-md",
+                          0,
+                          0,
+                          0
+                        ],
+                        "type": "frame",
+                        "width": "100%"
+                      }
+                    ],
+                    "fill": "$bg-surface",
+                    "gap": "$space-md",
+                    "id": "swa-panel",
+                    "layout": "vertical",
+                    "minHeight": 0,
+                    "minWidth": 360,
+                    "name": "Detail panel",
+                    "overflow": "auto",
+                    "padding": "$space-md",
+                    "type": "frame",
+                    "width": 360
+                  }
+                ],
+                "height": "100%",
+                "id": "swa-main-panes",
+                "layout": "horizontal",
+                "minHeight": 0,
+                "name": "Panes",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "id": "swa-main",
+            "layout": "vertical",
+            "minWidth": 0,
+            "name": "Main",
+            "type": "frame",
+            "width": "100%"
+          }
+        ],
+        "fill": "$bg-primary",
+        "height": "100%",
+        "id": "swa-shell",
+        "layout": "horizontal",
+        "name": "Shell",
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "pM-G5ADTVa",
+    "name": "Document",
+    "overflow": "hidden",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {}
+}

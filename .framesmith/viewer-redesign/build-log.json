@@ -1,0 +1,38 @@
+[
+  {
+    "at": "2026-11-24T14:00:26.541Z",
+    "axes": {
+      "alignment": "left",
+      "density": "balanced",
+      "heroTreatment": "none",
+      "rhythm": "uniform"
+    },
+    "canvasId": "dri4igoofJ",
+    "canvasName": "Gallery",
+    "structure": "browser-app"
+  },
+  {
+    "at": "2026-11-24T14:01:46.956Z",
+    "axes": {
+      "alignment": "split",
+      "density": "dense",
+      "heroTreatment": "split",
+      "rhythm": "asymmetric"
+    },
+    "canvasId": "rbSmuMnACt",
+    "canvasName": "Canvas detail",
+    "structure": "editor-inspector-app"
+  },
+  {
+    "at": "2026-11-24T14:04:05.688Z",
+    "axes": {
+      "alignment": "split",
+      "density": "dense",
+      "heroTreatment": "split",
+      "rhythm": "asymmetric"
+    },
+    "canvasId": "0LhfROW1xb",
+    "canvasName": "Archive",
+    "structure": "split-workbench-app"
+  }
+]

@@ -93,6 +93,306 @@
       "dir": "pattern-library",
       "id": "QTrOgC44pt",
       "name": "Pattern library"
+    },
+    {
+      "designSystem": {
+        "colors": {
+          "accent": "#BB5915",
+          "accent-tint": "#FFF2EC",
+          "bg-elevated": "#F0F0EE",
+          "bg-primary": "#F6F6F5",
+          "bg-surface": "#FFFFFF",
+          "border": "#E2E2DF",
+          "border-strong": "#8A8A86",
+          "chart-1": "#C36120",
+          "chart-2": "#8D8300",
+          "chart-3": "#009861",
+          "chart-4": "#0090A6",
+          "chart-5": "#5D79D6",
+          "danger": "#BC4A41",
+          "danger-tint": "#FFF2F0",
+          "focus-ring": "#BB5915",
+          "neutral-100": "#EDEDEB",
+          "neutral-200": "#E2E2DF",
+          "neutral-300": "#C8C8C4",
+          "neutral-400": "#A8A8A4",
+          "neutral-50": "#F6F6F5",
+          "neutral-500": "#8A8A86",
+          "neutral-600": "#73736F",
+          "neutral-700": "#5F5F5C",
+          "neutral-800": "#3D3D3B",
+          "neutral-900": "#1D1D1C",
+          "neutral-tint": "#EFEFED",
+          "primary-100": "#FFEADF",
+          "primary-200": "#FFC8AC",
+          "primary-300": "#F7A87E",
+          "primary-400": "#E98B55",
+          "primary-50": "#FFF4EF",
+          "primary-500": "#D47033",
+          "primary-600": "#BB5915",
+          "primary-700": "#9D4601",
+          "primary-800": "#7E3700",
+          "primary-900": "#602800",
+          "success": "#007F38",
+          "success-tint": "#DAF8DF",
+          "text-primary": "#1D1D1C",
+          "text-secondary": "#5F5F5C",
+          "warning": "#956300",
+          "warning-tint": "#FFEFDB"
+        },
+        "dark": {
+          "colors": {
+            "accent": "#E98B55",
+            "accent-tint": "#3A2214",
+            "bg-elevated": "#222221",
+            "bg-primary": "#121212",
+            "bg-surface": "#1A1A19",
+            "border": "#2C2C2A",
+            "border-strong": "#76766F",
+            "chart-1": "#D77336",
+            "chart-2": "#A19500",
+            "chart-3": "#1BAC71",
+            "chart-4": "#00A4BD",
+            "chart-5": "#6E8CEB",
+            "danger": "#FB8276",
+            "danger-tint": "#46221E",
+            "focus-ring": "#D47033",
+            "neutral-tint": "#262625",
+            "success": "#52B76D",
+            "success-tint": "#17351F",
+            "text-primary": "#EDEDEB",
+            "text-secondary": "#A2A29E",
+            "warning": "#D5A052",
+            "warning-tint": "#3E2909"
+          },
+          "elevation": {
+            "flat": [
+              {
+                "blur": 2,
+                "color": "rgba(0, 0, 0, 0.2)",
+                "spread": 0,
+                "x": 0,
+                "y": 1
+              }
+            ],
+            "floating": [
+              {
+                "blur": 6,
+                "color": "rgba(0, 0, 0, 0.24)",
+                "spread": -2,
+                "x": 0,
+                "y": 4
+              },
+              {
+                "blur": 16,
+                "color": "rgba(0, 0, 0, 0.44)",
+                "spread": -4,
+                "x": 0,
+                "y": 12
+              }
+            ],
+            "overlay": [
+              {
+                "blur": 10,
+                "color": "rgba(0, 0, 0, 0.24)",
+                "spread": -4,
+                "x": 0,
+                "y": 8
+              },
+              {
+                "blur": 25,
+                "color": "rgba(0, 0, 0, 0.56)",
+                "spread": -5,
+                "x": 0,
+                "y": 20
+              }
+            ],
+            "raised": [
+              {
+                "blur": 2,
+                "color": "rgba(0, 0, 0, 0.24)",
+                "spread": 0,
+                "x": 0,
+                "y": 1
+              },
+              {
+                "blur": 4,
+                "color": "rgba(0, 0, 0, 0.32)",
+                "spread": -1,
+                "x": 0,
+                "y": 2
+              }
+            ]
+          }
+        },
+        "elevation": {
+          "flat": [
+            {
+              "blur": 2,
+              "color": "rgba(16, 24, 40, 0.05)",
+              "spread": 0,
+              "x": 0,
+              "y": 1
+            }
+          ],
+          "floating": [
+            {
+              "blur": 6,
+              "color": "rgba(16, 24, 40, 0.06)",
+              "spread": -2,
+              "x": 0,
+              "y": 4
+            },
+            {
+              "blur": 16,
+              "color": "rgba(16, 24, 40, 0.11)",
+              "spread": -4,
+              "x": 0,
+              "y": 12
+            }
+          ],
+          "overlay": [
+            {
+              "blur": 10,
+              "color": "rgba(16, 24, 40, 0.06)",
+              "spread": -4,
+              "x": 0,
+              "y": 8
+            },
+            {
+              "blur": 25,
+              "color": "rgba(16, 24, 40, 0.14)",
+              "spread": -5,
+              "x": 0,
+              "y": 20
+            }
+          ],
+          "raised": [
+            {
+              "blur": 2,
+              "color": "rgba(16, 24, 40, 0.06)",
+              "spread": 0,
+              "x": 0,
+              "y": 1
+            },
+            {
+              "blur": 4,
+              "color": "rgba(16, 24, 40, 0.08)",
+              "spread": -1,
+              "x": 0,
+              "y": 2
+            }
+          ]
+        },
+        "motion": {
+          "base": {
+            "duration": 180,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          },
+          "fast": {
+            "duration": 120,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          },
+          "slow": {
+            "duration": 260,
+            "easing": "cubic-bezier(0.2, 0, 0, 1)"
+          }
+        },
+        "radius": {
+          "radius-lg": 14,
+          "radius-md": 10,
+          "radius-sm": 6
+        },
+        "spacing": {
+          "space-2xl": 48,
+          "space-2xs": 4,
+          "space-3xl": 64,
+          "space-3xs": 2,
+          "space-lg": 24,
+          "space-md": 16,
+          "space-sm": 12,
+          "space-xl": 32,
+          "space-xs": 8
+        },
+        "state": {
+          "disabledContainer": 0.12,
+          "disabledContent": 0.38,
+          "focus": 0.1,
+          "hover": 0.08,
+          "pressed": 0.1
+        },
+        "typography": {
+          "body": {
+            "fontFamily": "Inter",
+            "fontSize": 14,
+            "lineHeight": 1.5
+          },
+          "caption": {
+            "fontFamily": "Inter",
+            "fontSize": 11,
+            "lineHeight": 1.5
+          },
+          "display": {
+            "fontFamily": "Space Grotesk",
+            "fontSize": 34,
+            "fontWeight": 600,
+            "letterSpacing": -1,
+            "lineHeight": 1.2
+          },
+          "heading": {
+            "fontFamily": "Space Grotesk",
+            "fontSize": 22,
+            "fontWeight": 600,
+            "lineHeight": 1.35
+          },
+          "label": {
+            "fontFamily": "Inter",
+            "fontSize": 12,
+            "fontWeight": 500,
+            "letterSpacing": 0.25,
+            "lineHeight": 1.5
+          },
+          "text-2xl": {
+            "fontSize": 27,
+            "lineHeight": 1.35
+          },
+          "text-3xl": {
+            "fontSize": 34,
+            "letterSpacing": -0.5,
+            "lineHeight": 1.2
+          },
+          "text-base": {
+            "fontSize": 14,
+            "lineHeight": 1.5
+          },
+          "text-lg": {
+            "fontSize": 18,
+            "lineHeight": 1.5
+          },
+          "text-sm": {
+            "fontSize": 11,
+            "lineHeight": 1.5
+          },
+          "text-xl": {
+            "fontSize": 22,
+            "lineHeight": 1.35
+          },
+          "text-xs": {
+            "fontSize": 11,
+            "lineHeight": 1.5
+          },
+          "title": {
+            "fontFamily": "Space Grotesk",
+            "fontSize": 27,
+            "fontWeight": 600,
+            "letterSpacing": -0.5,
+            "lineHeight": 1.35
+          }
+        }
+      },
+      "dir": "viewer-redesign",
+      "id": "3tm2S1pJhP",
+      "name": "Viewer redesign"
     }
   ],
   "schemaVersion": 1,
