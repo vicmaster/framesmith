@@ -595,6 +595,18 @@ Phases 30 and 31 closed with seven follow-ups open, and five of them are quiet f
 
 _Full spec-driven breakdown in [`docs/specs/PHASE-32-SPEC.md`](docs/specs/PHASE-32-SPEC.md). Deliberately out of scope: a test framework, splitting `src/index.ts` and `src/evaluate.ts`, rewriting "Phase N" comments in `src/`, cross-instance autofix, and an indicator bar on contained tabs._
 
+### Phase 33 — Viewer redesign, ported
+
+Phase 31 rebuilt the viewer as canvases and left the code alone. A design pass on 2026-11-24 redrew those seven screens (gallery, detail with its menu, comment and delete states, archive and its empty state), each clean in both themes, and they are committed under `.framesmith/viewer-redesign/`. This phase ports them into the viewer: neutral chrome that follows the system's light or dark setting, real thumbnails scored against the evaluator's bar, an inspector that leads with what holds a design back, and live updates that cover thumbnails, scores and comments, not only the preview.
+
+- [ ] Slice A — foundation: `src/viewer/` modules, tokens copied from the design system and pinned by a test, fonts served from the cache, one sidebar, tabs, menu and dialog used everywhere
+- [ ] Slice B — gallery: thumbnail cards with a score chip against the bar, search and type filter kept in the URL, a live status, and refresh on every edit
+- [ ] Slice C — detail shell: toolbar with state tabs, a More menu (JSON, copy ID, archive, delete), a delete dialog, and preview tools (zoom, fit, preview theme, safe area)
+- [ ] Slice D — inspector and comments: the Quality tab sorted lowest first with a reason line, Design system and Feedback restyled, the Import placeholder removed, the comment popover, and panels that refresh live
+- [ ] Slice E — archive, docs and acceptance: the archive tree with a preview panel, README and screenshots, and each screen beside its design
+
+_Full spec-driven breakdown in [`docs/specs/PHASE-33-SPEC.md`](docs/specs/PHASE-33-SPEC.md). Deliberately out of scope: a bundler or framework, a theme toggle, static thumbnails, a mirror marker, the Import tab's content, and the CORS policy on mutating routes (its own change)._
+
 ### Continuous integration (infrastructure)
 
 Nothing runs on a pull request today: no workflow, no branch protection, no checks. That held because a single disciplined maintainer ran things by hand, but it has already failed silently — the repository has 102 test files and no `test` script to run them as a suite, and two tests were found failing at the v2.0.0 tag itself. The missing runner is the root cause; a pipeline that is red on its first run only teaches you to ignore the red X. Running the suite together for the first time turned up three failing tests, two of them red at the v2.0.0 tag itself; all three are fixed.

@@ -1,0 +1,288 @@
+{
+  "components": {},
+  "createdAt": "2026-11-24T14:04:27.548Z",
+  "id": "uiyI3Yp09q",
+  "lastModified": "2026-11-24T14:08:17.814Z",
+  "metadata": {
+    "provenance": {
+      "at": "2026-11-24T14:04:05.688Z",
+      "axes": {
+        "alignment": "split",
+        "density": "dense",
+        "heroTreatment": "split",
+        "rhythm": "asymmetric"
+      },
+      "structure": "split-workbench-app"
+    },
+    "surface": {
+      "device": "window-1440",
+      "type": "desktop-app"
+    },
+    "variant": {
+      "at": "2026-11-24T14:04:27.549Z",
+      "of": "0LhfROW1xb",
+      "state": "empty"
+    }
+  },
+  "name": "Archive · empty",
+  "projectId": "3tm2S1pJhP",
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "color": "$text-primary",
+                "content": "framesmith",
+                "fontSize": "$body",
+                "fontWeight": 600,
+                "id": "S58gQbVdUK",
+                "padding": [
+                  "$space-2xs",
+                  "$space-xs"
+                ],
+                "type": "text"
+              },
+              {
+                "color": "$text-secondary",
+                "content": "Personal",
+                "fontSize": "$caption",
+                "fontWeight": 500,
+                "id": "lQM4kzNkYf",
+                "name": "Workspace label",
+                "padding": [
+                  0,
+                  "$space-xs"
+                ],
+                "type": "text"
+              },
+              {
+                "children": [
+                  {
+                    "active": false,
+                    "count": 1,
+                    "dotColor": "$chart-1",
+                    "icon": null,
+                    "id": "pgY9VlF-Lo",
+                    "label": "Design system",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 5,
+                    "dotColor": "$chart-2",
+                    "icon": null,
+                    "id": "REB-sRaU9e",
+                    "label": "UI",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 2,
+                    "dotColor": "$chart-3",
+                    "icon": null,
+                    "id": "CyWK2sJ43U",
+                    "label": "Releases",
+                    "type": "nav-item"
+                  },
+                  {
+                    "active": false,
+                    "count": 11,
+                    "dotColor": "$chart-4",
+                    "icon": null,
+                    "id": "HA9x4FO_51",
+                    "label": "Pattern library",
+                    "type": "nav-item"
+                  },
+                  {
+                    "count": 0,
+                    "dotColor": "$chart-5",
+                    "id": "R2uPq7Mb5A",
+                    "label": "Foundations",
+                    "type": "nav-item"
+                  }
+                ],
+                "gap": "$space-3xs",
+                "height": "100%",
+                "id": "W_sx_Rz5Fi",
+                "layout": "vertical",
+                "name": "Navigation",
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "active": true,
+                    "count": 0,
+                    "icon": "archive",
+                    "id": "XgQnszMlUr",
+                    "label": "Archive",
+                    "type": "nav-item"
+                  }
+                ],
+                "gap": "$space-3xs",
+                "id": "-AeWb_2zcP",
+                "layout": "vertical",
+                "name": "Secondary navigation",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "fill": "$bg-surface",
+            "gap": "$space-lg",
+            "id": "CflzAPHE8l",
+            "layout": "vertical",
+            "minHeight": 0,
+            "minWidth": 240,
+            "name": "Sidebar",
+            "overflow": "auto",
+            "padding": "$space-sm",
+            "type": "frame",
+            "width": 240
+          },
+          {
+            "id": "3DHQwMReBW",
+            "orientation": "vertical",
+            "type": "divider"
+          },
+          {
+            "children": [
+              {
+                "alignItems": "center",
+                "borderBottom": {
+                  "color": "$border",
+                  "width": 1
+                },
+                "children": [
+                  {
+                    "color": "$text-primary",
+                    "content": "Archive",
+                    "fontSize": "$text-lg",
+                    "fontWeight": 600,
+                    "id": "ZfAbuAMpkn",
+                    "textOverflow": "ellipsis",
+                    "title": "Archive",
+                    "type": "text"
+                  },
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "color": "$text-secondary",
+                        "content": "0 canvases",
+                        "fontSize": "$caption",
+                        "id": "klfemjhAf-",
+                        "minWidth": 0,
+                        "name": "Archive note",
+                        "textOverflow": "ellipsis",
+                        "title": "0 canvases",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$space-xs",
+                    "id": "ISDSNl0dfa",
+                    "layout": "horizontal",
+                    "minWidth": 0,
+                    "name": "Actions",
+                    "type": "frame"
+                  }
+                ],
+                "gap": "$space-md",
+                "height": 48,
+                "id": "h2h5iOE-b7",
+                "justifyContent": "space-between",
+                "layout": "horizontal",
+                "minHeight": 48,
+                "name": "Header",
+                "padding": [
+                  0,
+                  "$space-md"
+                ],
+                "type": "frame",
+                "width": "100%"
+              },
+              {
+                "children": [
+                  {
+                    "alignItems": "center",
+                    "children": [
+                      {
+                        "icon": "archive",
+                        "iconColor": "$text-secondary",
+                        "iconSize": 32,
+                        "id": "13mxoibTBe",
+                        "type": "icon"
+                      },
+                      {
+                        "color": "$text-primary",
+                        "content": "No archived canvases",
+                        "fontSize": "$body",
+                        "fontWeight": 600,
+                        "id": "u3AtKqPi4P",
+                        "textAlign": "center",
+                        "type": "text"
+                      },
+                      {
+                        "color": "$text-secondary",
+                        "content": "Archive a canvas from its page, or have your agent call canvas_archive. Archived canvases wait here until you restore or delete them.",
+                        "fontSize": "$label",
+                        "id": "tgSDlJNEDA",
+                        "maxWidth": 400,
+                        "textAlign": "center",
+                        "type": "text"
+                      }
+                    ],
+                    "gap": "$space-sm",
+                    "id": "SbwIkr9EsT",
+                    "justifyContent": "center",
+                    "layout": "vertical",
+                    "minHeight": 0,
+                    "minWidth": 0,
+                    "name": "Work area",
+                    "overflow": "auto",
+                    "padding": [
+                      "$space-md",
+                      "$space-lg"
+                    ],
+                    "type": "frame",
+                    "width": "100%"
+                  }
+                ],
+                "height": "100%",
+                "id": "NSDJ2RdGOV",
+                "layout": "horizontal",
+                "minHeight": 0,
+                "name": "Panes",
+                "type": "frame",
+                "width": "100%"
+              }
+            ],
+            "id": "6nzY6dx_Gj",
+            "layout": "vertical",
+            "minWidth": 0,
+            "name": "Main",
+            "type": "frame",
+            "width": "100%"
+          }
+        ],
+        "fill": "$bg-primary",
+        "height": "100%",
+        "id": "03KcTzDqf-",
+        "layout": "horizontal",
+        "name": "Shell",
+        "type": "frame",
+        "width": "100%"
+      }
+    ],
+    "fill": "$bg-primary",
+    "height": 900,
+    "id": "B8T1Uq82LF",
+    "name": "Document",
+    "overflow": "hidden",
+    "type": "document",
+    "width": 1440
+  },
+  "variables": {}
+}
