@@ -1,9 +1,8 @@
 // Smoke for the viewer logo + favicon swap.
 //
-// - Sidebar shows the framesmith grid path mark (not the old amber square).
-// - Every page emits a `<link rel="icon" type="image/svg+xml">` favicon.
-// - .sidebar-mark CSS no longer uses background-color (background is set on
-//   the placeholder span; the new SVG draws via stroke="currentColor").
+// - Every page emits a `<link rel="icon" type="image/svg+xml">` favicon with
+//   the framesmith grid mark, stroked in the design system's accent.
+// - Phase 33: the sidebar's brand is the "framesmith" wordmark linked home.
 //
 // Usage: npx tsx test/unit/test-viewer-logo-favicon.ts
 
@@ -18,6 +17,7 @@ const { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject } = await impo
 const { createCanvas } = await import('../../src/scene-graph.js');
 const { renderProjectPage, renderArchivePage, renderDetailPage } = await import('../../src/viewer.js');
 const { DEFAULT_PROJECT_ID } = await import('../../src/types.js');
+const { LIGHT } = await import('../../src/viewer/tokens.js');
 
 interface Check { name: string; ok: boolean; detail?: string }
 const checks: Check[] = [];
@@ -40,20 +40,14 @@ try {
       html.includes("d='M 4 4 L 20 4 L 20 20 L 4 20 Z"));
   }
 
-  // --- Sidebar shows the new logo SVG instead of the empty span ---
+  // --- Phase 33: the sidebar's brand is the wordmark, linked home; the grid
+  // mark lives on in the favicon, stroked in the design system's accent. ---
   for (const [name, html] of [['gallery', gallery], ['archive', archive]] as const) {
-    expect(`logo: ${name} sidebar contains the grid path mark`,
-      html.includes('<svg class="sidebar-mark"') && html.includes('d="M 4 4 L 20 4 L 20 20 L 4 20 Z'));
-    expect(`logo: ${name} sidebar does NOT contain the old empty <span class="sidebar-mark"></span>`,
-      !html.includes('<span class="sidebar-mark"></span>'));
+    expect(`brand: ${name} sidebar shows the framesmith wordmark linked to /`,
+      html.includes('<a href="/" class="sidebar-brand">framesmith</a>'));
+    expect(`brand: ${name} sidebar has no grid mark`, !html.includes('sidebar-mark'));
   }
-
-  // --- .sidebar-mark CSS no longer paints a solid amber rectangle ---
-  expect('css: .sidebar-mark no background-color: var(--accent)',
-    !gallery.includes('background: var(--accent); flex-shrink: 0; }'),
-    'old rule (background: var(--accent)) should be replaced with color: var(--accent)');
-  expect('css: .sidebar-mark uses color: var(--accent) for stroke',
-    gallery.includes('color: var(--accent)') && gallery.includes('.sidebar-mark {'));
+  expect('favicon: stroked in the light accent token', gallery.includes(`stroke='${encodeURIComponent(LIGHT.colors.accent)}'`));
 
   // --- Detail page has no sidebar so logo-mark CSS may or may not appear,
   // but favicon must still be on the page (covered above). ---
