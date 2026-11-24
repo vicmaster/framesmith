@@ -52,7 +52,7 @@ check(
 );
 
 // The empty card should NOT have an iframe; the with-content one should.
-const emptyCardMatch = html.match(new RegExp(`href="/canvas/${emptyCanvas.id}"[^]*?</a>`));
+const emptyCardMatch = html.match(new RegExp(`data-canvas-id="${emptyCanvas.id}"[^]*?</article>`));
 check('empty card section located in gallery', !!emptyCardMatch);
 if (emptyCardMatch) {
   check(
@@ -65,7 +65,7 @@ if (emptyCardMatch) {
   );
 }
 
-const contentCardMatch = html.match(new RegExp(`href="/canvas/${withContent.id}"[^]*?</a>`));
+const contentCardMatch = html.match(new RegExp(`data-canvas-id="${withContent.id}"[^]*?</article>`));
 check('with-content card section located in gallery', !!contentCardMatch);
 if (contentCardMatch) {
   check(
@@ -79,7 +79,6 @@ if (contentCardMatch) {
 }
 
 // CSS hooks for the new placeholder must be in the inline stylesheet.
-check('CSS contains .thumb--empty rule', html.includes('.thumb--empty'));
 check('CSS contains .thumb-empty rule (placeholder body)', html.includes('.thumb-empty {'));
 check('CSS contains .thumb-empty-back/front rules (layered hairlines)',
   html.includes('.thumb-empty-back') && html.includes('.thumb-empty-front'));

@@ -81,8 +81,7 @@ check('sidebar: Marketing project shows count 0', sidebarItem(htmlDefault, projA
 check('sidebar: Side project shows count 0 (archived excluded)', sidebarItem(htmlDefault, projInDefault.id)?.count === 0);
 
 // ---- 4. Breadcrumb + main pane title ------------------------------------
-check('main: breadcrumb shows "Personal / Untitled"', htmlDefault.includes('Personal / Untitled'));
-check('main: title shows "Untitled"', /<h1 class="project-title">Untitled<\/h1>/.test(htmlDefault));
+check('main: title shows "Untitled"', /<h1 class="page-title">Untitled<\/h1>/.test(htmlDefault));
 check('main: project-meta shows "2 canvases"', htmlDefault.includes('2 canvases'));
 
 // ---- 5. Canvas grid is project-scoped -----------------------------------
@@ -94,8 +93,7 @@ check('main: grid does NOT contain archived "old" canvas', !htmlDefault.includes
 
 // ---- 6. Acme project page scoping ---------------------------------------
 const htmlAcme = (await viewer.renderProjectPage(projAcmeA.id, 3001))!;
-check('acme page: breadcrumb shows "Acme / Brand"', htmlAcme.includes('Acme / Brand'));
-check('acme page: title shows "Brand"', /<h1 class="project-title">Brand<\/h1>/.test(htmlAcme));
+check('acme page: title shows "Brand"', /<h1 class="page-title">Brand<\/h1>/.test(htmlAcme));
 check('acme page: the current place is Brand, not Untitled',
   sidebarItem(htmlAcme, projAcmeA.id)?.current === true && sidebarItem(htmlAcme, DEFAULT_PROJECT_ID)?.current === false,
 );

@@ -1,6 +1,7 @@
 // Phase 33 slice A — helpers every viewer page shares: escaping, safe script
 // JSON, the node index, and the artboard-proportioned thumbnails.
 import type { Canvas, SceneNode } from '../types.js';
+import type { CanvasSummary } from '../scene-graph.js';
 import { DEFAULT_DEVICE, DEVICE_PROFILES } from '../surfaces.js';
 
 export function esc(str: string): string {
@@ -75,3 +76,11 @@ export const THUMB_FIT_JS = `
       const observer = new ResizeObserver((entries) => entries.forEach((e) => fit(e.target)));
       thumbs.forEach((t) => observer.observe(t));
     })();`;
+
+/** The base canvases a project page shows as cards: a variant whose base is in
+ * the project folds into that base (Phase 24); an orphan stays a card. */
+export function baseRows<T extends CanvasSummary>(rows: T[], projectId: string): T[] {
+  const live = rows.filter((c) => c.projectId === projectId && !c.archived);
+  const present = new Set(live.map((c) => c.id));
+  return live.filter((c) => !(c.variant && present.has(c.variant.of)));
+}

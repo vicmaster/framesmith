@@ -146,7 +146,7 @@ export const COMPONENTS_CSS = `
   .btn[aria-expanded="true"] { background: var(--hover); }
 
   .tablist { display: flex; gap: var(--space-md); border-bottom: 1px solid var(--border); }
-  .tab { position: relative; height: 32px; padding: 0 var(--space-2xs); border: none; background: none; font: inherit; font-size: var(--font-body); font-weight: 500; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: var(--space-2xs); }
+  .tab { position: relative; white-space: nowrap; flex-shrink: 0; height: 32px; padding: 0 var(--space-2xs); border: none; background: none; font: inherit; font-size: var(--font-body); font-weight: 500; color: var(--text-secondary); cursor: pointer; display: inline-flex; align-items: center; gap: var(--space-2xs); }
   .tab:hover { color: var(--text-primary); }
   .tab[aria-selected="true"] { color: var(--text-primary); font-weight: 600; }
   .tab[aria-selected="true"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px; }

@@ -8,6 +8,7 @@ import { getCanvasTokens } from '../workspaces.js';
 import { getRepoLocation, archiveRepoCanvas, deleteRepoCanvas, updateRepoCanvas } from '../aggregate.js';
 import { DEFAULT_PROJECT_ID, type Canvas } from '../types.js';
 import { resolveSurface } from '../surfaces.js';
+import { resolveGenre } from '../evaluate.js';
 import { addFeedback, listFeedback, resolveFeedback, deleteFeedback, openFeedbackCount } from '../feedback.js';
 import { cachedFontFile, resolveFamily } from '../fonts.js';
 import { evalCacheKey } from './scores.js';
@@ -108,7 +109,12 @@ export async function startViewer(port: number): Promise<number> {
       // API: list canvases
       if (path === '/api/canvases') {
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify(listCanvases()));
+        // Phase 33 slice B — each row carries its type and genre, which the
+        // gallery's live poll compares (FR-B4).
+        res.end(JSON.stringify(listCanvases().map((row) => {
+          const canvas = getCanvas(row.id);
+          return canvas ? { ...row, type: resolveSurface(canvas).type, genre: resolveGenre(canvas).genre } : row;
+        })));
         return;
       }
 
