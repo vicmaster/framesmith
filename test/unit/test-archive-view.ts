@@ -95,18 +95,20 @@ function archiveLink(html: string): { current: boolean; count: number } | null {
 {
   // Non-archived canvas → Archive button + Delete button, NO Restore button
   const detailActive = await viewer.renderDetailPage(sg.getCanvas(active.id)!, 3001);
-  check('detail (active): Archive button present', detailActive.includes('id="btn-archive"'));
-  check('detail (active): Restore button absent', !detailActive.includes('id="btn-restore"'));
-  check('detail (active): Delete button present', detailActive.includes('id="btn-delete"'));
+  // Phase 33 slice C: lifecycle actions live in the More menu; Delete confirms in a dialog.
+  check('detail (active): More menu offers Archive', detailActive.includes('data-action="archive"'));
+  check('detail (active): no Restore on an active canvas', !detailActive.includes('data-action="unarchive"'));
+  check('detail (active): More menu offers Delete canvas', detailActive.includes('data-action="delete"'));
+  check('detail (active): the delete dialog is on the page', detailActive.includes('id="delete-dialog"') && detailActive.includes('fsDialog.open(\'delete-dialog\')'));
   check('detail (active): lifecycleAction handler defined', detailActive.includes('async function lifecycleAction'));
   check('detail (active): "Back" goes to canvas\'s project',
     detailActive.includes(`/project/${DEFAULT_PROJECT_ID}`));
 
   // Archived canvas → Restore button instead of Archive
   const detailArchived = await viewer.renderDetailPage(sg.getCanvas(archivedA.id)!, 3001);
-  check('detail (archived): Restore button present', detailArchived.includes('id="btn-restore"'));
-  check('detail (archived): Archive button absent', !detailArchived.includes('id="btn-archive"'));
-  check('detail (archived): Delete button still present', detailArchived.includes('id="btn-delete"'));
+  check('detail (archived): More menu offers Restore', detailArchived.includes('data-action="unarchive"'));
+  check('detail (archived): no Archive on an archived canvas', !detailArchived.includes('data-action="archive"'));
+  check('detail (archived): Delete canvas still offered', detailArchived.includes('data-action="delete"'));
 }
 
 // ---- 5. Counts are dynamic ---------------------------------------------

@@ -81,7 +81,7 @@ export function renderTabs(tabs: TabSpec[], label: string): string {
   return `<div class="tablist" role="tablist" aria-label="${esc(label)}">${buttons}</div>`;
 }
 
-export type MenuItemSpec = { action: string; label: string; icon?: string; danger?: boolean } | 'separator';
+export type MenuItemSpec = { action: string; label: string; icon?: string; danger?: boolean; keepOpen?: boolean } | 'separator';
 
 /** A menu behind a button: Up and Down move, Enter activates, Escape and an
  * outside click close it and return focus (COMPONENTS_JS). Choosing an item
@@ -89,7 +89,7 @@ export type MenuItemSpec = { action: string; label: string; icon?: string; dange
 export function renderMenu(id: string, buttonHtml: string, buttonLabel: string, items: MenuItemSpec[]): string {
   const rows = items.map((item) => item === 'separator'
     ? '<div class="menu-sep" role="separator"></div>'
-    : `<button type="button" role="menuitem" class="menu-item${item.danger ? ' menu-item--danger' : ''}" data-action="${esc(item.action)}" tabindex="-1">${item.icon ? icon(item.icon) : ''}<span>${esc(item.label)}</span></button>`).join('');
+    : `<button type="button" role="menuitem" class="menu-item${item.danger ? ' menu-item--danger' : ''}" data-action="${esc(item.action)}"${item.keepOpen ? ' data-keep-open' : ''} tabindex="-1">${item.icon ? icon(item.icon) : ''}<span>${esc(item.label)}</span></button>`).join('');
   return `<div class="menu-wrap" data-menu="${esc(id)}">
       <button type="button" class="btn btn--ghost btn--icon" aria-haspopup="menu" aria-expanded="false" aria-controls="${esc(id)}" aria-label="${esc(buttonLabel)}">${buttonHtml}</button>
       <div class="menu" role="menu" id="${esc(id)}" aria-label="${esc(buttonLabel)}" hidden>${rows}</div>
@@ -103,7 +103,10 @@ export interface DialogSpec { id: string; title: string; body: string; confirmLa
 export function renderDialog(d: DialogSpec): string {
   return `<div class="dialog-scrim" data-dialog-scrim="${esc(d.id)}" hidden>
       <div class="dialog" role="dialog" aria-modal="true" id="${esc(d.id)}" aria-labelledby="${esc(d.id)}-title">
-        <div class="dialog-title" id="${esc(d.id)}-title">${esc(d.title)}</div>
+        <div class="dialog-head">
+          <div class="dialog-title" id="${esc(d.id)}-title">${esc(d.title)}</div>
+          <button type="button" class="btn btn--ghost btn--icon" data-dialog-close aria-label="Close">${icon('x')}</button>
+        </div>
         <div class="dialog-body">${esc(d.body)}</div>
         <div class="dialog-actions">
           <button type="button" class="btn btn--secondary" data-dialog-cancel>Cancel</button>
@@ -162,7 +165,8 @@ export const COMPONENTS_JS = `
         menu.addEventListener('click', (e) => {
           const item = e.target.closest('[role="menuitem"]');
           if (!item) return;
-          close(true);
+          // An item that reports its result in place (Copy) keeps the menu open.
+          if (!item.hasAttribute('data-keep-open')) close(true);
           wrap.dispatchEvent(new CustomEvent('menuaction', { detail: { action: item.dataset.action } }));
         });
         document.addEventListener('click', (e) => { if (!menu.hidden && !wrap.contains(e.target)) close(false); });
@@ -178,6 +182,7 @@ export const COMPONENTS_JS = `
           scrim.hidden = false;
           const cancel = dialog.querySelector('[data-dialog-cancel]');
           const confirm = dialog.querySelector('[data-dialog-confirm]');
+          const closer = dialog.querySelector('[data-dialog-close]');
           cancel.focus();
           return new Promise((resolve) => {
             const done = (value) => {
@@ -186,6 +191,7 @@ export const COMPONENTS_JS = `
               scrim.removeEventListener('click', onScrim);
               cancel.removeEventListener('click', onCancel);
               confirm.removeEventListener('click', onConfirm);
+              if (closer) closer.removeEventListener('click', onCancel);
               if (opener && opener.focus) opener.focus();
               resolve(value);
             };
@@ -204,6 +210,7 @@ export const COMPONENTS_JS = `
             scrim.addEventListener('click', onScrim);
             cancel.addEventListener('click', onCancel);
             confirm.addEventListener('click', onConfirm);
+            if (closer) closer.addEventListener('click', onCancel);
           });
         },
       };

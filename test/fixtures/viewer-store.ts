@@ -6,6 +6,7 @@
 //   Personal / Pattern library a copy of the repo's pattern library, plus a
 //                              mobile and a desktop-app canvas, one canvas with
 //                              two state variants, one empty canvas, one canvas
+//                              with a dark token layer, one canvas
 //                              with open and resolved comments, and canvases
 //                              scoring exactly 96 and 95
 //   Personal / Archived work   three archived canvases
@@ -27,7 +28,7 @@ export interface ViewerStore {
   patternProjectId: string;
   archivedProjectId: string;
   /** Canvas ids by role: each pattern copy by its source name, plus mobile,
-   * desktopApp, withStates, blank, withFeedback, at96, at95, archived1..3. */
+   * desktopApp, withStates, blank, themed, withFeedback, at96, at95, archived1..3. */
   ids: Record<string, string>;
 }
 
@@ -76,6 +77,12 @@ export function seedViewerStore(): ViewerStore {
   ids.withStates = withStates.id;
 
   ids.blank = createCanvas('blank', pattern.id).id;
+
+  // A canvas whose design system has a dark layer (the preview's theme button).
+  const themed = copyCanvas('onboarding.json', pattern.id, 'onboarding-themed');
+  themed.variables = { ...themed.variables, dark: { colors: { 'bg-primary': '#0A0A0A', 'text-primary': '#F5F5F5' } } };
+  touchCanvas(themed.id);
+  ids.themed = themed.id;
 
   // Open and resolved point-and-tell comments.
   const withFeedback = copyCanvas('auth.json', pattern.id, 'auth-feedback');

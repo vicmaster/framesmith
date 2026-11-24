@@ -107,16 +107,21 @@ check('dialog: is a modal dialog named by its title', await page.$eval('#confirm
 await page.keyboard.press('Tab');
 check('dialog: Tab moves to the confirm button', (await focused(page)) === 'Delete canvas');
 await page.keyboard.press('Tab');
-check('dialog: Tab wraps inside the dialog', (await focused(page)) === 'Cancel');
+check('dialog: Tab wraps inside the dialog, to its Close button', (await focused(page)) === 'Close');
 await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
 check('dialog: Shift+Tab wraps backwards', (await focused(page)) === 'Delete canvas');
+await page.focus('[data-dialog-close]');
+await page.keyboard.press('Enter');
+check('dialog: the Close button cancels', !(await dialogOpen()));
+await page.focus('#opener');
+await page.keyboard.press('Enter');
 await page.keyboard.press('Escape');
 check('dialog: Escape cancels and returns focus to the opener', !(await dialogOpen()) && (await focused(page)) === 'opener');
 await page.keyboard.press('Enter');
 await page.keyboard.press('Tab');
 await page.keyboard.press('Enter');
 const results = await page.evaluate(() => (window as unknown as { results: boolean[] }).results);
-check('dialog: resolves false on cancel and true on confirm', results.join() === 'false,true', results.join());
+check('dialog: resolves false on cancel and close, true on confirm', results.join() === 'false,false,true', results.join());
 
 // ── FR-A3 offline: an empty font cache renders the fallback stack ────────────
 // env.js points FRAMESMITH_HOME at an empty temp dir, so nothing is cached yet.

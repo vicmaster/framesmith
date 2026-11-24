@@ -98,7 +98,7 @@ try {
     const bottom = document.querySelector('.safe-band--bottom')!.getBoundingClientRect();
     return {
       shown: getComputedStyle(document.getElementById('safe-overlay')!).display !== 'none',
-      active: document.getElementById('btn-safe')!.classList.contains('active'),
+      active: document.getElementById('btn-safe')!.getAttribute('aria-pressed') === 'true',
       top: { h: top.height, atTop: top.y === screen.y },
       bottom: { h: bottom.height, atBottom: bottom.bottom === screen.bottom },
     };
@@ -107,26 +107,28 @@ try {
   check('overlay: top band 47 at the screen top', bands.top.h === 47 && bands.top.atTop, JSON.stringify(bands.top));
   check('overlay: bottom band 34 at the screen bottom', bands.bottom.h === 34 && bands.bottom.atBottom, JSON.stringify(bands.bottom));
   await page.click('#btn-safe');
-  const hiddenAgain = await page.evaluate(() => getComputedStyle(document.getElementById('safe-overlay')!).display === 'none' && !document.getElementById('btn-safe')!.classList.contains('active'));
+  const hiddenAgain = await page.evaluate(() => getComputedStyle(document.getElementById('safe-overlay')!).display === 'none' && document.getElementById('btn-safe')!.getAttribute('aria-pressed') === 'false');
   check('overlay: toggles off', hiddenAgain);
 
   // --- FR-F2: web breakpoints read the profile, keep other toolbar state ---
   await page.goto(`${base}/canvas/${desktop.id}`, { waitUntil: 'networkidle0' });
-  await page.click('#btn-json');
+  await page.click('[aria-label="More actions"]');
+  await page.click('[data-action="json"]');
   await page.click('#bp-mobile');
   await new Promise((r) => setTimeout(r, 400));
   const web = await page.evaluate(() => ({
     frameW: document.getElementById('frame')!.getAttribute('width'),
-    active: [...document.querySelectorAll('.btn.active')].map((b) => b.id).sort(),
+    selected: [...document.querySelectorAll('.bp-btn[aria-selected="true"]')].map((b) => b.id),
+    jsonOpen: !(document.getElementById('json-panel') as HTMLElement).hidden,
   }));
   check('web: Mobile sizes the frame 390 wide', web.frameW === '390', String(web.frameW));
-  check('web: Mobile active, JSON still active', JSON.stringify(web.active) === JSON.stringify(['bp-mobile', 'btn-json']), web.active.join(','));
+  check('web: Mobile selected, the JSON panel still open', JSON.stringify(web.selected) === '["bp-mobile"]' && web.jsonOpen, JSON.stringify(web));
 
   // A 390-wide web canvas: Desktop highlights Desktop, not Mobile.
   await page.goto(`${base}/canvas/${narrowWeb.id}`, { waitUntil: 'networkidle0' });
   await page.click('#bp-mobile');
   await page.click('#bp-desktop');
-  const narrowActive = await page.evaluate(() => [...document.querySelectorAll('.bp-btn.active')].map((b) => b.id));
+  const narrowActive = await page.evaluate(() => [...document.querySelectorAll('.bp-btn[aria-selected="true"]')].map((b) => b.id));
   check('390-wide web canvas: Desktop highlights Desktop', JSON.stringify(narrowActive) === '["bp-desktop"]', narrowActive.join(','));
 
   // Dark survives a breakpoint switch.

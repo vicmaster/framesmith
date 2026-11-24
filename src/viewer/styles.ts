@@ -163,7 +163,8 @@ export const COMPONENTS_CSS = `
 
   .dialog-scrim { position: fixed; inset: 0; z-index: 500; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-md); }
   .dialog-scrim[hidden] { display: none; }
-  .dialog { width: 100%; max-width: 420px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elevation-overlay); padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm); }
-  .dialog-title { font-size: var(--font-body); font-weight: 600; }
+  .dialog { width: 100%; max-width: 480px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--elevation-overlay); padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm); }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+  .dialog-title { font-size: 16px; font-weight: 600; }
   .dialog-body { font-size: var(--font-body); color: var(--text-primary); }
   .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); margin-top: var(--space-xs); }`;

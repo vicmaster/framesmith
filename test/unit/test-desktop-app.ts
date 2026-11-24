@@ -261,7 +261,7 @@ const text = (id: string, content: string, fontSize: number): SceneNode => ({ id
 {
   const html = await renderDetailPage(canvasWith([text('t', 'Hi', 14)], { type: 'desktop-app', device: 'window-1440' }), 0);
   check('the detail page offers 1024 and 1280 window buttons plus the artboard', /id="bp-w1024"/.test(html) && /id="bp-w1280"/.test(html) && /id="bp-desktop"[^>]*>1440</.test(html));
-  check('the artboard width is not repeated as a window button', !/id="bp-w1440"/.test(html) && (html.match(/class="btn bp-btn/g) ?? []).length === 4);
+  check('the artboard width is not repeated as a window button', !/id="bp-w1440"/.test(html) && (html.match(/class="tab bp-btn/g) ?? []).length === 4);
   check('no phone or tablet buttons on a desktop-app canvas', !/id="bp-mobile"/.test(html) && !/id="bp-tablet"/.test(html));
   const web = await renderDetailPage(canvasWith([text('t', 'Hi', 14)]), 0);
   check('a web canvas keeps Mobile / Tablet / Desktop', /id="bp-mobile"/.test(web) && /id="bp-tablet"/.test(web));

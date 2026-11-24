@@ -36,6 +36,7 @@ check('one mobile and one desktop-app canvas', resolveSurface(getCanvas(store.id
 const states = rows.find((r) => r.id === store.ids.withStates)?.variants?.map((v) => v.state).sort();
 check('one canvas with the empty and loading states', JSON.stringify(states) === '["empty","loading"]', JSON.stringify(states));
 check('one empty canvas', (getCanvas(store.ids.blank)!.root.children ?? []).length === 0);
+check('one canvas with a dark token layer', Object.keys(getCanvas(store.ids.themed)!.variables?.dark?.colors ?? {}).length > 0);
 const feedback = getCanvas(store.ids.withFeedback)!.metadata?.feedback ?? [];
 check('one canvas with an open and a resolved comment', feedback.filter((e) => !e.resolvedAt).length === 1 && feedback.filter((e) => e.resolvedAt).length === 1);
 check('copies keep their source dates', getCanvas(store.ids.auth)!.lastModified.startsWith('2026-06-26'), getCanvas(store.ids.auth)!.lastModified);

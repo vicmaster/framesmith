@@ -34,14 +34,12 @@ const markupChecks: Array<{ name: string; needle: string | RegExp }> = [
   { name: 'refreshFrames helper defined', needle: 'function refreshFrames' },
   { name: '.viewport.compare CSS rule', needle: '.viewport.compare' },
   { name: '--bp-w CSS variable wiring', needle: '--bp-w' },
-  // Slice-5b polish: toolbar buttons are grouped into clusters separated by
-  // hairline dividers (was a flat row of 8 same-weight buttons).
-  { name: 'toolbar clusters group related buttons', needle: 'class="toolbar-cluster"' },
-  { name: 'toolbar dividers between clusters', needle: 'class="toolbar-divider"' },
-  // Mobile polish: dividers hidden, clusters stack full-width, status dot hidden.
-  { name: 'mobile: toolbar-divider hidden in @media query', needle: /@media \(max-width: 640px\)[\s\S]*?\.toolbar-divider\s*\{\s*display:\s*none/ },
-  { name: 'mobile: cluster takes 100% row width', needle: /@media \(max-width: 640px\)[\s\S]*?\.toolbar-cluster\s*\{[^}]*flex:\s*0\s*0\s*100%/ },
-  { name: 'mobile: status dot hidden', needle: /@media \(max-width: 640px\)[\s\S]*?\.status\s*\{\s*display:\s*none/ },
+  // Phase 33 slice C: the toolbar is crumbs, breakpoint tabs and actions.
+  { name: 'breakpoints are one tab list', needle: 'class="tablist bp-tabs" role="tablist" aria-label="Preview width"' },
+  { name: 'Compare is a tab with no size', needle: /id="bp-compare" data-tab="compare" aria-selected="false"/ },
+  // Narrow windows: the crumbs take their own row and the Live status hides.
+  { name: 'narrow: crumbs take the first row', needle: /@media \(max-width: 900px\)[\s\S]*?\.crumbs\s*\{\s*flex:\s*0\s*0\s*100%/ },
+  { name: 'mobile: Live status hidden', needle: /@media \(max-width: 640px\)[\s\S]*?\.live\s*\{\s*display:\s*none/ },
 ];
 
 let allPass = true;
@@ -64,7 +62,7 @@ try {
   page.on('request', (req) => (req.url().includes('/canvas/test-canvas-id/html') ? req.abort() : req.continue()));
 
   const before = await page.evaluate(() => ({
-    singleVisible: getComputedStyle(document.getElementById('frame')!).display !== 'none',
+    singleVisible: getComputedStyle(document.getElementById('stage')!).display !== 'none',
     gridVisible: getComputedStyle(document.getElementById('compare-grid')!).display !== 'none',
   }));
 
@@ -72,10 +70,10 @@ try {
   await new Promise((r) => setTimeout(r, 50));
 
   const after = await page.evaluate(() => ({
-    singleVisible: getComputedStyle(document.getElementById('frame')!).display !== 'none',
+    singleVisible: getComputedStyle(document.getElementById('stage')!).display !== 'none',
     gridVisible: getComputedStyle(document.getElementById('compare-grid')!).display !== 'none',
     cells: document.querySelectorAll('.compare-cell').length,
-    activeBtn: document.querySelector('.btn.active')?.id ?? null,
+    activeBtn: document.querySelector('.bp-btn[aria-selected="true"]')?.id ?? null,
   }));
 
   const beforeOk = before.singleVisible === true && before.gridVisible === false;

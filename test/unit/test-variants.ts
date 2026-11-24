@@ -88,16 +88,17 @@ const baseCard = page ? page.slice(page.indexOf(`data-canvas-id="${base.id}"`), 
 check('gallery base card counts its two states', baseCard.includes(' · 2 states'), baseCard.slice(0, 200));
 
 const detailBase = await renderDetailPage(getCanvas(base.id)!, 0);
-check('base detail chips: default active + links', detailBase.includes('state-chip--active">default') && detailBase.includes(`/canvas/${empty.id}`));
+// Phase 33 slice C: the states are a nav of links; the current page carries aria-current.
+check('base detail states: default current + links', detailBase.includes('<nav class="state-nav" aria-label="States">') && detailBase.includes(`href="/canvas/${base.id}" aria-current="page">default`) && detailBase.includes(`href="/canvas/${empty.id}">empty`));
 const detailVariant = await renderDetailPage(getCanvas(empty.id)!, 0);
-check('variant detail chips: link back to base + sibling', detailVariant.includes(`/canvas/${base.id}`) && detailVariant.includes(`/canvas/${loading.id}`) && detailVariant.includes('state-chip--active">empty'));
+check('variant detail states: link back to base + sibling', detailVariant.includes(`href="/canvas/${base.id}">default`) && detailVariant.includes(`href="/canvas/${loading.id}">loading`) && detailVariant.includes(`href="/canvas/${empty.id}" aria-current="page">empty`));
 
 // Orphan: delete the base — variants render standalone, nothing crashes.
 deleteCanvas(base.id);
 const orphanPage = await renderProjectPage(DEFAULT_PROJECT_ID, 0);
 check('orphaned variants render standalone', !!orphanPage && orphanPage.includes('Orders · empty'));
 const orphanDetail = await renderDetailPage(getCanvas(empty.id)!, 0);
-check('orphaned variant detail renders without chips', !orphanDetail.includes('state-chip--active">empty'));
+check('orphaned variant detail renders without the states nav', !orphanDetail.includes('class="state-nav"'));
 
 // addVariant on an orphaned variant errors clearly.
 let orphanErr = '';

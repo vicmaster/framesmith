@@ -7,8 +7,9 @@ import { resolveGenre, type EvaluationResult, type EvaluationIssue } from '../..
 import { isPresetName } from '../../genre.js';
 import { openFeedbackCount } from '../../feedback.js';
 import { withoutRetiredSeeds } from '../../variables.js';
-import { baseCss } from '../styles.js';
-import { FAVICON_HTML } from '../components.js';
+import { baseCss, COMPONENTS_CSS } from '../styles.js';
+import { TYPE_LABELS } from './project.js';
+import { FAVICON_HTML, icon, renderDialog, renderMenu } from '../components.js';
 import { artboardSize, esc, PHONE } from '../shared.js';
 import { evalFor, gradeFor, scoreColor, sevColor } from '../scores.js';
 import { detailScript } from '../client/detail.js';
@@ -212,11 +213,12 @@ function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
  *  with the safe-area bands (the root's `safeArea`, else the profile's insets,
  *  per side — the hardware intrudes there either way) hidden until toggled. A
  *  side set to 0 draws no band. */
-function renderDevice(canvas: Canvas, w: number, h: number, deviceId: string, profile: DeviceProfile): string {
+function renderDevice(canvas: Canvas, w: number, h: number, deviceId: string, profile: DeviceProfile, tools: string): string {
   const reserved = canvas.root.type === 'document' ? usableSafeArea(canvas.root.safeArea) : {};
   const top = reserved.top ?? profile.safeArea.top;
   const bottom = reserved.bottom ?? profile.safeArea.bottom;
   return `<div class="viewport viewport--device" id="viewport">
+    ${tools}
     <div class="device" data-device="${esc(deviceId)}">
       <div class="device-screen" style="width: ${w}px; height: ${h}px;">
         <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
@@ -261,33 +263,21 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
   // Phase 25 slice D — a dark token layer makes the theme toggle appear.
   const hasDark = Object.keys(getCanvasTokens(canvas).dark?.colors ?? {}).length > 0;
 
-  // State chips (Phase 24 slice A) — a screen and its designed states cross-
-  // link: on a base with variants, "default" (active) + each state; on a
-  // variant, the base ("default") + every sibling state. Orphan-safe: a
-  // variant whose base is gone simply shows no chips.
+  // Phase 33 FR-C1 — the screen's designed states as a nav of links (each is a
+  // page, so not a tablist): on a base with variants, "default" (current) and
+  // each state; on a variant, the base ("default") and every sibling. Orphan-
+  // safe: a variant whose base is gone shows none.
   const rows = listCanvases();
   const selfRow = rows.find((r) => r.id === canvas.id);
-  let stateChips = '';
-  {
-    const chip = (label: string, id: string | null) => id === null
-      ? `<span class="state-chip state-chip--active">${esc(label)}</span>`
-      : `<a class="state-chip" href="/canvas/${id}">${esc(label)}</a>`;
-    if (selfRow?.variants?.length) {
-      stateChips = `<span class="state-chips" title="Designed states of this screen">${[
-        chip('default', null),
-        ...selfRow.variants.map((v) => chip(v.state, v.canvasId)),
-      ].join('')}</span>`;
-    } else if (selfRow?.variant) {
-      const base = rows.find((r) => r.id === selfRow.variant!.of);
-      if (base) {
-        const siblings = (base.variants ?? []).filter((v) => v.canvasId !== canvas.id);
-        stateChips = `<span class="state-chips" title="Designed states of this screen">${[
-          chip('default', base.id),
-          ...siblings.map((v) => chip(v.state, v.canvasId)),
-          chip(selfRow.variant.state, null),
-        ].join('')}</span>`;
-      }
-    }
+  const baseRow = selfRow?.variants?.length ? selfRow : selfRow?.variant ? rows.find((r) => r.id === selfRow.variant!.of) : undefined;
+  const designedStates = (baseRow?.variants ?? []).map((v) => v.state);
+  let stateNav = '';
+  if (baseRow) {
+    const link = (label: string, id: string) => `<a class="state-link" href="/canvas/${esc(id)}"${id === canvas.id ? ' aria-current="page"' : ''}>${esc(label)}</a>`;
+    stateNav = `<nav class="state-nav" aria-label="States">${[
+      link('default', baseRow.id),
+      ...(baseRow.variants ?? []).map((v) => link(v.state, v.canvasId)),
+    ].join('')}</nav>`;
   }
 
   // Critique verdict chip (Phase 13) — latest rubric overall + needs-revision
@@ -299,6 +289,36 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
     const tail = crit.needsRevision ? ' · needs revision' : '';
     verdictChip = `<span class="${cls}" title="Latest rubric critique (Phase 13) — derived overall + needs-revision flag"><b>◇</b>${crit.overall}/100${tail}</span>`;
   }
+
+  const projectName = getProject(canvas.projectId)?.name ?? 'Back';
+  const openComments = openFeedbackCount(canvas);
+  const caption = [TYPE_LABELS[surface.type], `${w} × ${h}`, designedStates.length ? `States: ${designedStates.join(', ')}` : 'No state variants yet'].join(' · ');
+
+  // FR-C1 — the breakpoints by type: web gets phone, tablet, the artboard and
+  // Compare; desktop-app the window widths below the artboard, the artboard
+  // and Compare; mobile none (it shows the device frame at 1:1).
+  // The shared tab handler (COMPONENTS_JS) selects on click and arrow keys and
+  // fires "tabchange"; the page script switches the preview from data-w/h.
+  const bpTab = (id: string, label: string, size: [number, number] | null, selected = false, title = '') =>
+    `<button type="button" role="tab" class="tab bp-btn" id="bp-${id}" data-tab="${id}"${size ? ` data-w="${size[0]}" data-h="${size[1]}"` : ''} aria-selected="${selected}" tabindex="${selected ? 0 : -1}"${title ? ` title="${esc(title)}"` : ''}>${esc(label)}</button>`;
+  const breakpoints = isMobile ? '<div class="breakpoints"></div>' : `<div class="breakpoints"><div class="tablist bp-tabs" role="tablist" aria-label="Preview width">${window
+    ? [...windowWidths.map((bw) => bpTab(`w${bw}`, String(bw), [bw, h], false, `A ${bw}px window`)),
+       bpTab('desktop', String(w), [w, h], true, "The artboard's window"),
+       bpTab('compare', 'Compare', null)].join('')
+    : [bpTab('mobile', 'Mobile', [PHONE.width, PHONE.height]),
+       bpTab('tablet', 'Tablet', [768, 1024]),
+       bpTab('desktop', 'Desktop', [w, h], true),
+       bpTab('compare', 'Compare', null)].join('')}</div></div>`;
+
+  // FR-C4 — the preview tools: zoom on web and desktop-app canvases; the
+  // preview's theme when a dark layer exists; the safe area on a phone.
+  const toolButton = (id: string, iconName: string, label: string, onclick: string, pressed?: boolean) =>
+    `<button type="button" class="btn btn--ghost btn--icon btn--xs" id="${id}" aria-label="${esc(label)}" title="${esc(label)}" onclick="${onclick}"${pressed === undefined ? '' : ` aria-pressed="${pressed}"`}>${icon(iconName)}</button>`;
+  const tools = `<div class="tools" role="toolbar" aria-label="Preview tools">${[
+    ...(isMobile ? [] : [toolButton('btn-zoom-in', 'zoom-in', 'Zoom in', 'zoomBy(1)'), toolButton('btn-zoom-out', 'zoom-out', 'Zoom out', 'zoomBy(-1)'), toolButton('btn-fit', 'scan', 'Fit to window', 'fitPreview()')]),
+    ...(hasDark ? [toolButton('theme-toggle', 'moon', 'Preview in dark', 'toggleTheme()', false)] : []),
+    ...(isMobile ? [toolButton('btn-safe', 'smartphone', 'Show safe area', 'toggleSafeArea()', false)] : []),
+  ].join('')}</div>`;
 
   // Phase 19 Slice A — heuristic quality inspector (fast, Chrome-free, read-only).
   const ev = await evalFor(canvas);
@@ -312,45 +332,55 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
 ${FAVICON_HTML}
 <style>
   ${baseCss()}
+  ${COMPONENTS_CSS}
   body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-  .toolbar { height: 52px; background: var(--sidebar); border-bottom: 1px solid var(--border-subtle); display: flex; align-items: center; padding: 0 20px; gap: 14px; flex-shrink: 0; }
-  /* Grouped clusters of related buttons with subtle vertical dividers
-   * between them. Reads as "view modes / utilities / lifecycle" three-way
-   * grouping rather than a flat wall of 8 same-weight buttons. */
-  .toolbar-cluster { display: inline-flex; align-items: center; gap: 6px; }
-  .toolbar-divider { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
-  .toolbar a { color: var(--text-tertiary); text-decoration: none; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 6px; transition: color 0.15s; }
-  .toolbar a:hover { color: var(--text-primary); }
-  .toolbar .title { font-size: 15px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.1px; }
-  .toolbar .dim { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  /* Provenance chip — the structure / preset / axes that produced this canvas
-   * (Phase 11). Flat + muted, with a single small accent mark; no glow. */
-  .toolbar .prov { font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; }
-  .toolbar .prov b { color: var(--accent-soft); font-weight: 700; margin-right: 6px; }
-  /* Critique verdict chip (Phase 13) — flat, muted; amber mark when the latest
-   * rubric flagged the canvas as needing revision. */
-  .toolbar .verdict { font-size: 12px; color: var(--text-muted); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .toolbar .verdict b { color: var(--accent-soft); font-weight: 700; margin-right: 6px; }
+  /* Phase 33 FR-C1 — the toolbar: crumbs, breakpoint tabs, actions. */
+  .toolbar { height: 48px; flex-shrink: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--space-md); padding: 0 var(--space-md); background: var(--bg-surface); border-bottom: 1px solid var(--border); }
+  .crumbs { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; overflow: hidden; }
+  .crumbs > * { flex-shrink: 0; }
+  .back-link { display: inline-flex; align-items: center; gap: var(--space-2xs); min-width: 0; max-width: 180px; color: var(--accent); text-decoration: none; font-weight: 500; white-space: nowrap; }
+  .back-link span { overflow: hidden; text-overflow: ellipsis; }
+  .back-link:hover span { text-decoration: underline; }
+  .crumb-sep { color: var(--text-secondary); flex-shrink: 0; }
+  .toolbar .title { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 80px; max-width: 240px; flex-shrink: 1; }
+  .toolbar .dim { font-size: var(--font-label); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .state-nav { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--neutral-tint); flex-shrink: 0; }
+  .state-link { font-size: var(--font-label); font-weight: 500; padding: 2px var(--space-xs); border-radius: 4px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
+  .state-link:hover { color: var(--text-primary); }
+  .state-link[aria-current="page"] { background: var(--bg-surface); color: var(--text-primary); font-weight: 600; box-shadow: var(--elevation-flat); }
+  /* Provenance and critique chips (Phases 11, 13) — slice D moves them into the Quality tab. */
+  .toolbar .prov, .toolbar .verdict { font-size: var(--font-label); color: var(--text-secondary); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .crumbs > .prov, .crumbs > .verdict { flex-shrink: 100; }
+  .toolbar .prov b, .toolbar .verdict b { color: var(--accent); font-weight: 700; margin-right: 6px; }
   .toolbar .verdict.warn b { color: var(--warning); }
-  .toolbar .spacer { flex: 1; }
-  .toolbar .btn { background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
-  .toolbar .btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-  .toolbar .btn.active { background: var(--accent-tint); border-color: var(--accent); color: var(--accent-soft); font-weight: 600; }
-  .toolbar .btn--danger:hover { background: var(--danger-tint); border-color: var(--danger); color: var(--danger); }
-  .status { width: 8px; height: 8px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
-  .status.stale { background: var(--text-muted); }
+  .breakpoints { display: flex; justify-content: center; }
+  .bp-tabs { border-bottom: none; gap: 2px; }
+  .bp-tabs .tab { padding: 0 var(--space-xs); border-radius: var(--radius-sm); }
+  .bp-tabs .tab[aria-selected="true"] { background: var(--accent-tint); }
+  .bp-tabs .tab[aria-selected="true"]::after { display: none; }
+  .actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-xs); min-width: 0; }
+  .actions .btn.active { background: var(--accent-tint); border-color: var(--accent); }
+  .live { display: inline-flex; align-items: center; gap: var(--space-2xs); font-size: var(--font-label); color: var(--text-secondary); white-space: nowrap; margin-left: var(--space-2xs); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .live.offline .live-dot { background: var(--border-strong); }
   /* Phase 19 — detail body splits into the preview (left) and the read-only
    * quality inspector (right). Toolbar stays full-width above. */
   .detail-main { flex: 1; display: flex; min-height: 0; }
-  .viewport { flex: 1; display: flex; align-items: flex-start; justify-content: safe center; overflow: auto; background: var(--bg-0); padding: 24px 0; }
-  .viewport iframe { border: none; background: transparent; transition: width 0.3s, height 0.3s; transform-origin: top center; }
-  .viewport.fit iframe { width: 100% !important; height: 100% !important; }
-  .viewport.compare #frame { display: none; }
+  .viewport { position: relative; flex: 1; display: flex; align-items: safe center; justify-content: safe center; overflow: auto; background: var(--bg-primary); padding: 72px var(--space-lg) var(--space-lg); }
+  /* FR-C4 — preview tools float top-left; the stage scales the artboard. */
+  .tools { position: absolute; top: var(--space-md); left: var(--space-md); z-index: 5; display: flex; gap: 2px; padding: var(--space-2xs); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .btn--xs { width: 24px; height: 24px; padding: 0; }
+  .btn--xs[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
+  .btn:disabled { opacity: 0.4; pointer-events: none; }
+  .stage { display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); }
+  .frame-box { box-sizing: content-box; position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--elevation-floating); background: var(--bg-surface); }
+  .frame-box iframe { position: absolute; top: 0; left: 0; border: none; background: transparent; transform-origin: 0 0; }
+  .caption { font-size: var(--font-label); color: var(--text-secondary); text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewport.compare .stage { display: none; }
   .viewport.compare .compare-grid { display: flex; }
-  .viewport.compare #btn-fit { pointer-events: none; opacity: 0.4; }
   /* Phase 30 slice F — a mobile canvas at 1:1 in a CSS device frame. The
    * iframe scrolls inside the screen, so fixed chrome stays pinned. */
-  .viewport--device { padding: 32px 24px 48px; }
+  .viewport--device { padding: 72px 24px 48px; }
   .device { flex-shrink: 0; padding: 12px; border-radius: 59px; background: var(--bg-elevated); box-shadow: 0 0 0 1px var(--border-strong), var(--elevation-floating); }
   .device-screen { position: relative; overflow: hidden; border-radius: 47px; background: transparent; }
   .device-screen iframe { display: block; border: 0; }
@@ -365,9 +395,10 @@ ${FAVICON_HTML}
   .bp-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
   .iframe-wrap { background: transparent; overflow: hidden; border-radius: 6px; border: 1px solid var(--border); width: calc(var(--bp-w) * var(--scale) * 1px); height: calc(var(--bp-h) * var(--scale) * 1px); }
   .iframe-wrap iframe { border: 0; background: transparent; width: calc(var(--bp-w) * 1px); height: calc(var(--bp-h) * 1px); transform: scale(var(--scale)); transform-origin: top left; }
-  .json-panel { display: none; position: fixed; top: 52px; right: 0; bottom: 0; width: 480px; background: var(--sidebar); border-left: 1px solid var(--border-subtle); overflow: auto; z-index: 10; }
-  .json-panel.open { display: block; }
-  .json-panel pre { padding: 20px; font-size: 12px; color: var(--text-secondary); font-family: 'JetBrains Mono', 'Fira Code', monospace; white-space: pre-wrap; word-break: break-all; }
+  .json-panel { position: fixed; top: 48px; right: 0; bottom: 0; width: 480px; max-width: 100%; z-index: 300; display: flex; flex-direction: column; background: var(--bg-surface); border-left: 1px solid var(--border); box-shadow: var(--elevation-overlay); }
+  .json-panel[hidden] { display: none; }
+  .json-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border); font-weight: 600; }
+  .json-panel pre { flex: 1; overflow: auto; padding: var(--space-md); font-size: var(--font-label); color: var(--text-secondary); font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
   /* Quality inspector (Phase 19 Slice A) */
   .inspector { width: 360px; flex-shrink: 0; background: var(--sidebar); border-left: 1px solid var(--border-subtle); overflow-y: auto; }
   .insp-tabs { display: flex; gap: 20px; padding: 16px 20px 0; border-bottom: 1px solid var(--border); align-items: flex-end; }
@@ -460,95 +491,82 @@ ${FAVICON_HTML}
   .fb-popover textarea:focus { outline: none; border-color: var(--accent); }
   .fb-pop-actions { display: flex; justify-content: flex-end; gap: 6px; }
   @media (max-width: 900px) { .inspector { width: 300px; } }
-  @media (max-width: 720px) { .detail-main { flex-direction: column; } .inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); } }
+  @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
+  @media (max-width: 1399px) { .toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } }
+  @media (max-width: 1100px) { .toolbar .prov, .toolbar .verdict, .toolbar .dim { display: none; } }
+  @media (max-width: 900px) {
+    .toolbar { display: flex; flex-wrap: wrap; height: auto; min-height: 48px; padding: var(--space-xs) var(--space-sm); row-gap: var(--space-xs); }
+    .crumbs { flex: 0 0 100%; }
+    .breakpoints { flex: 1; justify-content: flex-start; min-width: 0; overflow-x: auto; }
+    .actions { flex: 0 0 auto; }
+    .json-panel { top: 0; }
+  }
   @media (max-width: 640px) {
-    .toolbar { flex-wrap: wrap; height: auto; min-height: 52px; padding: 10px 12px; gap: 8px; }
-    .toolbar a { font-size: 13px; }
-    .toolbar .title { font-size: 14px; min-width: 0; flex-shrink: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .toolbar .dim, .toolbar .prov { display: none; }
-    /* Dividers don't make sense when clusters wrap to separate rows — hide. */
-    .toolbar-divider { display: none; }
-    /* Spacer becomes a full-width line break so the buttons drop to a new row
-     * underneath the title (rather than getting crammed alongside it). */
-    .toolbar .spacer { flex-basis: 100%; height: 0; }
-    /* Auto-refresh dot is too small to be worth its own line on mobile. Hide. */
-    .status { display: none; }
-    /* Each cluster takes a full row. Buttons inside the cluster share the
-     * row width evenly via flex: 1, with compact padding. Three cluster-rows
-     * stack cleanly under the title row. */
-    .toolbar-cluster { flex: 0 0 100%; gap: 6px; }
-    .toolbar .btn { flex: 1; min-width: 0; padding: 8px 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
-    .json-panel { width: 100%; }
+    .toolbar .dim, .live { display: none; }
+    .actions .btn span:not(.tab-count) { display: none; }
+    .viewport { padding: 64px var(--space-sm) var(--space-sm); }
     .compare-grid { --scale: 0.18; gap: 12px; padding: 12px; }
   }
 </style>
 </head>
 <body>
-  <div class="toolbar">
-    <a href="/project/${canvas.projectId}">&larr; Back</a>
-    <span class="title">${esc(canvas.name)}</span>
-    <span class="dim">${w} x ${h}${isMobile ? ` &middot; ${esc(deviceId)}` : window ? ` &middot; ${esc(window.id)}` : ''}</span>
-    ${stateChips}
-    ${provChip}
-    ${verdictChip}
-    <div class="spacer"></div>
-    <div class="toolbar-cluster">
-      ${hasDark ? '<button class="btn" id="theme-toggle" onclick="toggleTheme()" title="Render the dark token layer">Dark</button>' : ''}
-      ${isMobile
-        ? '<button class="btn" onclick="toggleSafeArea()" id="btn-safe" title="Show where the status bar and home indicator sit">Safe area</button>'
-        : window
-        ? `${windowWidths.map((bw) => `<button class="btn bp-btn" onclick="setViewport(${bw}, ${h}, 'w${bw}')" id="bp-w${bw}" title="A ${bw}px window">${bw}</button>`).join('\n      ')}
-      <button class="btn bp-btn active" onclick="setViewport(${w}, ${h}, 'desktop')" id="bp-desktop" title="The artboard's window">${w}</button>
-      <button class="btn bp-btn" onclick="setCompareMode()" id="bp-compare">Compare</button>`
-        : `<button class="btn bp-btn" onclick="setViewport(${PHONE.width}, ${PHONE.height}, 'mobile')" id="bp-mobile">Mobile</button>
-      <button class="btn bp-btn" onclick="setViewport(768, 1024, 'tablet')" id="bp-tablet">Tablet</button>
-      <button class="btn bp-btn active" onclick="setViewport(${w}, ${h}, 'desktop')" id="bp-desktop">Desktop</button>
-      <button class="btn bp-btn" onclick="setCompareMode()" id="bp-compare">Compare</button>`}
+  <header class="toolbar">
+    <div class="crumbs">
+      <a class="back-link" href="/project/${esc(canvas.projectId)}">${icon('arrow-left')}<span>${esc(projectName)}</span></a>
+      ${icon('chevron-right', 14).replace('<svg', '<svg class="crumb-sep" aria-hidden="true"')}
+      <span class="title" title="${esc(canvas.name)}">${esc(canvas.name)}</span>
+      <span class="dim">${w} × ${h}${isMobile ? ` · ${esc(deviceId)}` : window ? ` · ${esc(window.id)}` : ''}</span>
+      ${stateNav}
+      ${provChip}
+      ${verdictChip}
     </div>
-    <span class="toolbar-divider" aria-hidden="true"></span>
-    <div class="toolbar-cluster">
-      ${isMobile ? '' : '<button class="btn" onclick="toggleFit()" id="btn-fit">Fit</button>'}
-      <button class="btn" onclick="toggleJson()" id="btn-json">JSON</button>
-      <button class="btn" onclick="toggleComment()" id="btn-comment" title="Click any element in the preview to leave a note for the agent">Comment</button>
+    ${breakpoints}
+    <div class="actions">
+      <button type="button" class="btn btn--secondary" onclick="toggleComment()" id="btn-comment" aria-pressed="false" title="Click any element in the preview to leave a note for the agent">${icon('message-square')}<span>Comment</span>${openComments > 0 ? `<span class="tab-count" id="comment-count">${openComments}</span>` : ''}</button>
+      ${renderMenu('more-menu', icon('ellipsis'), 'More actions', [
+        { action: 'json', label: 'View JSON', icon: 'braces' },
+        { action: 'copy', label: 'Copy canvas ID', icon: 'copy', keepOpen: true },
+        'separator',
+        canvas.archived ? { action: 'unarchive', label: 'Restore', icon: 'archive-restore' } : { action: 'archive', label: 'Archive', icon: 'archive' },
+        { action: 'delete', label: 'Delete canvas', icon: 'trash-2', danger: true },
+      ])}
+      <span class="live" id="live" role="status"><span class="live-dot"></span><span class="live-label">Live</span></span>
     </div>
-    <span class="toolbar-divider" aria-hidden="true"></span>
-    <div class="toolbar-cluster">
-      ${canvas.archived
-        ? `<button class="btn" onclick="lifecycleAction('unarchive')" id="btn-restore">Restore</button>`
-        : `<button class="btn" onclick="lifecycleAction('archive')" id="btn-archive">Archive</button>`
-      }
-      <button class="btn btn--danger" onclick="lifecycleAction('delete')" id="btn-delete">Delete</button>
-    </div>
-    <div class="status" id="status" title="Auto-refresh active"></div>
-  </div>
+  </header>
   <div class="detail-main">
-  ${isMobile ? renderDevice(canvas, w, h, deviceId, profile) : `<div class="viewport" id="viewport">
-    <iframe id="frame" src="/canvas/${canvas.id}/html" width="${w}" height="${h}"></iframe>
+  ${isMobile ? renderDevice(canvas, w, h, deviceId, profile, tools) : `<div class="viewport" id="viewport">
+    ${tools}
+    <div class="stage" id="stage">
+      <div class="frame-box" id="frame-box" style="width: ${w}px; height: ${h}px;"><iframe id="frame" src="/canvas/${esc(canvas.id)}/html" width="${w}" height="${h}" title="Preview of ${esc(canvas.name)}"></iframe></div>
+      <div class="caption">${esc(caption)}</div>
+    </div>
     <div class="compare-grid" id="compare-grid">
       ${window ? windowWidths.map((bw) => `<div class="compare-cell" style="--bp-w: ${bw}; --bp-h: ${h};">
         <div class="bp-label">Window · ${bw}×${h}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${bw}&h=${h}" data-bp="w${bw}"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${bw}&h=${h}" data-bp="w${bw}" title="Preview at ${bw}×${h}"></iframe></div>
       </div>`).join('\n      ') : `<div class="compare-cell" style="--bp-w: ${PHONE.width}; --bp-h: ${PHONE.height};">
         <div class="bp-label">Mobile · ${PHONE.width}×${PHONE.height}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile" title="Preview at ${PHONE.width}×${PHONE.height}"></iframe></div>
       </div>
       <div class="compare-cell" style="--bp-w: 768; --bp-h: 1024;">
         <div class="bp-label">Tablet · 768×1024</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet" title="Preview at 768×1024"></iframe></div>
       </div>`}
       <div class="compare-cell" style="--bp-w: ${w}; --bp-h: ${h};">
         <div class="bp-label">${window ? "Window" : "Desktop"} · ${w}×${h}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop" title="Preview at ${w}×${h}"></iframe></div>
       </div>
     </div>
   </div>`}
   ${inspectorHtml}
   </div>
-  <div class="json-panel" id="json-panel">
+  <aside class="json-panel" id="json-panel" aria-label="Canvas JSON" hidden>
+    <div class="json-head"><span>JSON</span><button type="button" class="btn btn--ghost btn--icon" aria-label="Close JSON" onclick="toggleJson(false)">${icon('x')}</button></div>
     <pre id="json-content">Loading...</pre>
-  </div>
+  </aside>
+  ${renderDialog({ id: 'delete-dialog', title: `Delete ${canvas.name}?`, body: 'The canvas is deleted for good and cannot be restored. To hide it from the gallery and keep it, archive it instead.', confirmLabel: 'Delete canvas', destructive: true })}
   <script>
     ${detailScript(canvas, w, h, surface.type)}
   </script>
