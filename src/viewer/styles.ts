@@ -39,15 +39,15 @@ export function baseCss(): string {
   return `
   ${fontFaceCss()}
   :root { color-scheme: light dark; ${themeVars(LIGHT)} ${scaleVars()}
-    --font-sans: '${BODY_FAMILY}', ${FALLBACK_STACK};
-    --font-display: '${DISPLAY_FAMILY}', '${BODY_FAMILY}', ${FALLBACK_STACK};
+    --family-sans: '${BODY_FAMILY}', ${FALLBACK_STACK};
+    --family-display: '${DISPLAY_FAMILY}', '${BODY_FAMILY}', ${FALLBACK_STACK};
     --scrim: color-mix(in srgb, var(--text-primary) 40%, transparent);
     --hover: color-mix(in srgb, var(--text-primary) 6%, transparent);
   }
   @media (prefers-color-scheme: dark) { :root { ${themeVars(DARK)} } }
   ${LEGACY_ALIASES}
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-sans); font-size: var(--font-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--family-sans); font-size: var(--font-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
   :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   ${STATE_CHIP_CSS}`;
 }

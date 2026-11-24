@@ -152,11 +152,11 @@ const dialog = await page.$eval('#delete-dialog', (d) => ({ shown: !(d.closest('
 check('Delete canvas opens the dialog, titled with the name', dialog.shown && dialog.title === 'Delete catalogue?', JSON.stringify(dialog));
 check('…saying it cannot be undone and offering archive', dialog.body!.includes('cannot be restored') && dialog.body!.includes('archive it instead'));
 check('focus starts on Cancel', await page.evaluate(() => document.activeElement?.textContent === 'Cancel'));
-await page.click('[data-dialog-cancel]');
+await page.click('#delete-dialog [data-dialog-cancel]');
 check('Cancel leaves the canvas', !!getCanvas(store.ids.catalogue) && await page.$eval('#delete-dialog', (d) => (d.closest('[data-dialog-scrim]') as HTMLElement).hidden));
 await page.click(more);
 await page.click('[data-action="delete"]');
-await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('[data-dialog-confirm]')]);
+await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('#delete-dialog [data-dialog-confirm]')]);
 check('confirming deletes it and goes to the project', !getCanvas(store.ids.catalogue) && page.url().endsWith(`/project/${store.patternProjectId}`));
 
 // Narrow windows: the name and the states stay visible; below 720px the page scrolls to the inspector.

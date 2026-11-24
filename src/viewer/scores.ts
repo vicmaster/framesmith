@@ -66,17 +66,3 @@ export async function evalFor(canvas: Canvas, states?: string[]): Promise<Evalua
     return null; // a scoring failure must never break the page
   }
 }
-
-export function gradeFor(score: number): { label: string; warn: boolean } {
-  if (score >= 90) return { label: 'Excellent', warn: false };
-  if (score >= 75) return { label: 'Good', warn: false };
-  if (score >= 60) return { label: 'Needs improvement', warn: true };
-  return { label: 'Poor', warn: true };
-}
-// ≥80 green, 60–79 amber, <60 red — the bar colors in the panel + gallery badge.
-export function scoreColor(score: number): string {
-  return score >= 80 ? 'var(--success)' : score >= 60 ? 'var(--accent)' : 'var(--danger)';
-}
-export function sevColor(severity: string): string {
-  return severity === 'error' ? 'var(--danger)' : severity === 'warning' ? 'var(--accent)' : 'var(--info)';
-}

@@ -3,31 +3,43 @@ import type { Canvas } from '../../types.js';
 import { getProject, getCanvasTokens, getProjectDesignSystem, getWorkspaceDesignSystem } from '../../workspaces.js';
 import { listCanvases } from '../../scene-graph.js';
 import { resolveSurface, usableSafeArea, deviceProfile, windowProfile, WINDOW_PROFILES, DEFAULT_WINDOW, DEFAULT_DEVICE, type DeviceProfile } from '../../surfaces.js';
-import { resolveGenre, type EvaluationResult, type EvaluationIssue } from '../../evaluate.js';
+import { foldIssues, resolveGenre, type EvaluationResult, type EvaluationIssue } from '../../evaluate.js';
 import { isPresetName } from '../../genre.js';
 import { openFeedbackCount } from '../../feedback.js';
 import { withoutRetiredSeeds } from '../../variables.js';
 import { baseCss, COMPONENTS_CSS } from '../styles.js';
 import { TYPE_LABELS } from './project.js';
-import { FAVICON_HTML, icon, renderDialog, renderMenu } from '../components.js';
-import { artboardSize, esc, PHONE } from '../shared.js';
-import { evalFor, gradeFor, scoreColor, sevColor } from '../scores.js';
+import { FAVICON_HTML, icon, renderDialog, renderMenu, renderTabs } from '../components.js';
+import { artboardSize, buildNodeIndex, esc, PHONE } from '../shared.js';
+import { evalFor } from '../scores.js';
 import { detailScript } from '../client/detail.js';
 
-function renderIssueCard(issue: EvaluationIssue): string {
-  const label = issue.tell ? `${esc(issue.category)} · ${esc(issue.tell)}` : esc(issue.category);
-  const clickable = typeof issue.nodeId === 'string' && issue.nodeId.length > 0;
-  const fixTag = issue.fix
-    ? `<span class="insp-fix" title="canvas_autofix can resolve this">&#9889; auto-fixable</span>` : '';
+/** The evaluator's quality bar: a score above 95 is at it (FR-B2, FR-D1). */
+const BAR = 96;
+
+const CATEGORY_LABELS: Record<string, string> = {
+  spacing: 'Spacing', color: 'Color', typography: 'Typography', structure: 'Structure',
+  consistency: 'Consistency', usability: 'Usability', coverage: 'Coverage', cliche: 'Cliché',
+};
+const categoryLabel = (name: string) => CATEGORY_LABELS[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
+const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1 };
+const severityRank = (sev: string) => SEVERITY_RANK[sev] ?? 2;
+
+/** One folded issue as a ruled row (FR-D1): "<Category> · <kind>", the
+ * message, and a link that outlines its nodes. The suggestion is the row's
+ * tooltip; the agent reads it from canvas_evaluate. */
+function renderIssueRow(issue: EvaluationIssue): string {
+  const fixable = !!issue.fix || (issue.fixes?.length ?? 0) > 0;
+  const kind = issue.tell ?? (fixable ? 'auto-fixable' : issue.severity);
+  const nodes = issue.nodeIds?.length ? issue.nodeIds : issue.nodeId ? [issue.nodeId] : [];
+  const show = nodes.length
+    ? `<button type="button" class="issue-nodes" data-nodes="${esc(JSON.stringify(nodes))}">Show ${nodes.length} node${nodes.length === 1 ? '' : 's'}</button>`
+    : '';
   return `
-    <div class="insp-issue${clickable ? '' : ' insp-issue--static'}"${clickable ? ` data-issue-node="${esc(issue.nodeId!)}"` : ''}>
-      <div class="insp-issue-top">
-        <span class="insp-dot" style="background:${sevColor(issue.severity)}"></span>
-        <span class="insp-badge">${label}</span>
-        ${fixTag}
-      </div>
-      <div class="insp-msg">${esc(issue.message)}</div>
-      ${issue.suggestion ? `<div class="insp-sug">${esc(issue.suggestion)}</div>` : ''}
+    <div class="issue issue--${esc(issue.severity)}"${issue.suggestion ? ` title="${esc(issue.suggestion)}"` : ''}>
+      <div class="issue-kind">${esc(categoryLabel(issue.category))} · ${esc(kind)}</div>
+      <div class="issue-msg">${esc(issue.message)}</div>
+      ${show}
     </div>`;
 }
 
@@ -71,10 +83,7 @@ function renderDesignSystem(canvas: Canvas): string {
     if (m) for (const n of Object.keys(m)) allSources.push(sourceOf(cat, n));
   }
   if (allSources.length === 0) {
-    return `
-  <div class="insp-tabpane" data-pane="design" hidden>
-    <div class="insp-section"><div class="insp-clean">This canvas inherits no design tokens. Set them with set_variables or bind a design system.</div></div>
-  </div>`;
+    return '<div class="insp-section"><div class="insp-empty">This canvas inherits no design tokens. Set them with set_variables or bind a design system.</div></div>';
   }
   const dominant = mostCommon(allSources);
   const defaultLabel = dominant === 'default' ? 'defaults' : `from ${dominant}`;
@@ -153,59 +162,84 @@ function renderDesignSystem(canvas: Canvas): string {
       </div>
     </div>` : '';
 
-  return `
-  <div class="insp-tabpane" data-pane="design" hidden>
-    ${colorSec}${typeSec}${spaceSec}${radiusSec}
-  </div>`;
+  const body = `${colorSec}${typeSec}${spaceSec}${radiusSec}`;
+  return body.trim() ? body : '<div class="insp-section"><div class="insp-empty">This canvas inherits no design tokens.</div></div>';
 }
 
-function renderInspector(ev: EvaluationResult, canvas: Canvas): string {
-  const grade = gradeFor(ev.overallScore);
-  const fbOpen = openFeedbackCount(canvas);
-  const cats = ev.categories.map((c) => `
-      <div class="insp-cat">
-        <span class="insp-cat-name">${esc(c.name)}</span>
-        <span class="insp-cat-track"><span class="insp-cat-fill" style="width:${Math.max(0, Math.min(100, c.score))}%;background:${scoreColor(c.score)}"></span></span>
-        <span class="insp-cat-score" style="${c.score < 60 ? 'color:var(--danger);font-weight:700' : ''}">${c.score}</span>
-      </div>`).join('');
-  const issues = ev.issues.length
-    ? ev.issues.map(renderIssueCard).join('')
-    : `<div class="insp-clean">No issues — this canvas is clean.</div>`;
+/** The Quality tab (FR-D1): the score against the bar with a reason line,
+ * provenance and critique, the categories lowest first, then the folded
+ * issues, errors first. */
+export function renderQualityPanel(ev: EvaluationResult | null, canvas: Canvas): string {
+  if (!ev) {
+    const empty = !canvas.root.children?.length;
+    return `<div class="insp-section"><div class="insp-empty">${empty ? 'An empty canvas has no score yet.' : 'The score could not be computed for this canvas.'}</div></div>`;
+  }
+  const below = ev.overallScore < BAR;
+  const folded = foldIssues(ev.issues);
+  const ordered = [...folded].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  const cats = [...ev.categories].sort((a, b) => a.score - b.score);
+  const weakest = cats.find((c) => c.score < 100);
+  const blocker = weakest ? ordered.find((i) => i.category === weakest.name) : undefined;
+  const reason = weakest
+    ? `${categoryLabel(weakest.name)} holds it back${blocker ? `: ${blocker.message}` : '.'}`
+    : 'Every category is at 100.';
+
+  const prov = canvas.metadata?.provenance;
+  const genre = resolveGenre(canvas).genre;
+  const built = [prov?.structure, genre, prov?.preset && ('genre' in (prov ?? {}) || isPresetName(prov.preset)) ? prov.preset : undefined].filter(Boolean) as string[];
+  const crit = canvas.metadata?.critique;
+
+  const findings = folded.reduce((n, i) => n + (i.count ?? 1), 0);
   return `
-  <aside class="inspector" id="inspector">
-    <div class="insp-tabs">
-      <span class="insp-tab active" data-tab="quality">Quality</span>
-      <span class="insp-tab" data-tab="design">Design system</span>
-      <span class="insp-tab" data-tab="feedback">Feedback<span class="fb-badge" id="fb-badge"${fbOpen ? '' : ' hidden'}>${fbOpen}</span></span>
-      <span class="insp-tab disabled" title="Coming in Phase 19 Slice C">Import</span>
+    <div class="insp-section score-block">
+      <div class="score-line">
+        <div class="score-figure"><span class="score-value">${ev.overallScore}</span><span class="score-scale">/ 100</span></div>
+        <span class="verdict-chip${below ? ' verdict-chip--below' : ''}">${below ? 'Below the bar' : 'At the bar'}</span>
+      </div>
+      <div class="score-reason">${esc(reason)}</div>
+      ${built.length ? `<div class="score-built">Built from ${esc(built.join(' · '))}</div>` : ''}
+      ${crit ? `<div class="score-critique">Vision critique ${crit.overall}/100${crit.needsRevision ? ' · needs revision' : ''}</div>` : ''}
     </div>
-    <div class="insp-tabpane" data-pane="quality">
-      <div class="insp-score">
-        <div class="insp-score-row">
-          <div class="insp-score-num">${ev.overallScore}<span>/100</span></div>
-          <span class="insp-grade${grade.warn ? ' warn' : ''}">${grade.label}</span>
-        </div>
-        <div class="insp-track"><div class="insp-fill" style="width:${ev.overallScore}%;background:${scoreColor(ev.overallScore)}"></div></div>
-      </div>
-      <div class="insp-divider"></div>
-      <div class="insp-section">
-        <div class="insp-section-label">Categories</div>
-        ${cats}
-      </div>
-      <div class="insp-divider"></div>
-      <div class="insp-section">
-        <div class="insp-section-head"><span class="insp-section-label">Issues</span><span class="insp-count">${ev.issues.length}</span></div>
-        ${issues}
-      </div>
+    <div class="insp-section categories">
+      ${cats.map((c) => `<div class="category${c.score < BAR ? ' category--below' : ''}">
+        <span class="category-name">${esc(categoryLabel(c.name))}</span>
+        <span class="meter"><span class="meter-fill" style="width:${Math.max(0, Math.min(100, c.score))}%"></span></span>
+        <span class="category-score">${c.score}</span>
+      </div>`).join('')}
     </div>
-    ${renderDesignSystem(canvas)}
-    <div class="insp-tabpane" data-pane="feedback" hidden>
-      <div class="insp-section">
-        <div class="insp-section-head"><span class="insp-section-label">Point-and-tell</span></div>
-        <div class="fb-hint">Toggle <b>Comment</b> in the toolbar, then click any element in the preview to leave a note for the agent.</div>
-        <div id="fb-pane"></div>
-      </div>
-    </div>
+    <div class="insp-section issues">
+      <div class="issues-head"><span class="issues-title">Issues</span><span class="issues-count">${folded.length ? `${findings} finding${findings === 1 ? '' : 's'} in ${folded.length} group${folded.length === 1 ? '' : 's'}` : ''}</span></div>
+      ${ordered.length ? ordered.map(renderIssueRow).join('') : '<div class="insp-empty">No issues. This canvas is clean.</div>'}
+    </div>`;
+}
+
+/** The Feedback tab's shell; the list is rendered client-side from
+ * /api/canvas/:id/feedback, so comment text never passes through innerHTML. */
+function renderFeedbackPanel(): string {
+  return `<div class="insp-section">
+      <div class="fb-hint">Press <b>Comment</b>, then click an element in the preview to pin a note for the agent.</div>
+      <div id="fb-pane"></div>
+    </div>`;
+}
+
+/** What GET /canvas/:id/inspector returns (FR-D4): the panels the page swaps
+ * when the canvas changes, and the node index the comment popover labels with. */
+export async function renderInspectorParts(canvas: Canvas): Promise<{ quality: string; design: string; nodeIndex: Record<string, { name?: string; type: string }> }> {
+  return { quality: renderQualityPanel(await evalFor(canvas), canvas), design: renderDesignSystem(canvas), nodeIndex: buildNodeIndex(canvas.root) };
+}
+
+function renderInspector(ev: EvaluationResult | null, canvas: Canvas): string {
+  const open = openFeedbackCount(canvas);
+  return `
+  <aside class="inspector" id="inspector" aria-label="Inspector">
+    <div class="insp-tabs">${renderTabs([
+      { id: 'quality', label: 'Quality', selected: true, panelId: 'insp-quality' },
+      { id: 'design', label: 'Design system', panelId: 'insp-design' },
+      { id: 'feedback', label: 'Feedback', count: open, panelId: 'insp-feedback' },
+    ], 'Inspector')}</div>
+    <section class="insp-panel" id="insp-quality" role="tabpanel" aria-labelledby="tab-quality">${renderQualityPanel(ev, canvas)}</section>
+    <section class="insp-panel" id="insp-design" role="tabpanel" aria-labelledby="tab-design" hidden>${renderDesignSystem(canvas)}</section>
+    <section class="insp-panel" id="insp-feedback" role="tabpanel" aria-labelledby="tab-feedback" hidden>${renderFeedbackPanel()}</section>
   </aside>`;
 }
 
@@ -244,22 +278,6 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
   const deviceId = surface.device ?? DEFAULT_DEVICE;
   const profile = deviceProfile(deviceId) ?? PHONE;
 
-  // Provenance chip (Phase 11) — structure · genre · preset · alignment/density. Shows
-  // only the parts that exist; hidden entirely when a canvas has no provenance.
-  const prov = canvas.metadata?.provenance;
-  let provChip = '';
-  if (prov) {
-    const parts: string[] = [];
-    if (prov.structure) parts.push(esc(prov.structure));
-    const genre = resolveGenre(canvas).genre;
-    if (genre) parts.push(esc(genre));
-    // A legacy genre stored in `preset` already showed as the genre above.
-    if (prov.preset && ('genre' in prov || isPresetName(prov.preset))) parts.push(esc(prov.preset));
-    const ax = prov.axes ? [prov.axes.alignment, prov.axes.density].filter(Boolean).join('/') : '';
-    if (ax) parts.push(esc(ax));
-    if (parts.length) provChip = `<span class="prov" title="Provenance — the structure / genre / preset / axes of this canvas"><b>◆</b>${parts.join(' · ')}</span>`;
-  }
-
   // Phase 25 slice D — a dark token layer makes the theme toggle appear.
   const hasDark = Object.keys(getCanvasTokens(canvas).dark?.colors ?? {}).length > 0;
 
@@ -280,15 +298,7 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
     ].join('')}</nav>`;
   }
 
-  // Critique verdict chip (Phase 13) — latest rubric overall + needs-revision
-  // flag. Hidden when a canvas has never been judged.
-  const crit = canvas.metadata?.critique;
-  let verdictChip = '';
-  if (crit) {
-    const cls = crit.needsRevision ? 'verdict warn' : 'verdict';
-    const tail = crit.needsRevision ? ' · needs revision' : '';
-    verdictChip = `<span class="${cls}" title="Latest rubric critique (Phase 13) — derived overall + needs-revision flag"><b>◇</b>${crit.overall}/100${tail}</span>`;
-  }
+
 
   const projectName = getProject(canvas.projectId)?.name ?? 'Back';
   const openComments = openFeedbackCount(canvas);
@@ -322,7 +332,7 @@ export async function renderDetailPage(canvas: Canvas, port: number): Promise<st
 
   // Phase 19 Slice A — heuristic quality inspector (fast, Chrome-free, read-only).
   const ev = await evalFor(canvas);
-  const inspectorHtml = ev ? renderInspector(ev, canvas) : '';
+  const inspectorHtml = renderInspector(ev, canvas);
 
   return `<!DOCTYPE html>
 <html>
@@ -348,11 +358,6 @@ ${FAVICON_HTML}
   .state-link { font-size: var(--font-label); font-weight: 500; padding: 2px var(--space-xs); border-radius: 4px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
   .state-link:hover { color: var(--text-primary); }
   .state-link[aria-current="page"] { background: var(--bg-surface); color: var(--text-primary); font-weight: 600; box-shadow: var(--elevation-flat); }
-  /* Provenance and critique chips (Phases 11, 13) — slice D moves them into the Quality tab. */
-  .toolbar .prov, .toolbar .verdict { font-size: var(--font-label); color: var(--text-secondary); font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .crumbs > .prov, .crumbs > .verdict { flex-shrink: 100; }
-  .toolbar .prov b, .toolbar .verdict b { color: var(--accent); font-weight: 700; margin-right: 6px; }
-  .toolbar .verdict.warn b { color: var(--warning); }
   .breakpoints { display: flex; justify-content: center; }
   .bp-tabs { border-bottom: none; gap: 2px; }
   .bp-tabs .tab { padding: 0 var(--space-xs); border-radius: var(--radius-sm); }
@@ -399,103 +404,104 @@ ${FAVICON_HTML}
   .json-panel[hidden] { display: none; }
   .json-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border); font-weight: 600; }
   .json-panel pre { flex: 1; overflow: auto; padding: var(--space-md); font-size: var(--font-label); color: var(--text-secondary); font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
-  /* Quality inspector (Phase 19 Slice A) */
-  .inspector { width: 360px; flex-shrink: 0; background: var(--sidebar); border-left: 1px solid var(--border-subtle); overflow-y: auto; }
-  .insp-tabs { display: flex; gap: 20px; padding: 16px 20px 0; border-bottom: 1px solid var(--border); align-items: flex-end; }
-  .insp-tab { font-size: 13px; font-weight: 500; color: var(--text-tertiary); padding-bottom: 10px; border-bottom: 2px solid transparent; }
-  .insp-tab.active { color: var(--accent); font-weight: 600; border-bottom-color: var(--accent); }
-  .insp-tab.disabled { color: var(--text-muted); cursor: default; }
-  .insp-score { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
-  .insp-score-row { display: flex; justify-content: space-between; align-items: center; }
-  .insp-score-num { font-size: 40px; font-weight: 700; color: var(--text-primary); line-height: 1; font-variant-numeric: tabular-nums; }
-  .insp-score-num span { font-size: 14px; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
-  .insp-grade { font-size: 11px; font-weight: 600; color: var(--text-secondary); background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; }
-  .insp-grade.warn { color: var(--accent-soft); }
-  .insp-track { width: 100%; height: 8px; border-radius: 4px; background: var(--surface-elevated); overflow: hidden; }
-  .insp-fill { height: 100%; border-radius: 4px; }
-  .insp-divider { height: 1px; background: var(--border); }
-  .insp-section { padding: 16px 20px; display: flex; flex-direction: column; gap: 11px; }
-  .insp-section-head { display: flex; justify-content: space-between; align-items: center; }
-  .insp-section-label { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); }
-  .insp-count { font-size: 11px; font-weight: 700; color: var(--text-secondary); background: var(--surface-elevated); border-radius: 6px; padding: 2px 8px; }
-  .insp-cat { display: flex; align-items: center; gap: 10px; }
-  .insp-cat-name { width: 84px; flex-shrink: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-  .insp-cat-track { flex: 1; height: 6px; border-radius: 3px; background: var(--surface-elevated); overflow: hidden; }
-  .insp-cat-fill { display: block; height: 100%; border-radius: 3px; }
-  .insp-cat-score { width: 28px; flex-shrink: 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-  .insp-issue { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-  .insp-issue:hover { border-color: var(--border); background: var(--surface-hover); }
-  .insp-issue.sel { border-color: var(--accent); background: var(--accent-tint); }
-  .insp-issue--static { cursor: default; }
-  .insp-issue--static:hover { border-color: var(--border-subtle); background: var(--surface); }
-  .insp-issue-top { display: flex; align-items: center; gap: 8px; }
-  .insp-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .insp-badge { font-size: 10px; font-weight: 600; color: var(--accent-soft); background: var(--surface-elevated); border-radius: 6px; padding: 2px 7px; }
-  .insp-fix { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--success); }
-  .insp-msg { font-size: 12px; font-weight: 500; color: var(--text-primary); line-height: 1.45; }
-  .insp-sug { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; }
-  .insp-clean { font-size: 12px; color: var(--text-tertiary); padding: 4px 0; }
-  /* Design-system pane (Phase 19 Slice B) */
-  .insp-tab[data-tab] { cursor: pointer; }
-  .insp-tabpane[hidden] { display: none; }
-  .ds-default { font-size: 10px; font-weight: 500; color: var(--text-muted); }
-  .ds-src { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; padding: 1px 5px; border-radius: 4px; }
-  .ds-src--canvas { color: var(--accent-soft); background: var(--accent-tint); }
-  .ds-src--project { color: var(--text-secondary); background: var(--neutral-tint); }
-  .ds-src--workspace { color: var(--text-tertiary); background: var(--surface-elevated); }
-  .ds-src--default { color: var(--text-muted); background: var(--surface-elevated); }
-  .ds-swatches { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .ds-swatch { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .ds-chip { width: 100%; height: 36px; border-radius: 8px; border: 1px solid var(--border-subtle); }
-  .ds-swatch-meta { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; }
-  .ds-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ds-hex { font-size: 11px; font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-  .ds-type { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-  .ds-type-sample { color: var(--text-primary); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ds-type-meta { font-size: 10px; font-weight: 500; color: var(--text-muted); flex-shrink: 0; }
-  .ds-sp { display: flex; align-items: center; gap: 10px; }
-  .ds-sp-name { width: 36px; flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--text-secondary); }
-  .ds-sp-bar { height: 8px; border-radius: 2px; background: var(--accent); flex-shrink: 0; }
-  .ds-sp-val { font-size: 11px; font-weight: 500; color: var(--text-muted); }
-  .ds-radii { display: flex; gap: 16px; }
-  .ds-rad { display: flex; flex-direction: column; gap: 6px; align-items: center; }
-  .ds-rad-tile { width: 56px; height: 40px; background: var(--surface-elevated); border: 1px solid var(--border); }
-  .ds-rad-label { font-size: 10px; font-weight: 500; color: var(--text-muted); }
-  /* Point-and-tell feedback (Phase 21 Slice B) */
-  .fb-badge { font-size: 10px; font-weight: 700; color: var(--accent-soft); background: var(--accent-tint); border-radius: 8px; padding: 1px 6px; margin-left: 6px; font-variant-numeric: tabular-nums; }
-  .fb-hint { font-size: 11px; color: var(--text-tertiary); line-height: 1.5; }
-  .fb-hint b { color: var(--text-secondary); }
-  #fb-pane { display: flex; flex-direction: column; gap: 10px; }
-  .fb-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--border-subtle); border-radius: 10px; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-  .fb-card:hover { border-color: var(--border); background: var(--surface-hover); }
-  .fb-card.sel { border-color: var(--accent); background: var(--accent-tint); }
-  .fb-card.resolved { opacity: 0.55; cursor: default; }
-  .fb-card-top { display: flex; align-items: center; gap: 8px; }
-  .fb-anchor { font-size: 10px; font-weight: 600; color: var(--accent-soft); background: var(--surface-elevated); border-radius: 6px; padding: 2px 7px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fb-orphan { font-size: 10px; font-weight: 600; color: var(--warning); }
-  .fb-when { margin-left: auto; font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .fb-comment { font-size: 12px; font-weight: 500; color: var(--text-primary); line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
-  .fb-reply { font-size: 11px; color: var(--text-tertiary); line-height: 1.45; border-left: 2px solid var(--border); padding-left: 8px; }
-  .fb-actions { display: flex; gap: 6px; margin-top: 2px; }
-  .fb-btn { background: var(--surface-elevated); border: 1px solid var(--border); color: var(--text-secondary); padding: 3px 10px; border-radius: 5px; font-size: 10px; font-weight: 600; cursor: pointer; font-family: inherit; transition: background 0.15s, border-color 0.15s, color 0.15s; }
-  .fb-btn:hover { background: var(--surface-hover); color: var(--text-primary); }
-  .fb-btn--danger:hover { background: var(--danger-tint); border-color: var(--danger); color: var(--danger); }
-  .fb-sep { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; }
-  .fb-empty { font-size: 12px; color: var(--text-tertiary); }
-  /* Comment popover — parent-page overlay anchored near the clicked element. */
-  .fb-popover { position: fixed; z-index: 30; width: 300px; background: var(--sidebar); border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; box-shadow: var(--elevation-floating); }
-  .fb-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-  .fb-chip { font-size: 10px; font-weight: 600; color: var(--text-tertiary); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; cursor: pointer; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .fb-chip.sel { color: var(--accent-soft); background: var(--accent-tint); border-color: var(--accent); }
-  .fb-popover textarea { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-family: inherit; font-size: 12px; line-height: 1.45; padding: 8px; min-height: 60px; resize: vertical; }
-  .fb-popover textarea:focus { outline: none; border-color: var(--accent); }
-  .fb-pop-actions { display: flex; justify-content: flex-end; gap: 6px; }
-  @media (max-width: 900px) { .inspector { width: 300px; } }
+  /* Phase 33 slice D — the inspector. */
+  .inspector { width: 380px; flex-shrink: 0; background: var(--bg-surface); border-left: 1px solid var(--border); overflow-y: auto; }
+  .insp-tabs { position: sticky; top: 0; z-index: 2; background: var(--bg-surface); padding: var(--space-xs) var(--space-md) 0; }
+  .insp-panel[hidden] { display: none; }
+  .insp-section { padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-xs); }
+  .insp-section + .insp-section { border-top: 1px solid var(--border); }
+  .insp-empty { font-size: var(--font-label); color: var(--text-secondary); }
+  .score-line { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+  .score-figure { display: flex; align-items: baseline; gap: var(--space-2xs); }
+  .score-value { font-family: var(--family-display); font-size: var(--font-display); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+  .score-scale { font-size: var(--font-label); color: var(--text-secondary); }
+  .verdict-chip { font-size: var(--font-caption); font-weight: 600; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--neutral-tint); color: var(--text-secondary); white-space: nowrap; }
+  .verdict-chip--below { background: var(--warning-tint); color: var(--warning); }
+  .score-reason { font-size: var(--font-label); color: var(--text-secondary); }
+  .score-built, .score-critique { font-size: var(--font-caption); color: var(--text-secondary); }
+  .categories { gap: 0; }
+  .category { display: flex; align-items: center; gap: var(--space-sm); height: 28px; }
+  .category-name { width: 96px; flex-shrink: 0; font-size: var(--font-label); color: var(--text-secondary); }
+  .category--below .category-name { color: var(--text-primary); }
+  .meter { flex: 1; height: 4px; border-radius: var(--radius-sm); background: var(--neutral-tint); overflow: hidden; }
+  .meter-fill { display: block; height: 100%; border-radius: var(--radius-sm); background: var(--border-strong); }
+  .category--below .meter-fill { background: var(--warning); }
+  .category-score { width: 28px; flex-shrink: 0; text-align: right; font-size: var(--font-label); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .category--below .category-score { color: var(--warning); font-weight: 600; }
+  .issues { gap: 0; }
+  .issues-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm); padding-bottom: var(--space-2xs); }
+  .issues-title { font-weight: 600; }
+  .issues-count { font-size: var(--font-caption); color: var(--text-secondary); }
+  .issue { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); }
+  .issue:last-child { border-bottom: none; }
+  .issue-kind { font-size: var(--font-caption); font-weight: 600; color: var(--text-secondary); }
+  .issue--error .issue-kind { color: var(--danger); }
+  .issue--warning .issue-kind { color: var(--warning); }
+  .issue-msg { font-size: var(--font-label); color: var(--text-primary); }
+  .issue-nodes { border: none; background: none; padding: 0; font: inherit; font-size: var(--font-label); font-weight: 500; color: var(--accent); cursor: pointer; }
+  .issue-nodes:hover { text-decoration: underline; }
+  .issue-nodes[aria-pressed="true"] { text-decoration: underline; font-weight: 600; }
+  /* Design system tab (Phase 19 slice B), on the new tokens. */
+  .insp-section-label { font-size: var(--font-caption); font-weight: 600; color: var(--text-secondary); }
+  .insp-section-head { display: flex; justify-content: space-between; align-items: baseline; }
+  .ds-default { font-size: var(--font-caption); color: var(--text-secondary); }
+  .ds-src { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; margin-left: 4px; background: var(--neutral-tint); color: var(--text-secondary); }
+  .ds-src--canvas { background: var(--accent-tint); color: var(--accent); }
+  .ds-swatches { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
+  .ds-swatch { display: flex; flex-direction: column; gap: var(--space-2xs); min-width: 0; }
+  .ds-chip { width: 100%; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .ds-swatch-meta { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2xs); }
+  .ds-name { font-size: var(--font-label); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-hex { font-size: var(--font-caption); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .ds-type { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-sm); }
+  .ds-type-sample { line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ds-type-meta { font-size: var(--font-caption); color: var(--text-secondary); flex-shrink: 0; }
+  .ds-sp { display: flex; align-items: center; gap: var(--space-sm); }
+  .ds-sp-name { width: 72px; flex-shrink: 0; font-size: var(--font-label); color: var(--text-secondary); }
+  .ds-sp-bar { height: 6px; border-radius: 2px; background: var(--border-strong); flex-shrink: 0; }
+  .ds-sp-val { font-size: var(--font-caption); color: var(--text-secondary); }
+  .ds-radii { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+  .ds-rad { display: flex; flex-direction: column; gap: var(--space-2xs); align-items: center; }
+  .ds-rad-tile { width: 56px; height: 40px; background: var(--neutral-tint); border: 1px solid var(--border-strong); }
+  .ds-rad-label { font-size: var(--font-caption); color: var(--text-secondary); }
+  /* Feedback tab (Phase 21), on the new tokens. */
+  .fb-hint { font-size: var(--font-label); color: var(--text-secondary); }
+  .fb-hint b { color: var(--text-primary); }
+  #fb-pane { display: flex; flex-direction: column; }
+  .fb-empty { font-size: var(--font-label); color: var(--text-secondary); padding: var(--space-sm) 0; }
+  .fb-card { display: flex; flex-direction: column; gap: var(--space-2xs); padding: var(--space-sm) 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .fb-card.sel .fb-comment { color: var(--accent); }
+  .fb-card.resolved { cursor: default; }
+  .fb-card.resolved .fb-comment { color: var(--text-secondary); }
+  .fb-card-top { display: flex; align-items: center; gap: var(--space-xs); }
+  .fb-anchor { font-size: var(--font-caption); font-weight: 600; color: var(--text-secondary); background: var(--neutral-tint); border-radius: 4px; padding: 1px 6px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-orphan { font-size: var(--font-caption); font-weight: 600; color: var(--warning); }
+  .fb-when { margin-left: auto; font-size: var(--font-caption); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .fb-comment { font-size: var(--font-label); color: var(--text-primary); white-space: pre-wrap; }
+  .fb-reply { font-size: var(--font-label); color: var(--text-secondary); border-left: 2px solid var(--border-strong); padding-left: var(--space-xs); }
+  .fb-actions { display: flex; gap: var(--space-xs); margin-top: 2px; }
+  .fb-sep { font-size: var(--font-caption); font-weight: 600; color: var(--text-secondary); padding: var(--space-md) 0 var(--space-2xs); }
+  .fb-actions .btn { height: 24px; padding: 0 var(--space-xs); font-size: var(--font-label); }
+  /* FR-D3 — the comment popover, under the Comment button. */
+  .comment-wrap { position: relative; display: inline-flex; }
+  .comment-pop { position: absolute; top: calc(100% + 6px); right: 0; z-index: 400; width: 320px; padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-sm); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--elevation-floating); }
+  .comment-pop[hidden] { display: none; }
+  .comment-pop-title { font-weight: 600; }
+  .comment-pop-hint { font-size: var(--font-label); color: var(--text-secondary); }
+  .fb-chips { display: flex; flex-wrap: wrap; gap: var(--space-2xs); }
+  .fb-chips[hidden] { display: none; }
+  .fb-chip { font: inherit; font-size: var(--font-caption); font-weight: 500; color: var(--text-secondary); background: var(--neutral-tint); border: 1px solid transparent; border-radius: 999px; padding: 2px 8px; cursor: pointer; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fb-chip[aria-pressed="true"] { color: var(--accent); background: var(--accent-tint); border-color: var(--accent); }
+  .comment-pop textarea { width: 100%; min-height: 72px; resize: vertical; padding: var(--space-xs); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: var(--font-body); }
+  .comment-pop textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .comment-pop-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+  #comment-cancel { color: var(--accent); }
+  @media (max-width: 900px) { .inspector { width: 320px; } }
   @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
   @media (max-width: 1399px) { .toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } }
-  @media (max-width: 1100px) { .toolbar .prov, .toolbar .verdict, .toolbar .dim { display: none; } }
+  @media (max-width: 1100px) { .toolbar .dim { display: none; } }
   @media (max-width: 900px) {
     .toolbar { display: flex; flex-wrap: wrap; height: auto; min-height: 48px; padding: var(--space-xs) var(--space-sm); row-gap: var(--space-xs); }
     .crumbs { flex: 0 0 100%; }
@@ -519,12 +525,22 @@ ${FAVICON_HTML}
       <span class="title" title="${esc(canvas.name)}">${esc(canvas.name)}</span>
       <span class="dim">${w} × ${h}${isMobile ? ` · ${esc(deviceId)}` : window ? ` · ${esc(window.id)}` : ''}</span>
       ${stateNav}
-      ${provChip}
-      ${verdictChip}
     </div>
     ${breakpoints}
     <div class="actions">
-      <button type="button" class="btn btn--secondary" onclick="toggleComment()" id="btn-comment" aria-pressed="false" title="Click any element in the preview to leave a note for the agent">${icon('message-square')}<span>Comment</span>${openComments > 0 ? `<span class="tab-count" id="comment-count">${openComments}</span>` : ''}</button>
+      <div class="comment-wrap">
+        <button type="button" class="btn btn--secondary" onclick="toggleComment()" id="btn-comment" aria-pressed="false" aria-expanded="false" aria-controls="comment-pop" title="Click any element in the preview to leave a note for the agent">${icon('message-square')}<span>Comment</span><span class="tab-count" id="comment-count"${openComments > 0 ? '' : ' hidden'}>${openComments}</span></button>
+        <div class="comment-pop" id="comment-pop" role="dialog" aria-labelledby="comment-pop-title" hidden>
+          <div class="comment-pop-title" id="comment-pop-title">Comment on ${esc(canvas.name)}</div>
+          <div class="comment-pop-hint">Click an element in the preview to pin the comment to it. Your agent reads it with get_feedback.</div>
+          <div class="fb-chips" id="fb-chips" role="group" aria-label="Pin the comment to" hidden></div>
+          <textarea id="comment-text" placeholder="Describe the change" aria-label="Comment"></textarea>
+          <div class="comment-pop-actions">
+            <button type="button" class="btn btn--ghost" id="comment-cancel">Cancel</button>
+            <button type="button" class="btn btn--primary" id="comment-save">Add comment</button>
+          </div>
+        </div>
+      </div>
       ${renderMenu('more-menu', icon('ellipsis'), 'More actions', [
         { action: 'json', label: 'View JSON', icon: 'braces' },
         { action: 'copy', label: 'Copy canvas ID', icon: 'copy', keepOpen: true },
@@ -566,6 +582,7 @@ ${FAVICON_HTML}
     <div class="json-head"><span>JSON</span><button type="button" class="btn btn--ghost btn--icon" aria-label="Close JSON" onclick="toggleJson(false)">${icon('x')}</button></div>
     <pre id="json-content">Loading...</pre>
   </aside>
+  ${renderDialog({ id: 'fb-delete-dialog', title: 'Delete this comment?', body: 'The comment is removed for everyone, your agent included.', confirmLabel: 'Delete comment', destructive: true })}
   ${renderDialog({ id: 'delete-dialog', title: `Delete ${canvas.name}?`, body: 'The canvas is deleted for good and cannot be restored. To hide it from the gallery and keep it, archive it instead.', confirmLabel: 'Delete canvas', destructive: true })}
   <script>
     ${detailScript(canvas, w, h, surface.type)}

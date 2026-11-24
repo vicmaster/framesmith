@@ -101,7 +101,8 @@ for (const [provenance, want, notWant] of [
   parseAndExecute(c.root, `I("document", { type: "text", content: "Hi", fontSize: 14 })`, c);
   c.metadata = { ...c.metadata, provenance } as typeof c.metadata;
   const html = await renderDetailPage(c, 0);
-  const chip = html.match(/<b>◆<\/b>([^<]*)<\/span>/)?.[1] ?? '';
+  // Phase 33 slice D: provenance reads "Built from …" in the Quality tab.
+  const chip = html.match(/<div class="score-built">Built from ([^<]*)<\/div>/)?.[1] ?? '';
   check(`chip for ${JSON.stringify(provenance)} reads "${want}"`, chip === want && (notWant === null || !chip.includes(notWant)), chip);
 }
 

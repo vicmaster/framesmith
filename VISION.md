@@ -602,7 +602,7 @@ Phase 31 rebuilt the viewer as canvases and left the code alone. A design pass o
 - [x] Slice A — foundation: `src/viewer/` modules, tokens copied from the design system and pinned by a test, chrome that follows the system's light or dark setting, fonts served from the cache, one sidebar, tabs, menu and dialog used everywhere
 - [x] Slice B — gallery: thumbnail cards with a score chip against the bar, search and type filter kept in the URL, a live status, and refresh on every edit
 - [x] Slice C — detail shell: toolbar with state tabs, a More menu (JSON, copy ID, archive, delete), a delete dialog, and preview tools (zoom, fit, preview theme, safe area)
-- [ ] Slice D — inspector and comments: the Quality tab sorted lowest first with a reason line, Design system and Feedback restyled, the Import placeholder removed, the comment popover, and panels that refresh live
+- [x] Slice D — inspector and comments: the Quality tab sorted lowest first with a reason line, Design system and Feedback restyled, the Import placeholder removed, the comment popover, and panels that refresh live
 - [ ] Slice E — archive, docs and acceptance: the archive tree with a preview panel, README and screenshots, and each screen beside its design
 - [ ] Follow-up — the viewer sends `Access-Control-Allow-Origin: *` on every response, the routes that archive, delete and post comments included. It listens on 127.0.0.1 only, but a page open in the same browser can still send it a simple cross-origin POST (archive, unarchive, add or resolve a comment) without a preflight. Drop the header from mutating routes, reject requests whose `Origin` is not the viewer's own, and test both; a separate change from the visual port
 
