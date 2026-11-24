@@ -600,7 +600,7 @@ _Full spec-driven breakdown in [`docs/specs/PHASE-32-SPEC.md`](docs/specs/PHASE-
 Phase 31 rebuilt the viewer as canvases and left the code alone. A design pass on 2026-11-24 redrew those seven screens (gallery, detail with its menu, comment and delete states, archive and its empty state), each clean in both themes, and they are committed under `.framesmith/viewer-redesign/`. This phase ports them into the viewer: neutral chrome that follows the system's light or dark setting, real thumbnails scored against the evaluator's bar, an inspector that leads with what holds a design back, and live updates that cover thumbnails, scores and comments, not only the preview.
 
 - [x] Slice A — foundation: `src/viewer/` modules, tokens copied from the design system and pinned by a test, chrome that follows the system's light or dark setting, fonts served from the cache, one sidebar, tabs, menu and dialog used everywhere
-- [ ] Slice B — gallery: thumbnail cards with a score chip against the bar, search and type filter kept in the URL, a live status, and refresh on every edit
+- [x] Slice B — gallery: thumbnail cards with a score chip against the bar, search and type filter kept in the URL, a live status, and refresh on every edit
 - [ ] Slice C — detail shell: toolbar with state tabs, a More menu (JSON, copy ID, archive, delete), a delete dialog, and preview tools (zoom, fit, preview theme, safe area)
 - [ ] Slice D — inspector and comments: the Quality tab sorted lowest first with a reason line, Design system and Feedback restyled, the Import placeholder removed, the comment popover, and panels that refresh live
 - [ ] Slice E — archive, docs and acceptance: the archive tree with a preview panel, README and screenshots, and each screen beside its design

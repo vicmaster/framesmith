@@ -82,8 +82,10 @@ check('base row has no variant field', baseRow.variant === undefined);
 
 // ── viewer: one card + chips; detail cross-links; orphan-safe ───────────────
 const page = await renderProjectPage(DEFAULT_PROJECT_ID, 0);
-check('gallery folds variants into base card', page !== null && !page!.includes('Orders · empty</div>'), undefined);
-check('gallery base card shows state chips', !!page && page.includes('state-chip') && page.includes('>empty</a>') && page.includes('>loading</a>'));
+check('gallery folds variants into base card', page !== null && !page!.includes(`data-canvas-id="${empty.id}"`) && !page!.includes(`data-canvas-id="${loading.id}"`) && page!.includes(`data-canvas-id="${base.id}"`));
+// Phase 33 slice B: the card's meta line counts the states; variants never get a card of their own.
+const baseCard = page ? page.slice(page.indexOf(`data-canvas-id="${base.id}"`), page.indexOf('</article>', page.indexOf(`data-canvas-id="${base.id}"`))) : '';
+check('gallery base card counts its two states', baseCard.includes(' · 2 states'), baseCard.slice(0, 200));
 
 const detailBase = await renderDetailPage(getCanvas(base.id)!, 0);
 check('base detail chips: default active + links', detailBase.includes('state-chip--active">default') && detailBase.includes(`/canvas/${empty.id}`));

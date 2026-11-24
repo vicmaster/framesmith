@@ -5,7 +5,7 @@
 import { listCanvases } from '../scene-graph.js';
 import { listProjects, listWorkspaces } from '../workspaces.js';
 import { getIconSvg } from '../icons.js';
-import { esc } from './shared.js';
+import { baseRows, esc } from './shared.js';
 import { LIGHT } from './tokens.js';
 
 /** A bundled Lucide icon, stroked in the current text colour. */
@@ -39,11 +39,12 @@ export function projectDotToken(projectId: string): string {
 }
 
 /** The sidebar: wordmark; per workspace its label and one link per project
- * (identity dot, name, non-archived count), or "No projects yet"; Archive
+ * (identity dot, name, card count), or "No projects yet"; Archive
  * pinned to the bottom with its count. `active` is a project id or 'archive'. */
 export function renderSidebar(active: string): string {
   const all = listCanvases();
-  const projectCount = (projectId: string) => all.filter((c) => c.projectId === projectId && !c.archived).length;
+  // Cards, not canvases: a state variant folds into its base, as on the page.
+  const projectCount = (projectId: string) => baseRows(all, projectId).length;
   const archivedCount = all.filter((c) => c.archived).length;
   const current = (on: boolean) => (on ? ' aria-current="page"' : '');
 

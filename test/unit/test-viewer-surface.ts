@@ -36,12 +36,12 @@ function make(name: string, size: { width?: number; height?: number }, surface?:
   return c;
 }
 
-/** The card markup for one canvas: from its card's opening tag to the next card. */
+/** The card markup for one canvas: its <article>, opening tag to close. */
 function cardFor(html: string, id: string): string {
-  const at = html.indexOf(`href="/canvas/${id}"`);
+  const at = html.indexOf(`data-canvas-id="${id}"`);
   if (at < 0) return '';
-  const next = html.slice(at + 1).search(/<a href="\/canvas\/|<div class="card[ "]/);
-  return html.slice(at, next < 0 ? undefined : at + 1 + next);
+  const end = html.indexOf('</article>', at);
+  return html.slice(at, end < 0 ? undefined : end);
 }
 
 const phone = make('phone', {}, { type: 'mobile' });

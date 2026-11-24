@@ -1,118 +1,124 @@
-import { getCanvas, listCanvases } from '../../scene-graph.js';
-import { getProject, listWorkspaces } from '../../workspaces.js';
+// Phase 33 slice B — the project page (the gallery), design screen 1: a header
+// with the project, a summary against the bar and a Live status; a search
+// field and type tabs; a grid of cards, each a live thumbnail with its score
+// on the corner. Search, filter and live refresh run in client/project.ts.
+
+import { getCanvas, listCanvases, type CanvasSummary } from '../../scene-graph.js';
+import { getProject } from '../../workspaces.js';
+import { resolveSurface, type SurfaceType } from '../../surfaces.js';
+import { resolveGenre } from '../../evaluate.js';
 import { DEFAULT_PROJECT_ID } from '../../types.js';
 import { baseCss, COMPONENTS_CSS, MOBILE_TOGGLE_CSS, SIDEBAR_CSS } from '../styles.js';
-import { FAVICON_HTML, MOBILE_TOGGLE_HTML, renderSidebar } from '../components.js';
-import { artboardSize, esc, renderThumb } from '../shared.js';
-import { evalFor, scoreColor } from '../scores.js';
+import { FAVICON_HTML, MOBILE_TOGGLE_HTML, icon, renderSidebar, renderTabs } from '../components.js';
+import { artboardSize, baseRows, esc, renderThumb } from '../shared.js';
+import { evalFor } from '../scores.js';
 import { projectScript } from '../client/project.js';
 
-/** Project-scoped main page. Sidebar on left, breadcrumb + canvas grid on right.
- *  Returns null when the project doesn't exist so the route handler can 404. */
-export async function renderProjectPage(projectId: string, port: number): Promise<string | null> {
+/** The evaluator's quality bar: a score above 95 is at it. */
+export const BAR = 96;
+
+export const TYPE_LABELS: Record<SurfaceType, string> = { web: 'Web', mobile: 'Mobile', 'desktop-app': 'Desktop app' };
+
+/** "Edited Nov 24", with the year when it is not the current one. */
+export function editedLabel(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const sameYear = d.getUTCFullYear() === now.getUTCFullYear();
+  return `Edited ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }), timeZone: 'UTC' })}`;
+}
+
+/** The score chip on a card's thumbnail: quiet at the bar, amber below it. */
+function scoreChip(score: number): string {
+  const below = score < BAR;
+  return `<span class="score-chip${below ? ' score-chip--below' : ''}" title="Quality score ${score} of 100${below ? ', below the bar' : ''}">${score}</span>`;
+}
+
+/** What the gallery's live poll compares (FR-B4): for each base canvas, its
+ * id, versionHash, name, type, genre and designed states. versionHash alone
+ * misses a rename, a genre change, a new state and a type change. Mirrors
+ * galleryKey in client/project.ts, which computes it from /api/canvases. */
+export function galleryKey(rows: Array<CanvasSummary & { type?: string; genre?: string | null }>, projectId: string): string {
+  return baseRows(rows, projectId)
+    .map((r) => {
+      const c = getCanvas(r.id);
+      const type = r.type ?? (c ? resolveSurface(c).type : '');
+      const genre = r.genre !== undefined ? r.genre : (c ? resolveGenre(c).genre : null);
+      return [r.id, r.versionHash, r.name, type, genre ?? '', (r.variants ?? []).map((v) => v.state).sort().join(',')].join('|');
+    })
+    .sort()
+    .join('\n');
+}
+
+/** Project-scoped main page. Returns null when the project doesn't exist so
+ * the route handler can 404. */
+export async function renderProjectPage(projectId: string, _port: number): Promise<string | null> {
   const project = getProject(projectId);
   if (!project) return null;
-
-  // Find the parent workspace for the breadcrumb. Default to "Personal" if
-  // somehow orphaned (shouldn't happen after slice 1 migration).
-  const ws = listWorkspaces().find((w) => w.id === project.workspaceId);
-  const wsName = ws?.name ?? 'Personal';
 
   // One listing for the whole render: it version-hashes every canvas in the
   // store, so it is the most expensive call on this path and must not be
   // repeated per card.
-  const allRows = listCanvases();
-  const statesById = new Map(allRows.map((r) => [r.id, r.variants?.map((v) => v.state) ?? []]));
-  const canvases = allRows.filter((c) => c.projectId === projectId && !c.archived);
-  // Phase 24 slice A — a screen and its state variants are ONE card: variants
-  // whose base is in this listing fold into the base card as chips. A variant
-  // whose base is missing (orphan) or lives elsewhere stays a standalone card.
-  const present = new Set(canvases.map((c) => c.id));
-  const shown = canvases.filter((c) => !(c.variant && present.has(c.variant.of)));
-  const cards = (await Promise.all(shown.map(async (c) => {
+  const rows = listCanvases();
+  const shown = baseRows(rows, projectId);
+  const typeCounts: Record<SurfaceType, number> = { web: 0, mobile: 0, 'desktop-app': 0 };
+  let below = 0;
+
+  const cards = await Promise.all(shown.map(async (c) => {
     const canvas = getCanvas(c.id)!;
     const { w, h } = artboardSize(canvas);
-    const date = new Date(c.createdAt).toLocaleString();
-    // Phase 19 Slice A — gallery score badge (fast eval, cached; empty → none).
-    const ev = await evalFor(canvas, statesById.get(c.id) ?? []);
-    const scoreBadge = ev
-      ? `<div class="card-score" style="color:${scoreColor(ev.overallScore)}" title="Heuristic quality score">${ev.overallScore}</div>`
-      : '';
-    const stateChips = c.variants?.length
-      ? `<div class="state-chips card-states">
-          <span class="state-chip state-chip--active">default</span>
-          ${c.variants.map((v) => `<a class="state-chip" href="/canvas/${v.canvasId}">${esc(v.state)}</a>`).join('')}
-        </div>`
-      : '';
-    return stateChips
-      ? `
-      <div class="card">
-        <a href="/canvas/${c.id}" class="card-link">
-          ${renderThumb(canvas, scoreBadge)}
-          <div class="info">
-            <div class="name">${esc(c.name)}</div>
-            <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
-          </div>
-        </a>
-        ${stateChips}
-      </div>`
-      : `
-      <a href="/canvas/${c.id}" class="card">
-        ${renderThumb(canvas, scoreBadge)}
-        <div class="info">
-          <div class="name">${esc(c.name)}</div>
-          <div class="meta">${w} x ${h} &middot; ${esc(date)}</div>
+    const type = resolveSurface(canvas).type;
+    typeCounts[type]++;
+    const states = c.variants?.map((v) => v.state) ?? [];
+    const ev = await evalFor(canvas, states);
+    if (ev && ev.overallScore < BAR) below++;
+    const meta = [TYPE_LABELS[type], `${w} × ${h}`, editedLabel(c.lastModified), ...(states.length ? [`${states.length} state${states.length === 1 ? '' : 's'}`] : [])].filter(Boolean).join(' · ');
+    return `
+      <article class="card" data-canvas-id="${esc(c.id)}" data-name="${esc(c.name.toLowerCase())}" data-type="${type}">
+        ${renderThumb(canvas, ev ? scoreChip(ev.overallScore) : '')}
+        <div class="card-copy">
+          <a class="card-name" href="/canvas/${esc(c.id)}" title="${esc(c.name)}">${esc(c.name)}</a>
+          <div class="card-meta" title="${esc(meta)}">${esc(meta)}</div>
         </div>
-      </a>`;
-  }))).join('\n');
+      </article>`;
+  }));
 
-  const emptyState = canvases.length === 0
+  const n = shown.length;
+  const summary = `${n} canvas${n === 1 ? '' : 'es'}${n === 0 ? '' : below === 0 ? ' · all at the bar' : ` · ${below} below the bar`}`;
+  const tabs = renderTabs([
+    { id: 'all', label: 'All', count: n, selected: true },
+    ...(Object.keys(typeCounts) as SurfaceType[]).filter((t) => typeCounts[t] > 0).map((t) => ({ id: t, label: TYPE_LABELS[t], count: typeCounts[t] })),
+  ], 'Canvas type');
+
+  const body = n === 0
     ? `<div class="empty">
-        <div class="empty-icon">&#9634;</div>
-        <div>No canvases in ${esc(project.name)} yet</div>
-        <div class="empty-hint">Create one via your MCP client using <code>canvas_create({ projectId: "${project.id}" })</code></div>
-       </div>`
-    : '';
+        <div class="empty-icon">${icon('layout-grid', 32)}</div>
+        <div class="empty-title">No canvases in ${esc(project.name)} yet</div>
+        <div class="empty-hint">Create one from your MCP client with <code>canvas_create({ projectId: "${esc(project.id)}" })</code>.</div>
+      </div>`
+    : `<div class="filter-bar">
+        <label class="search">${icon('search')}<input type="search" id="search" placeholder="Search canvases" aria-label="Search canvases" autocomplete="off"></label>
+        ${tabs}
+      </div>
+      <div class="grid-pane">
+        <div class="grid" id="grid">${cards.join('')}</div>
+        <div class="no-match" id="no-match" hidden>
+          <div class="empty-title" id="no-match-text"></div>
+          <button type="button" class="btn btn--secondary" id="clear-filters">Clear</button>
+        </div>
+      </div>`;
 
   return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>${esc(project.name)} — Framesmith</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(project.name)} — framesmith</title>
 ${FAVICON_HTML}
 <style>
   ${baseCss()}
   ${SIDEBAR_CSS}
   ${COMPONENTS_CSS}
-  /* Main pane */
-  .main { flex: 1; min-width: 0; background: var(--bg-1); }
-  .main-header { padding: 28px 36px 24px; border-bottom: 1px solid var(--border-subtle); }
-  .breadcrumb { font-size: 12px; font-weight: 500; color: var(--text-tertiary); margin-bottom: 8px; }
-  .project-title { font-size: 36px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.6px; line-height: 1.1; }
-  .project-meta { font-size: 13px; font-weight: 500; color: var(--text-tertiary); margin-top: 8px; }
-
-  /* Card grid */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(264px, 1fr)); gap: 20px; align-items: start; padding: 28px 36px 36px; }
-  .card { background: var(--surface); border-radius: 12px; overflow: hidden; text-decoration: none; color: inherit; transition: transform 0.18s ease, box-shadow 0.18s ease; border: 1px solid var(--border); box-shadow: var(--elevation-flat); }
-  .card:hover { transform: translateY(-2px); border-color: var(--border-strong); box-shadow: var(--elevation-raised); }
-  .card-link { display: block; text-decoration: none; color: inherit; }
-  .card-states { padding: 0 14px 12px; }
-  .thumb { width: 100%; aspect-ratio: 16/10; overflow: hidden; background: var(--bg-0); position: relative; }
-  .thumb iframe { border: none; transform-origin: 0 0; transform: scale(var(--thumb-scale, 0.222)); pointer-events: none; position: absolute; top: 0; left: 0; }
-  .thumb--empty { background: var(--bg-elevated); }
-  /* Phase 19 Slice A — heuristic quality score badge on each card thumbnail. */
-  .card-score { position: absolute; top: 8px; right: 8px; z-index: 2; font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; background: var(--neutral-tint); color: var(--text-secondary); border: none; border-radius: 6px; padding: 3px 8px; line-height: 1; }
-  .thumb-empty { position: absolute; inset: 0; }
-  .thumb-empty-back, .thumb-empty-front { position: absolute; width: 38px; height: 28px; border-radius: 4px; border: 1px solid var(--border); }
-  .thumb-empty-back { top: calc(50% - 6px); left: calc(50% - 27px); }
-  .thumb-empty-front { top: calc(50% - 10px); left: calc(50% - 19px); background: var(--bg-surface); border-color: var(--border-strong); }
-  .info { padding: 14px 16px 16px; }
-  .name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.1px; }
-  .meta { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
-  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 120px 32px; color: var(--text-tertiary); font-size: 15px; }
-  .empty-icon { font-size: 44px; opacity: 0.3; }
-  .empty-hint { font-size: 13px; color: var(--text-muted); text-align: center; max-width: 480px; }
-  .empty-hint code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--text-secondary); }
+  ${GALLERY_CSS}
   ${MOBILE_TOGGLE_CSS}
 </style>
 </head>
@@ -121,20 +127,69 @@ ${FAVICON_HTML}
   <div class="app">
     ${renderSidebar(projectId)}
     <main class="main">
-      <div class="main-header">
-        <div class="breadcrumb">${esc(wsName)} / ${esc(project.name)}</div>
-        <h1 class="project-title">${esc(project.name)}</h1>
-        <div class="project-meta">${canvases.length} canvas${canvases.length !== 1 ? 'es' : ''}</div>
-      </div>
-      ${canvases.length > 0 ? `<div class="grid">${cards}</div>` : emptyState}
+      <header class="main-header">
+        <h1 class="page-title">${esc(project.name)}</h1>
+        <div class="header-side">
+          <span class="summary" id="summary">${esc(summary)}</span>
+          <span class="live" id="live" role="status"><span class="live-dot"></span><span class="live-label">Live</span></span>
+        </div>
+      </header>
+      ${body}
     </main>
   </div>
   <script>
-    ${projectScript(projectId, canvases.length)}
+    ${projectScript(projectId, galleryKey(rows, projectId))}
   </script>
 </body>
 </html>`;
 }
+
+const GALLERY_CSS = `
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-primary); }
+  .main-header { height: 48px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: 0 var(--space-md); border-bottom: 1px solid var(--border); }
+  .page-title { font-size: 18px; font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-side { display: flex; align-items: center; gap: var(--space-md); min-width: 0; }
+  .summary { font-size: var(--font-label); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .live { display: inline-flex; align-items: center; gap: var(--space-2xs); font-size: var(--font-label); color: var(--text-secondary); white-space: nowrap; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  .live.offline .live-dot { background: var(--border-strong); }
+
+  .filter-bar { min-height: 48px; flex-shrink: 0; display: flex; align-items: center; gap: var(--space-md); padding: var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .search { display: flex; align-items: center; gap: var(--space-xs); width: 280px; max-width: 100%; height: 32px; padding: 0 var(--space-xs); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-secondary); }
+  .search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .search input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: var(--font-body); color: var(--text-primary); }
+  .search input::placeholder { color: var(--text-secondary); }
+  .filter-bar .tablist { border-bottom: none; gap: var(--space-2xs); }
+  .filter-bar .tab { padding: 0 var(--space-xs); border-radius: var(--radius-sm); }
+  .filter-bar .tab[aria-selected="true"] { background: var(--accent-tint); }
+  .filter-bar .tab[aria-selected="true"]::after { display: none; }
+
+  .grid-pane { flex: 1; padding: var(--space-lg); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-lg); align-items: start; }
+  .card { position: relative; display: flex; flex-direction: column; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; box-shadow: var(--elevation-flat); transition: border-color 0.15s, box-shadow 0.15s; }
+  .card:hover { border-color: var(--border-strong); box-shadow: var(--elevation-raised); }
+  .card:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .card[hidden] { display: none; }
+  .thumb { width: 100%; overflow: hidden; background: var(--bg-elevated); position: relative; border-bottom: 1px solid var(--border); }
+  .thumb iframe { border: none; transform-origin: 0 0; transform: scale(var(--thumb-scale, 0.222)); pointer-events: none; position: absolute; top: 0; left: 0; }
+  .thumb-empty { position: absolute; inset: 0; }
+  .thumb-empty-back, .thumb-empty-front { position: absolute; width: 38px; height: 28px; border-radius: 4px; border: 1px solid var(--border); }
+  .thumb-empty-back { top: calc(50% - 6px); left: calc(50% - 27px); }
+  .thumb-empty-front { top: calc(50% - 10px); left: calc(50% - 19px); background: var(--bg-surface); border-color: var(--border-strong); }
+  .score-chip { position: absolute; top: var(--space-xs); right: var(--space-xs); z-index: 2; font-size: var(--font-caption); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.5; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--neutral-tint); color: var(--text-secondary); pointer-events: none; }
+  .score-chip--below { background: var(--warning-tint); color: var(--warning); }
+  .card-copy { display: flex; flex-direction: column; gap: 2px; padding: var(--space-sm) var(--space-md); min-width: 0; }
+  .card-name { font-size: var(--font-body); font-weight: 600; color: var(--text-primary); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none; }
+  .card-name::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+  .card-meta { font-size: var(--font-caption); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .empty, .no-match { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); padding: 120px var(--space-lg); text-align: center; color: var(--text-secondary); }
+  .no-match[hidden] { display: none; }
+  .empty-icon { color: var(--text-secondary); }
+  .empty-title { font-size: var(--font-body); font-weight: 600; color: var(--text-primary); }
+  .empty-hint { font-size: var(--font-label); max-width: 480px; }
+  .empty-hint code { background: var(--neutral-tint); padding: 2px 6px; border-radius: 4px; font-size: var(--font-label); color: var(--text-primary); }
+  @media (max-width: 640px) { .header-side .summary { display: none; } .grid-pane { padding: var(--space-md); } .grid { grid-template-columns: 1fr; } }`;
 
 /** Backwards-compatible alias: renders the default project. The previous
  *  `renderGalleryPage` was a flat all-canvases view; the new model is

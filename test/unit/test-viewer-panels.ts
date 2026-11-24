@@ -64,7 +64,7 @@ I(page, { type:"text", content:"A short honest description.", fontSize:16, color
   console.log('\n── gallery: score badge per card ──');
   // Both fixtures landed in the default project; render it and check the badge.
   const proj = await renderProjectPage(projectId, 3001) ?? '';
-  assert(proj.includes('class="card-score"'), 'the gallery stamps a score badge on scored cards');
+  assert(/<span class="score-chip(?: score-chip--below)?" title="Quality score \d+ of 100/.test(proj), 'the gallery stamps a score chip on scored cards');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed > 0 ? 1 : 0);
