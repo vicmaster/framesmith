@@ -1422,6 +1422,8 @@ npm run build
 | `npx tsx scripts/run-tests.ts <substring>` | Run just the tests whose path matches, such as `cliche` or `unit/`. |
 | `npx tsx test/unit/test-cliche.ts` | Run a single test script directly, from the repo root. |
 
+The runner gives each test its own temp folder (`TMPDIR`) and removes it when the test ends, however it ends, so test runs leave nothing in the system temp dir. A test run directly removes the store `test/env.ts` made for it; other temp folders it makes stay until the system cleans them.
+
 ### Env vars
 
 | Variable | Purpose |
