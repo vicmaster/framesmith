@@ -103,7 +103,10 @@ export interface DialogSpec { id: string; title: string; body: string; confirmLa
 export function renderDialog(d: DialogSpec): string {
   return `<div class="dialog-scrim" data-dialog-scrim="${esc(d.id)}" hidden>
       <div class="dialog" role="dialog" aria-modal="true" id="${esc(d.id)}" aria-labelledby="${esc(d.id)}-title">
-        <div class="dialog-title" id="${esc(d.id)}-title">${esc(d.title)}</div>
+        <div class="dialog-head">
+          <div class="dialog-title" id="${esc(d.id)}-title">${esc(d.title)}</div>
+          <button type="button" class="btn btn--ghost btn--icon" data-dialog-close aria-label="Close">${icon('x')}</button>
+        </div>
         <div class="dialog-body">${esc(d.body)}</div>
         <div class="dialog-actions">
           <button type="button" class="btn btn--secondary" data-dialog-cancel>Cancel</button>
@@ -179,6 +182,7 @@ export const COMPONENTS_JS = `
           scrim.hidden = false;
           const cancel = dialog.querySelector('[data-dialog-cancel]');
           const confirm = dialog.querySelector('[data-dialog-confirm]');
+          const closer = dialog.querySelector('[data-dialog-close]');
           cancel.focus();
           return new Promise((resolve) => {
             const done = (value) => {
@@ -187,6 +191,7 @@ export const COMPONENTS_JS = `
               scrim.removeEventListener('click', onScrim);
               cancel.removeEventListener('click', onCancel);
               confirm.removeEventListener('click', onConfirm);
+              if (closer) closer.removeEventListener('click', onCancel);
               if (opener && opener.focus) opener.focus();
               resolve(value);
             };
@@ -205,6 +210,7 @@ export const COMPONENTS_JS = `
             scrim.addEventListener('click', onScrim);
             cancel.addEventListener('click', onCancel);
             confirm.addEventListener('click', onConfirm);
+            if (closer) closer.addEventListener('click', onCancel);
           });
         },
       };

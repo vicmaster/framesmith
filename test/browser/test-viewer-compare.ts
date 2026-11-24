@@ -38,7 +38,7 @@ const markupChecks: Array<{ name: string; needle: string | RegExp }> = [
   { name: 'breakpoints are one tab list', needle: 'class="tablist bp-tabs" role="tablist" aria-label="Preview width"' },
   { name: 'Compare is a tab with no size', needle: /id="bp-compare" data-tab="compare" aria-selected="false"/ },
   // Narrow windows: the crumbs take their own row and the Live status hides.
-  { name: 'mobile: crumbs take the first row', needle: /@media \(max-width: 640px\)[\s\S]*?\.crumbs\s*\{\s*flex:\s*0\s*0\s*100%/ },
+  { name: 'narrow: crumbs take the first row', needle: /@media \(max-width: 900px\)[\s\S]*?\.crumbs\s*\{\s*flex:\s*0\s*0\s*100%/ },
   { name: 'mobile: Live status hidden', needle: /@media \(max-width: 640px\)[\s\S]*?\.live\s*\{\s*display:\s*none/ },
 ];
 

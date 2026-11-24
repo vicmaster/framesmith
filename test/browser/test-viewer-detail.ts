@@ -95,13 +95,21 @@ await page.click('#bp-desktop');
 check('leaving Compare enables them again', !(await page.$eval('#btn-zoom-in', (b) => (b as HTMLButtonElement).disabled)));
 
 await open(store.ids.dashboard);
-const hasTheme = !!(await page.$('#theme-toggle'));
-if (hasTheme) {
-  await page.click('#theme-toggle');
-  check('the theme button renders the preview dark', (await page.$eval('#frame', (f) => f.getAttribute('src') ?? '')).includes('theme=dark') && (await page.$eval('#theme-toggle', (b) => b.getAttribute('aria-pressed'))) === 'true');
-} else {
-  check('a canvas with no dark layer has no theme button', !hasTheme);
-}
+check('a canvas with no dark layer has no theme button', !(await page.$('#theme-toggle')));
+await open(store.ids.themed);
+check('a canvas with a dark layer has the theme button, off', (await page.$eval('#theme-toggle', (b) => b.getAttribute('aria-pressed')).catch(() => null)) === 'false');
+await page.click('#theme-toggle');
+check('the theme button renders the preview dark', (await page.$eval('#frame', (f) => f.getAttribute('src') ?? '')).includes('theme=dark') && (await page.$eval('#theme-toggle', (b) => b.getAttribute('aria-pressed'))) === 'true');
+check('…and keeps its label', (await page.$eval('#theme-toggle', (b) => b.getAttribute('aria-label'))) === 'Preview in dark');
+await page.click('#theme-toggle');
+check('pressing it again renders the preview light', !(await page.$eval('#frame', (f) => f.getAttribute('src') ?? '')).includes('theme=dark'));
+
+// The frame shows the whole artboard: at 100% its inner box is the artboard.
+await page.click('#bp-desktop');
+while (await page.$eval('#btn-zoom-in', (b) => !(b as HTMLButtonElement).disabled) && Number(await page.$eval('#stage', (s) => (s as HTMLElement).dataset.scale)) < 1) await page.click('#btn-zoom-in');
+check('at 100% the frame shows all 1440 × 900', JSON.stringify(await page.$eval('#frame-box', (b) => [b.clientWidth, b.clientHeight])) === '[1440,900]', JSON.stringify(await page.$eval('#frame-box', (b) => [b.clientWidth, b.clientHeight])));
+await page.click('#btn-zoom-in'); await page.click('#btn-zoom-in');
+check('zoom in is disabled at the largest step', await page.$eval('#btn-zoom-in', (b) => (b as HTMLButtonElement).disabled));
 
 // ── FR-C2: the More menu ─────────────────────────────────────────────────────
 await open(store.ids.auth);
@@ -122,8 +130,9 @@ await page.click('[data-action="copy"]');
 await pause(150);
 check('Copy canvas ID says Copied in place', (await page.$eval('[data-action="copy"] span', (s) => s.textContent)) === 'Copied');
 check('…and the clipboard holds the id', (await page.evaluate(() => navigator.clipboard.readText())) === store.ids.auth);
+await page.click('[data-action="copy"]');
 await pause(2100);
-check('…and the label returns after 2 seconds', (await page.$eval('[data-action="copy"] span', (s) => s.textContent)) === 'Copy canvas ID');
+check('…and the label returns after 2 seconds, even after a second copy', (await page.$eval('[data-action="copy"] span', (s) => s.textContent)) === 'Copy canvas ID');
 await page.keyboard.press('Escape');
 
 await page.click(more);
@@ -149,6 +158,18 @@ await page.click(more);
 await page.click('[data-action="delete"]');
 await Promise.all([page.waitForNavigation({ waitUntil: 'load' }), page.click('[data-dialog-confirm]')]);
 check('confirming deletes it and goes to the project', !getCanvas(store.ids.catalogue) && page.url().endsWith(`/project/${store.patternProjectId}`));
+
+// Narrow windows: the name and the states stay visible; below 720px the page scrolls to the inspector.
+await open(store.ids.withStates);
+for (const width of [1200, 1024, 768]) {
+  await page.setViewport({ width, height: 900 });
+  const sizes = await page.evaluate(() => ({ title: document.querySelector('.toolbar .title')!.getBoundingClientRect().width, states: document.querySelector('.state-nav')!.getBoundingClientRect().right <= document.querySelector('.crumbs')!.getBoundingClientRect().right + 1 }));
+  check(`at ${width}px the name keeps at least 80px and the states fit`, sizes.title >= 79 && sizes.states, JSON.stringify(sizes));
+}
+await page.setViewport({ width: 390, height: 844 });
+const narrow = await page.evaluate(() => ({ viewport: document.getElementById('viewport')!.getBoundingClientRect().height, scrolls: document.querySelector('.detail-main')!.scrollHeight > document.querySelector('.detail-main')!.clientHeight }));
+check('at 390px the preview keeps a usable height and the page scrolls to the inspector', narrow.viewport >= 0.55 * 844 && narrow.scrolls, JSON.stringify(narrow));
+await page.setViewport({ width: 1440, height: 900 });
 
 check('no page error', errors.length === 0, errors.join(' | ').slice(0, 300));
 await browser.close();

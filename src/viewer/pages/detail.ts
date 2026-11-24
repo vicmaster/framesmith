@@ -342,7 +342,7 @@ ${FAVICON_HTML}
   .back-link span { overflow: hidden; text-overflow: ellipsis; }
   .back-link:hover span { text-decoration: underline; }
   .crumb-sep { color: var(--text-secondary); flex-shrink: 0; }
-  .toolbar .title { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 240px; flex-shrink: 1; }
+  .toolbar .title { font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 80px; max-width: 240px; flex-shrink: 1; }
   .toolbar .dim { font-size: var(--font-label); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .state-nav { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--neutral-tint); flex-shrink: 0; }
   .state-link { font-size: var(--font-label); font-weight: 500; padding: 2px var(--space-xs); border-radius: 4px; color: var(--text-secondary); text-decoration: none; white-space: nowrap; }
@@ -366,21 +366,21 @@ ${FAVICON_HTML}
   /* Phase 19 — detail body splits into the preview (left) and the read-only
    * quality inspector (right). Toolbar stays full-width above. */
   .detail-main { flex: 1; display: flex; min-height: 0; }
-  .viewport { position: relative; flex: 1; display: flex; align-items: flex-start; justify-content: safe center; overflow: auto; background: var(--bg-primary); padding: 72px var(--space-lg) var(--space-lg); }
+  .viewport { position: relative; flex: 1; display: flex; align-items: safe center; justify-content: safe center; overflow: auto; background: var(--bg-primary); padding: 72px var(--space-lg) var(--space-lg); }
   /* FR-C4 — preview tools float top-left; the stage scales the artboard. */
   .tools { position: absolute; top: var(--space-md); left: var(--space-md); z-index: 5; display: flex; gap: 2px; padding: var(--space-2xs); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
   .btn--xs { width: 24px; height: 24px; padding: 0; }
   .btn--xs[aria-pressed="true"] { background: var(--accent-tint); color: var(--accent); }
   .btn:disabled { opacity: 0.4; pointer-events: none; }
   .stage { display: flex; flex-direction: column; align-items: center; gap: var(--space-sm); }
-  .frame-box { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--elevation-floating); background: var(--bg-surface); }
+  .frame-box { box-sizing: content-box; position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--elevation-floating); background: var(--bg-surface); }
   .frame-box iframe { position: absolute; top: 0; left: 0; border: none; background: transparent; transform-origin: 0 0; }
   .caption { font-size: var(--font-label); color: var(--text-secondary); text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .viewport.compare .stage { display: none; }
   .viewport.compare .compare-grid { display: flex; }
   /* Phase 30 slice F — a mobile canvas at 1:1 in a CSS device frame. The
    * iframe scrolls inside the screen, so fixed chrome stays pinned. */
-  .viewport--device { padding: 32px 24px 48px; }
+  .viewport--device { padding: 72px 24px 48px; }
   .device { flex-shrink: 0; padding: 12px; border-radius: 59px; background: var(--bg-elevated); box-shadow: 0 0 0 1px var(--border-strong), var(--elevation-floating); }
   .device-screen { position: relative; overflow: hidden; border-radius: 47px; background: transparent; }
   .device-screen iframe { display: block; border: 0; }
@@ -491,16 +491,20 @@ ${FAVICON_HTML}
   .fb-popover textarea:focus { outline: none; border-color: var(--accent); }
   .fb-pop-actions { display: flex; justify-content: flex-end; gap: 6px; }
   @media (max-width: 900px) { .inspector { width: 300px; } }
-  @media (max-width: 720px) { .detail-main { flex-direction: column; } .inspector { width: 100%; border-left: none; border-top: 1px solid var(--border-subtle); } }
+  @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
-  @media (max-width: 1100px) { .toolbar .prov, .toolbar .verdict { display: none; } }
-  @media (max-width: 640px) {
+  @media (max-width: 1399px) { .toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } }
+  @media (max-width: 1100px) { .toolbar .prov, .toolbar .verdict, .toolbar .dim { display: none; } }
+  @media (max-width: 900px) {
     .toolbar { display: flex; flex-wrap: wrap; height: auto; min-height: 48px; padding: var(--space-xs) var(--space-sm); row-gap: var(--space-xs); }
     .crumbs { flex: 0 0 100%; }
-    .toolbar .dim, .live { display: none; }
     .breakpoints { flex: 1; justify-content: flex-start; min-width: 0; overflow-x: auto; }
     .actions { flex: 0 0 auto; }
+    .json-panel { top: 0; }
+  }
+  @media (max-width: 640px) {
+    .toolbar .dim, .live { display: none; }
     .actions .btn span:not(.tab-count) { display: none; }
     .viewport { padding: 64px var(--space-sm) var(--space-sm); }
     .compare-grid { --scale: 0.18; gap: 12px; padding: 12px; }
@@ -520,7 +524,7 @@ ${FAVICON_HTML}
     </div>
     ${breakpoints}
     <div class="actions">
-      <button type="button" class="btn btn--secondary" onclick="toggleComment()" id="btn-comment" title="Click any element in the preview to leave a note for the agent">${icon('message-square')}<span>Comment</span>${openComments > 0 ? `<span class="tab-count" id="comment-count">${openComments}</span>` : ''}</button>
+      <button type="button" class="btn btn--secondary" onclick="toggleComment()" id="btn-comment" aria-pressed="false" title="Click any element in the preview to leave a note for the agent">${icon('message-square')}<span>Comment</span>${openComments > 0 ? `<span class="tab-count" id="comment-count">${openComments}</span>` : ''}</button>
       ${renderMenu('more-menu', icon('ellipsis'), 'More actions', [
         { action: 'json', label: 'View JSON', icon: 'braces' },
         { action: 'copy', label: 'Copy canvas ID', icon: 'copy', keepOpen: true },
@@ -541,18 +545,18 @@ ${FAVICON_HTML}
     <div class="compare-grid" id="compare-grid">
       ${window ? windowWidths.map((bw) => `<div class="compare-cell" style="--bp-w: ${bw}; --bp-h: ${h};">
         <div class="bp-label">Window · ${bw}×${h}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${bw}&h=${h}" data-bp="w${bw}"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${bw}&h=${h}" data-bp="w${bw}" title="Preview at ${bw}×${h}"></iframe></div>
       </div>`).join('\n      ') : `<div class="compare-cell" style="--bp-w: ${PHONE.width}; --bp-h: ${PHONE.height};">
         <div class="bp-label">Mobile · ${PHONE.width}×${PHONE.height}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${PHONE.width}&h=${PHONE.height}" data-bp="mobile" title="Preview at ${PHONE.width}×${PHONE.height}"></iframe></div>
       </div>
       <div class="compare-cell" style="--bp-w: 768; --bp-h: 1024;">
         <div class="bp-label">Tablet · 768×1024</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=768&h=1024" data-bp="tablet" title="Preview at 768×1024"></iframe></div>
       </div>`}
       <div class="compare-cell" style="--bp-w: ${w}; --bp-h: ${h};">
         <div class="bp-label">${window ? "Window" : "Desktop"} · ${w}×${h}</div>
-        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop"></iframe></div>
+        <div class="iframe-wrap"><iframe src="/canvas/${canvas.id}/html?w=${w}&h=${h}" data-bp="desktop" title="Preview at ${w}×${h}"></iframe></div>
       </div>
     </div>
   </div>`}

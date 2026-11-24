@@ -5,7 +5,7 @@ import { listFeedback } from '../../feedback.js';
 import { evalCacheKey } from '../scores.js';
 import { buildNodeIndex, scriptJson } from '../shared.js';
 import { LIGHT } from '../tokens.js';
-import { COMPONENTS_JS } from '../components.js';
+import { COMPONENTS_JS, icon } from '../components.js';
 
 export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: string): string {
   return `
@@ -13,6 +13,8 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     const canvasId = ${scriptJson(canvas.id)};
     // Outlines drawn inside the canvas iframe, which cannot read the page's CSS variables.
     const HIGHLIGHT = ${scriptJson(LIGHT.colors.accent)};
+    const MOON_ICON = ${scriptJson(icon('moon'))};
+    const SUN_ICON = ${scriptJson(icon('sun'))};
     let lastModified = ${scriptJson(canvas.lastModified)};
     let contentKey = ${scriptJson(evalCacheKey(canvas))};
     // The layout (device frame or breakpoints, artboard size, safe-area bands)
@@ -60,11 +62,11 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     function toggleTheme() {
       themeMode = themeMode === 'light' ? 'dark' : 'light';
       const btn = document.getElementById('theme-toggle');
+      // The label stays "Preview in dark" and aria-pressed says whether it is
+      // on; the icon shows the theme the preview is in.
       if (btn) {
         btn.setAttribute('aria-pressed', themeMode === 'dark' ? 'true' : 'false');
-        const label = themeMode === 'dark' ? 'Preview in light' : 'Preview in dark';
-        btn.setAttribute('aria-label', label);
-        btn.title = label;
+        btn.innerHTML = themeMode === 'dark' ? SUN_ICON : MOON_ICON;
       }
       document.querySelectorAll('iframe').forEach((frame) => {
         const u = new URL(frame.src, location.href);
@@ -115,6 +117,10 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       frame.style.transform = 'scale(' + scale + ')';
       document.getElementById('stage').dataset.scale = scale.toFixed(4);
       document.getElementById('stage').dataset.mode = zoom === null ? 'fit' : 'zoom';
+      if (!document.getElementById('viewport').classList.contains('compare')) {
+        document.getElementById('btn-zoom-in').disabled = !ZOOM_STEPS.some((s) => s > scale + 1e-6);
+        document.getElementById('btn-zoom-out').disabled = !ZOOM_STEPS.some((s) => s < scale - 1e-6);
+      }
     }
     function zoomBy(dir) {
       const current = zoom ?? fitScale();
@@ -126,6 +132,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     function fitPreview() { zoom = null; applyScale(); }
     function setZoomTools(enabled) {
       ['btn-zoom-in', 'btn-zoom-out', 'btn-fit'].forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = !enabled; });
+      if (enabled) applyScale();
     }
     window.addEventListener('resize', () => { if (zoom === null) applyScale(); });
     applyScale();
@@ -147,9 +154,8 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       frame.width = w;
       frame.height = h;
       frame.src = '/canvas/' + canvasId + '/html?w=' + w + '&h=' + h + (themeMode === 'dark' ? '&theme=dark' : '') + '&t=' + Date.now();
-      setZoomTools(true);
-      applyScale();
       selectBp(bp);
+      setZoomTools(true);
     }
 
     function setCompareMode() {
@@ -176,8 +182,9 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       const panel = document.getElementById('json-panel');
       const open = typeof force === 'boolean' ? force : panel.hidden;
       panel.hidden = !open;
-      if (open) loadJson();
+      if (open) { loadJson(); panel.querySelector('button').focus(); }
     }
+    document.getElementById('json-panel').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); toggleJson(false); } });
 
     async function loadJson() {
       try {
@@ -206,6 +213,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     }
 
     // FR-C2 — the More menu.
+    let copyTimer = 0;
     async function copyCanvasId(item) {
       let ok = false;
       try { await navigator.clipboard.writeText(canvasId); ok = true; } catch {
@@ -214,11 +222,13 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         document.body.appendChild(field); field.select();
         try { ok = document.execCommand('copy'); } catch {}
         field.remove();
+        item.focus();
       }
       const label = item.querySelector('span');
-      const before = label.textContent;
+      label.dataset.label = label.dataset.label || label.textContent;
       label.textContent = ok ? 'Copied' : 'Copy failed';
-      setTimeout(() => { label.textContent = before; }, 2000);
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => { label.textContent = label.dataset.label; }, 2000);
     }
     const moreMenu = document.querySelector('[data-menu="more-menu"]');
     if (moreMenu) moreMenu.addEventListener('menuaction', (e) => {
@@ -385,6 +395,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     function toggleComment() {
       commentMode = !commentMode;
       document.getElementById('btn-comment').classList.toggle('active', commentMode);
+      document.getElementById('btn-comment').setAttribute('aria-pressed', commentMode ? 'true' : 'false');
       if (!commentMode) closePopover();
       hookFrame();
     }
@@ -473,7 +484,8 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       ta.focus();
     }
 
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePopover(); });
+    // An Escape the menu, dialog or JSON panel already handled keeps the draft.
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !e.defaultPrevented) closePopover(); });
     document.getElementById('frame').addEventListener('load', hookFrame);
     hookFrame();
     renderFeedbackPane(FB_INIT);
