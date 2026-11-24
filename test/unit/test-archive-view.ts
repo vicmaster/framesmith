@@ -38,14 +38,19 @@ const archivedB = sg.createCanvas('to-archive-b', brand.id);
 sg.archiveCanvas(archivedA.id);
 sg.archiveCanvas(archivedB.id);
 
+/** The sidebar's Archive link (Phase 33): whether it is the current place, and its count. */
+function archiveLink(html: string): { current: boolean; count: number } | null {
+  const m = /<a href="\/archive" class="nav-item sidebar-archive"( aria-current="page")?>([\s\S]*?)<\/a>/.exec(html);
+  return m ? { current: !!m[1], count: Number(/<span class="nav-count">(\d+)<\/span>/.exec(m[2])?.[1] ?? NaN) } : null;
+}
+
 // ---- 1. Sidebar Archive entry on a project page ------------------------
 {
   const html = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
-  check('project page: sidebar contains Archive link', html.includes('class="sidebar-archive'));
+  check('project page: sidebar contains Archive link', html.includes('class="nav-item sidebar-archive"'));
   check('project page: Archive link points to /archive', html.includes('href="/archive"'));
-  check('project page: Archive count = 2 (cross-project total)',
-    /class="sidebar-archive-count">2<\/span>/.test(html));
-  check('project page: Archive entry is NOT active', !/class="sidebar-archive active"/.test(html));
+  check('project page: Archive count = 2 (cross-project total)', archiveLink(html)?.count === 2);
+  check('project page: Archive entry is NOT the current place', archiveLink(html)?.current === false);
 }
 
 // ---- 2. Archive page renders the right canvases -----------------------
@@ -54,7 +59,7 @@ sg.archiveCanvas(archivedB.id);
   check('archive: title shows "Archived canvases"',
     /<h1 class="project-title">Archived canvases<\/h1>/.test(html));
   check('archive: meta shows count across all projects', html.includes('2 canvases across all projects'));
-  check('archive: Archive sidebar entry IS active', /class="sidebar-archive active"/.test(html));
+  check('archive: Archive sidebar entry IS the current place', archiveLink(html)?.current === true);
 
   check('archive: contains archivedA card', html.includes(`/canvas/${archivedA.id}`));
   check('archive: contains archivedB card', html.includes(`/canvas/${archivedB.id}`));
@@ -109,8 +114,7 @@ sg.archiveCanvas(archivedB.id);
   // Delete the archived canvas, archive count should drop in the sidebar.
   sg.deleteCanvas(archivedA.id);
   const html = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
-  check('after delete: sidebar archive count drops to 0',
-    /class="sidebar-archive-count">0<\/span>/.test(html));
+  check('after delete: sidebar archive count drops to 0', archiveLink(html)?.count === 0);
 }
 
 rmSync(tmp, { recursive: true, force: true });

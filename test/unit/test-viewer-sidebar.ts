@@ -46,31 +46,39 @@ sg.archiveCanvas(archivedOne.id);
 const htmlDefault = (await viewer.renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
 
 // ---- 1. Sidebar tree structure ------------------------------------------
-check('sidebar: contains "Framesmith" logo', htmlDefault.includes('sidebar-logo'));
+// Phase 33 slice A: one nav-item link per project, the current one marked
+// with aria-current="page"; an identity dot, the name and a count in each.
+interface SidebarItem { current: boolean; label: string; count: number; dot: boolean }
+function sidebarItem(html: string, projectId: string): SidebarItem | null {
+  const m = new RegExp(`<a href="/project/${projectId}" class="nav-item"( aria-current="page")?>([\\s\\S]*?)</a>`).exec(html);
+  if (!m) return null;
+  return {
+    current: !!m[1],
+    label: /<span class="nav-label">([^<]*)<\/span>/.exec(m[2])?.[1] ?? '',
+    count: Number(/<span class="nav-count">(\d+)<\/span>/.exec(m[2])?.[1] ?? NaN),
+    dot: m[2].includes('class="nav-dot"'),
+  };
+}
+const defaultItem = sidebarItem(htmlDefault, DEFAULT_PROJECT_ID);
+const brandItem = sidebarItem(htmlDefault, projAcmeA.id);
+check('sidebar: contains the "framesmith" wordmark', htmlDefault.includes('class="sidebar-brand">framesmith<'));
 check('sidebar: contains "Personal" workspace label', htmlDefault.includes('>Personal<'));
 check('sidebar: contains "Acme" workspace label', htmlDefault.includes('>Acme<'));
-check('sidebar: contains "Untitled" project link', /\/project\/default-project[^"]*"[^>]*class="project[^"]*"[\s\S]*?<span class="project-name">Untitled/.test(htmlDefault));
-check('sidebar: project rows include a project-dot', /<span class="project-dot"/.test(htmlDefault));
-check('sidebar: active project row includes a project-bar focus rail', /class="project active"[\s\S]*?<span class="project-bar"/.test(htmlDefault));
-check('sidebar: contains "Brand" project link', new RegExp(`/project/${projAcmeA.id}`).test(htmlDefault));
-check('sidebar: contains "Marketing" project link', new RegExp(`/project/${projAcmeB.id}`).test(htmlDefault));
+check('sidebar: contains "Untitled" project link', defaultItem?.label === 'Untitled', JSON.stringify(defaultItem));
+check('sidebar: project rows include an identity dot', defaultItem?.dot === true && brandItem?.dot === true);
+check('sidebar: contains "Brand" project link', brandItem?.label === 'Brand');
+check('sidebar: contains "Marketing" project link', sidebarItem(htmlDefault, projAcmeB.id)?.label === 'Marketing');
 
-// ---- 2. Active highlight on the requested project -----------------------
-const activeRegex = new RegExp(`<a href="/project/${DEFAULT_PROJECT_ID}"[^>]*class="project active"`);
-check('sidebar: requested project carries `active` class', activeRegex.test(htmlDefault));
-
-const inactiveRegex = new RegExp(`<a href="/project/${projAcmeA.id}"[^>]*class="project"(?!\\s*active)`);
-check('sidebar: other projects do NOT carry `active` class', inactiveRegex.test(htmlDefault));
+// ---- 2. The requested project is the current place -----------------------
+check('sidebar: requested project carries aria-current="page"', defaultItem?.current === true);
+check('sidebar: other projects do NOT carry aria-current', brandItem?.current === false);
+check('sidebar: exactly one current place on a project page', (htmlDefault.match(/<a [^>]*aria-current="page"/g) ?? []).length === 1);
 
 // ---- 3. Canvas count badges count non-archived canvases per project -----
-// Default project has 2 active canvases (home + about)
-check('sidebar: default project shows count 2', /default-project[^"]*"[^>]*class="project active"[^>]*>[\s\S]*?>2<\/span>/.test(htmlDefault));
-// Brand has 3
-check('sidebar: Brand project shows count 3', new RegExp(`${projAcmeA.id}[^"]*"[^>]*class="project"[^>]*>[\\s\\S]*?>3<\/span>`).test(htmlDefault));
-// Marketing has 0
-check('sidebar: Marketing project shows count 0', new RegExp(`${projAcmeB.id}[^"]*"[^>]*class="project"[^>]*>[\\s\\S]*?>0<\/span>`).test(htmlDefault));
-// Side has 1 archived canvas, count should be 0 (archived excluded)
-check('sidebar: Side project shows count 0 (archived excluded)', new RegExp(`${projInDefault.id}[^"]*"[^>]*class="project"[^>]*>[\\s\\S]*?>0<\/span>`).test(htmlDefault));
+check('sidebar: default project shows count 2', defaultItem?.count === 2, String(defaultItem?.count));
+check('sidebar: Brand project shows count 3', brandItem?.count === 3, String(brandItem?.count));
+check('sidebar: Marketing project shows count 0', sidebarItem(htmlDefault, projAcmeB.id)?.count === 0);
+check('sidebar: Side project shows count 0 (archived excluded)', sidebarItem(htmlDefault, projInDefault.id)?.count === 0);
 
 // ---- 4. Breadcrumb + main pane title ------------------------------------
 check('main: breadcrumb shows "Personal / Untitled"', htmlDefault.includes('Personal / Untitled'));
@@ -88,9 +96,8 @@ check('main: grid does NOT contain archived "old" canvas', !htmlDefault.includes
 const htmlAcme = (await viewer.renderProjectPage(projAcmeA.id, 3001))!;
 check('acme page: breadcrumb shows "Acme / Brand"', htmlAcme.includes('Acme / Brand'));
 check('acme page: title shows "Brand"', /<h1 class="project-title">Brand<\/h1>/.test(htmlAcme));
-check('acme page: active highlight is on Brand, not Untitled',
-  new RegExp(`<a href="/project/${projAcmeA.id}"[^>]*class="project active"`).test(htmlAcme) &&
-  new RegExp(`<a href="/project/${DEFAULT_PROJECT_ID}"[^>]*class="project"(?!\\s*active)`).test(htmlAcme),
+check('acme page: the current place is Brand, not Untitled',
+  sidebarItem(htmlAcme, projAcmeA.id)?.current === true && sidebarItem(htmlAcme, DEFAULT_PROJECT_ID)?.current === false,
 );
 
 // ---- 7. Empty-project state ---------------------------------------------

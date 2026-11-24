@@ -202,6 +202,24 @@ function mimeOf(ext: string): string {
   return ext === 'woff2' ? 'font/woff2' : ext === 'woff' ? 'font/woff' : ext === 'otf' ? 'font/otf' : 'font/ttf';
 }
 
+/** Phase 33 — the cached faces of a family whose files are on disk, with no
+ * network: what the viewer declares in @font-face and serves by file name. */
+export function cachedFontFaces(family: string): Array<{ family: string; file: string; weight?: string; style?: 'normal' | 'italic' }> {
+  const entry = readRegistry().families[family.toLowerCase()];
+  return (entry?.faces ?? [])
+    .filter((face) => existsSync(join(fontsDir(), face.file)))
+    .map(({ family: name, file, weight, style }) => ({ family: name, file, ...(weight !== undefined ? { weight } : {}), ...(style ? { style } : {}) }));
+}
+
+/** A cached font file by bare name, with its media type; null for anything
+ * that is not a file directly in the fonts dir (no separators, no dot-files). */
+export function cachedFontFile(file: string): { path: string; mime: string } | null {
+  if (!/^[A-Za-z0-9_-]+\.(woff2|woff|ttf|otf)$/.test(file)) return null;
+  const path = join(fontsDir(), file);
+  if (!existsSync(path)) return null;
+  return { path, mime: mimeOf(file.split('.').pop() ?? 'woff2') };
+}
+
 function faceToDataUri(face: RegistryFace): FontFace | null {
   const path = join(fontsDir(), face.file);
   if (!existsSync(path)) return null;
