@@ -52,13 +52,13 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
           lastModified = meta.lastModified;
           contentKey = meta.contentKey || contentKey;
           refreshFrames();
-          refreshInspector();
           if (!document.getElementById('json-panel').hidden) loadJson();
         }
-        if (meta.feedbackKey && meta.feedbackKey !== feedbackKey) {
-          feedbackKey = meta.feedbackKey;
-          loadFeedback();
-        }
+        // The panels catch up on their own keys, which move only after a fetch
+        // succeeds, so a failed or slow one is retried on the next poll. An
+        // edit also re-reads the comments: their "node gone" flags can change.
+        if (meta.contentKey && meta.contentKey !== inspectorKey) refreshInspector(meta.contentKey);
+        if ((meta.feedbackKey && meta.feedbackKey !== feedbackKey) || (meta.contentKey && meta.contentKey !== feedbackContentKey)) loadFeedback(meta.feedbackKey, meta.contentKey);
       } catch {
         setLive(false);
       }
@@ -296,7 +296,12 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         delBtn.type = 'button';
         delBtn.className = 'btn btn--ghost';
         delBtn.textContent = 'Delete';
-        delBtn.onclick = async (e) => { e.stopPropagation(); if (await fsDialog.open('fb-delete-dialog')) fbAction('/feedback/' + entry.id, 'DELETE'); };
+        delBtn.onclick = async (e) => {
+          e.stopPropagation();
+          if (!(await fsDialog.open('fb-delete-dialog'))) return;
+          await fbAction('/feedback/' + entry.id, 'DELETE');
+          document.getElementById('tab-feedback').focus(); // the card it came from is gone
+        };
         actions.appendChild(resolveBtn);
         actions.appendChild(delBtn);
         card.appendChild(actions);
@@ -341,19 +346,26 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       }
     }
 
-    async function loadFeedback() {
+    let feedbackSeq = 0;
+    let feedbackContentKey = contentKey;
+    async function loadFeedback(key, forContent) {
+      const seq = ++feedbackSeq;
       try {
-        const res = await fetch('/api/canvas/' + canvasId + '/feedback');
+        const res = await fetch('/api/canvas/' + canvasId + '/feedback', { cache: 'no-store' });
+        if (!res.ok) return;
         const data = await res.json();
+        if (seq !== feedbackSeq) return; // a newer fetch is on its way
         renderFeedbackPane(data.entries);
-      } catch { /* pane keeps its last state */ }
+        if (key) feedbackKey = key;
+        if (forContent) feedbackContentKey = forContent;
+      } catch { /* the pane keeps its last state; the next poll retries */ }
     }
 
     async function fbAction(suffix, method) {
       try {
         const res = await fetch('/api/canvas/' + canvasId + suffix, { method });
         if (!res.ok) throw new Error('Request failed: ' + res.status);
-        loadFeedback();
+        await loadFeedback();
       } catch (err) { alert('Action failed: ' + err.message); }
     }
 
@@ -418,11 +430,21 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
       btn.setAttribute('aria-expanded', on ? 'true' : 'false');
       pop.hidden = !on;
-      if (on) { textEl.focus(); } else { setAnchor([]); textEl.value = ''; }
+      if (on) { textEl.focus(); } else {
+        if (popoverSelected) highlightNode(null, false);
+        chipsEl.replaceChildren(); chipsEl.hidden = true; popoverSelected = null;
+        textEl.value = '';
+      }
       hookFrame();
     }
     function toggleComment() { setCommentMode(!commentMode); }
-    function closePopover() { if (commentMode) setCommentMode(false); }
+    /** Close the popover; refocus the Comment button when the popover had focus. */
+    function closePopover() {
+      if (!commentMode) return;
+      const hadFocus = pop.contains(document.activeElement);
+      setCommentMode(false);
+      if (hadFocus) document.getElementById('btn-comment').focus();
+    }
 
     /** Fill the anchor chips from a clicked element's chain (nearest first). */
     function setAnchor(chain) {
@@ -453,7 +475,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     function openPopover(chain) { if (!commentMode) setCommentMode(true); setAnchor(chain); textEl.focus(); }
 
     document.getElementById('comment-cancel').addEventListener('click', closePopover);
-    pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closePopover(); document.getElementById('btn-comment').focus(); } });
+    pop.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closePopover(); } });
     document.getElementById('comment-save').addEventListener('click', async () => {
       const comment = textEl.value.trim();
       if (!comment) { textEl.focus(); return; }
@@ -467,6 +489,7 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
         closePopover();
         loadFeedback();
         document.getElementById('tab-feedback').click();
+        document.getElementById('tab-feedback').focus();
       } catch (err) { alert('Could not save comment: ' + err.message); }
     });
 
@@ -480,7 +503,10 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
     // The render carries data-node-id on every element; iframes are same-origin
     // so we toggle an outline directly in their documents.
     function highlightNode(nodeId, on) { highlightNodes(on && nodeId ? [nodeId] : []); }
+    // Every outline goes through here, so a "Show n nodes" button is pressed
+    // only while its own outline is the one showing.
     function highlightNodes(nodeIds) {
+      document.querySelectorAll('.issue-nodes[aria-pressed="true"]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
       const frames = [];
       const main = document.getElementById('frame');
       if (main && getComputedStyle(main).display !== 'none') frames.push(main);
@@ -509,24 +535,28 @@ export function detailScript(canvas: Canvas, w: number, h: number, surfaceType: 
       const btn = e.target.closest && e.target.closest('.issue-nodes');
       if (!btn) return;
       const on = btn.getAttribute('aria-pressed') !== 'true';
-      document.querySelectorAll('.issue-nodes[aria-pressed="true"]').forEach((b) => b.setAttribute('aria-pressed', 'false'));
-      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
       highlightNodes(on ? JSON.parse(btn.dataset.nodes) : []);
+      if (on) btn.setAttribute('aria-pressed', 'true');
     });
 
     // FR-D4 — swap the Quality and Design system panels (and the node index)
     // when the canvas changes, keeping the scroll position.
-    async function refreshInspector() {
+    let inspectorKey = contentKey;
+    let inspectorSeq = 0;
+    async function refreshInspector(key) {
+      const seq = ++inspectorSeq;
       try {
         const res = await fetch('/canvas/' + canvasId + '/inspector', { cache: 'no-store' });
         if (!res.ok) return;
         const parts = await res.json();
+        if (seq !== inspectorSeq) return; // a newer fetch is on its way
         const inspector = document.getElementById('inspector');
         const top = inspector.scrollTop;
         document.getElementById('insp-quality').innerHTML = parts.quality;
         document.getElementById('insp-design').innerHTML = parts.design;
         NODE_INDEX = parts.nodeIndex;
         inspector.scrollTop = top;
+        inspectorKey = key;
       } catch { /* the panels keep their last state */ }
     }
 `;

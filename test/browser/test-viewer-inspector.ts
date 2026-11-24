@@ -140,6 +140,46 @@ await page.waitForFunction((b) => document.querySelector('.score-value')?.textCo
 const after = await page.$eval('.score-value', (s) => s.textContent);
 check('an edit updates the score without a reload', after !== before && await page.evaluate(() => (window as unknown as { __mark?: boolean }).__mark === true), `${before} → ${after}`);
 
+// A failed panel fetch is retried on the next poll, not dropped.
+await open(store.ids['editorial-longform']);
+await page.setRequestInterception(true);
+let failNext = true;
+const onRequest = (req: import('puppeteer').HTTPRequest) => {
+  if (failNext && req.url().endsWith('/inspector')) { failNext = false; req.respond({ status: 500, body: 'boom' }); }
+  else req.continue();
+};
+page.on('request', onRequest);
+const longform = getCanvas(store.ids['editorial-longform'])!;
+const before2 = await page.$eval('.score-value', (s) => s.textContent);
+parseAndExecute(longform.root, 'I("document", { type: "frame", width: 100, height: 40, gap: 13, layout: "horizontal" })', longform);
+touchCanvas(longform.id);
+await page.waitForFunction((b) => document.querySelector('.score-value')?.textContent !== b, { timeout: 8000 }, before2).catch(() => null);
+check('after a failed panel fetch the next poll still updates the score', !failNext && (await page.$eval('.score-value', (s) => s.textContent)) !== before2);
+page.off('request', onRequest);
+await page.setRequestInterception(false);
+
+// An open popover and its draft survive a swap; Cancel returns focus to Comment.
+await page.click('#btn-comment');
+await page.type('#comment-text', 'half-written');
+parseAndExecute(longform.root, 'I("document", { type: "frame", width: 100, height: 40, gap: 15, layout: "horizontal" })', longform);
+touchCanvas(longform.id);
+const before3 = await page.$eval('.score-value', (s) => s.textContent);
+await page.waitForFunction((b) => document.querySelector('.score-value')?.textContent !== b, { timeout: 8000 }, before3).catch(() => null);
+check('an open popover keeps its draft through a swap', await page.evaluate(() => !(document.getElementById('comment-pop') as HTMLElement).hidden && (document.getElementById('comment-text') as HTMLTextAreaElement).value === 'half-written'));
+await page.click('#comment-cancel');
+check('Cancel closes it and returns focus to the Comment button', await page.evaluate(() => document.activeElement?.id === 'btn-comment'));
+
+// An edit that removes a commented node flags its comment without a new comment.
+await open(store.ids.withFeedback);
+await page.click('#tab-feedback');
+const fb2 = getCanvas(store.ids.withFeedback)!;
+const pinned = listFeedback(fb2, { includeResolved: true }).find((e) => e.nodeId)!;
+const rootKids = fb2.root.children ?? [];
+fb2.root.children = rootKids.filter((c) => c.id !== pinned.nodeId);
+touchCanvas(fb2.id);
+await page.waitForFunction(() => !!document.querySelector('#fb-pane .fb-orphan'), { timeout: 8000 }).catch(() => null);
+check('a comment whose node an edit removed shows "node gone"', !!(await page.$('#fb-pane .fb-orphan')));
+
 check('no page error', errors.length === 0, errors.join(' | ').slice(0, 300));
 await browser.close();
 process.exit(allPass ? 0 : 1);

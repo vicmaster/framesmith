@@ -162,7 +162,6 @@ export async function startViewer(port: number): Promise<number> {
         return;
       }
 
-      // Canvas JSON
       // Phase 33 FR-D4 — the inspector's Quality and Design system panels and
       // the node index, for the detail page's live swap.
       const inspectorMatch = path.match(/^\/canvas\/([^/]+)\/inspector$/);
@@ -174,6 +173,7 @@ export async function startViewer(port: number): Promise<number> {
         return;
       }
 
+      // Canvas JSON
       const jsonMatch = path.match(/^\/canvas\/([^/]+)\/json$/);
       if (jsonMatch) {
         const canvas = getCanvas(jsonMatch[1]);

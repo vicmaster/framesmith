@@ -170,7 +170,10 @@ function renderDesignSystem(canvas: Canvas): string {
  * provenance and critique, the categories lowest first, then the folded
  * issues, errors first. */
 export function renderQualityPanel(ev: EvaluationResult | null, canvas: Canvas): string {
-  if (!ev) return '<div class="insp-section"><div class="insp-empty">An empty canvas has no score yet.</div></div>';
+  if (!ev) {
+    const empty = !canvas.root.children?.length;
+    return `<div class="insp-section"><div class="insp-empty">${empty ? 'An empty canvas has no score yet.' : 'The score could not be computed for this canvas.'}</div></div>`;
+  }
   const below = ev.overallScore < BAR;
   const folded = foldIssues(ev.issues);
   const ordered = [...folded].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
@@ -492,6 +495,7 @@ ${FAVICON_HTML}
   .comment-pop textarea { width: 100%; min-height: 72px; resize: vertical; padding: var(--space-xs); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--bg-surface); color: var(--text-primary); font: inherit; font-size: var(--font-body); }
   .comment-pop textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   .comment-pop-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+  #comment-cancel { color: var(--accent); }
   @media (max-width: 900px) { .inspector { width: 320px; } }
   @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
