@@ -196,7 +196,7 @@ The response also carries the artboard `width`/`height`, `type`, `typeSource` (`
 
 ### `canvas_list`
 
-List canvases. Excludes archived canvases by default. A row carrying `openFeedback: n` has open point-and-tell comments waiting — read them with `get_feedback` before working on that canvas.
+List canvases. Excludes archived canvases by default. A row carrying `openFeedback: n` has open point-and-tell comments waiting — read them with `get_feedback` before working on that canvas. A listing also loads canvas files added on disk since the server started (a git pull, another session).
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -265,7 +265,7 @@ It creates `.framesmith/workspace.json` (the binding plus the design system, so 
     login-form.json
 ```
 
-It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. The files stay editable outside the server: after a `git pull`, a branch switch or a hand edit, every tool reloads a canvas whose file changed (or drops one whose file is gone) before it reads or writes it, so a screenshot shows the pulled design and an edit builds on it. While a canvas file can't be parsed (a merge conflict), tools treat it as not found instead of using an old copy, and pick it up again once it parses. A canvas file added on disk after the server started appears only after a restart.
+It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. The files stay editable outside the server: after a `git pull`, a branch switch or a hand edit, every tool reloads a canvas whose file changed (or drops one whose file is gone) before it reads or writes it, so a screenshot shows the pulled design and an edit builds on it. While a canvas file can't be parsed (a merge conflict), tools treat it as not found instead of using an old copy, and pick it up again once it parses. A canvas file added on disk after the server started (a teammate's new screen, a project a pull brought in) shows up in the next listing, or as soon as a tool asks for its id.
 
 **Binding re-keys the workspace and project IDs.** Both become `repo-*` IDs (`repo-ws-…`, `repo-proj-…`), and the old ones stop resolving. Canvas IDs are kept, and each canvas's `projectId` is updated to its new project. The result carries the mapping, so you can retarget without re-listing:
 
@@ -1384,7 +1384,7 @@ The standalone viewer:
 - **Fonts** (`/assets/fonts/<file>`) — the viewer's own faces (Inter, Space Grotesk), served from the font cache (`~/.framesmith/fonts/`)
 - **Live auto-refresh** — the canvas page polls every 2 seconds and the project page every 3, so the browser updates as your agent runs `batch_design`; the project page reloads on any edit, rename, genre, type or state change, and the canvas page refreshes its Quality and Design system panels, its Feedback list and its comment counts without a reload
 
-Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and the viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
+Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and a running server loads files another session or a git pull adds to either store (on the next listing, or when a tool is given the id). The viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 
 ## Workflow
 

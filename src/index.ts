@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, ensureAllFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, setCanvasType, addVariant } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, ensureAllFresh, discoverCanvases, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, setCanvasType, addVariant } from './scene-graph.js';
 import { deviceProfile, windowProfile, resolveSurface, surfaceFor, usableSafeArea, type SurfaceType } from './surfaces.js';
 import { canvasVersionHash, checkVersionHash } from './version.js';
-import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
+import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace, refreshWorkspace } from './workspaces.js';
 import { DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID } from './types.js';
 import { detectBinding, projectStartDir, readWorkspaceFile, setRepoBackend, registerRepo, migrateLegacyHome, appendBuildLog, recordPresetInBuildLog, readBuildLog } from './repo-store.js';
 import { bindRepo, initWorkspace } from './bind.js';
@@ -181,17 +181,23 @@ server.resource(
 /** A canvas as it is on disk now. In a bound repo (or the global store) its
  * file can change under the server, by a hand edit, a git pull or the viewer;
  * ensureFresh reloads it first, so a tool never reads, renders or writes back
- * the last copy it saw. Every tool reads canvases through this and lists them
+ * the last copy it saw, and a file added since startup is loaded on a miss. Every tool reads canvases through this and lists them
  * through freshListing, never through getCanvas or listCanvases
  * (test/unit/test-fresh-reads-guard.ts holds it). */
 function freshCanvas(id: string): Canvas | undefined {
   ensureFresh(id);
-  return getCanvas(id);
+  const canvas = getCanvas(id);
+  if (canvas) return canvas;
+  // Not loaded: a file a git pull or another session added since startup?
+  refreshWorkspace();
+  return discoverCanvases() > 0 ? getCanvas(id) : undefined;
 }
 
-/** listCanvases after refreshing every canvas, for the same reason: rows are
- * filtered on archived, project and variants, which a pulled file can change. */
+/** listCanvases after refreshing every canvas and loading added ones, for the
+ * same reason: rows are filtered on archived, project and variants, which a
+ * pulled file can change, and a pull can bring new canvases and projects. */
 function freshListing(): ReturnType<typeof listCanvases> {
+  refreshWorkspace();
   ensureAllFresh();
   return listCanvases();
 }
@@ -248,7 +254,7 @@ server.tool(
 // --- canvas_list ---
 server.tool(
   'canvas_list',
-  'List canvases. By default returns all non-archived canvases. Filter by `projectId` to scope to one project. Set `includeArchived: true` to include archived canvases in the result. A row carrying `openFeedback: n` has open point-and-tell comments from the user waiting — read them with get_feedback before working on (or presenting) that canvas. Every row carries a `versionHash` — the design-content hash canvas_version checks approvals against, so a gate can populate its records from this listing alone. State variants (canvas_add_variant): a variant row carries `variant: { of, state }`; its base row carries `variants: [{ state, canvasId }]` — one listing answers "which states are designed for this screen".',
+  'List canvases. By default returns all non-archived canvases. Filter by `projectId` to scope to one project. Set `includeArchived: true` to include archived canvases in the result. A row carrying `openFeedback: n` has open point-and-tell comments from the user waiting — read them with get_feedback before working on (or presenting) that canvas. Every row carries a `versionHash` — the design-content hash canvas_version checks approvals against, so a gate can populate its records from this listing alone. A listing reflects the files as they are now: edits, renames and deletions made outside the server, and canvas files added on disk since it started (a pulled screen, another session\'s canvas). State variants (canvas_add_variant): a variant row carries `variant: { of, state }`; its base row carries `variants: [{ state, canvasId }]` — one listing answers "which states are designed for this screen".',
   {
     projectId: z.string().optional().describe('Only list canvases in this project'),
     includeArchived: z.boolean().optional().describe('Include archived canvases in the result (default false)'),
@@ -2532,7 +2538,7 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. The files stay editable outside the server: every tool reloads a canvas whose file changed on disk (a git pull, a branch switch, a hand edit) before reading or writing it. A canvas file added on disk after the server started appears only after a restart. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. The files stay editable outside the server: every tool reloads a canvas whose file changed on disk (a git pull, a branch switch, a hand edit) before reading or writing it. A canvas file added on disk after the server started (a pulled screen or project) is picked up by the next listing or by a tool given its id. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
   {
     workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),

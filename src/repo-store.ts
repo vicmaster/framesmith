@@ -161,6 +161,26 @@ function fileMtime(path: string): number | null {
   }
 }
 
+/** A file's mtime and size, the "has it changed" key for set-aside files. */
+export function fileStamp(path: string): string | null {
+  try {
+    const s = statSync(path);
+    return `${s.mtimeMs}:${s.size}`;
+  } catch {
+    return null;
+  }
+}
+
+// Files discovery has set aside, by absolute path → stamp: JSON that is not a
+// canvas, a file that does not parse yet, and a canvas file this server
+// deleted but could not unlink. Each is looked at again only once it changes.
+const setAside = new Map<string, string>();
+
+function setFileAside(path: string): void {
+  const stamp = fileStamp(path);
+  if (stamp) setAside.set(path, stamp);
+}
+
 // --- workspace.json ---
 export function readWorkspaceFile(dir: string): RepoWorkspaceFile | null {
   const p = join(dir, WORKSPACE_FILE);
@@ -266,10 +286,15 @@ export function writeCanvasToDir(rootDir: string, canvas: Canvas): void {
 export function removeCanvasFromDir(rootDir: string, id: string): void {
   const rel = fileById.get(id);
   if (!rel) return;
+  const p = join(rootDir, rel);
   try {
-    const p = join(rootDir, rel);
     if (existsSync(p)) unlinkSync(p);
   } catch {}
+  if (existsSync(p)) {
+    // Never let discovery load a deleted canvas back from a file that stayed.
+    setFileAside(p);
+    process.stderr.write(`Warning: canvas ${id} deleted, but its file ${p} could not be removed\n`);
+  }
   fileById.delete(id);
   mtimeById.delete(id);
 }
@@ -290,6 +315,42 @@ export function canvasFileExists(rootDir: string, id: string): boolean {
 export function forgetCanvasFile(id: string): void {
   fileById.delete(id);
   mtimeById.delete(id);
+}
+
+/** Canvas files in the registered project folders that the server has not
+ * loaded: added by a git pull, a branch switch or by hand, or moved from
+ * another folder. Each is registered (path and mtime) and returned. A file
+ * that does not parse yet, or repeats an id whose file is still on disk, is
+ * skipped and looked at again next time. */
+export function discoverCanvasFiles(rootDir: string): Canvas[] {
+  const knownPaths = new Set(fileById.values());
+  const out: Canvas[] = [];
+  for (const [projectId, projectDir] of projectDirById) {
+    const abs = join(rootDir, projectDir);
+    let files: string[];
+    try { files = readdirSync(abs).filter((f) => f.endsWith('.json')); } catch { continue; }
+    for (const file of files) {
+      const rel = join(projectDir, file);
+      if (knownPaths.has(rel)) continue;
+      const full = join(rootDir, rel);
+      const stamp = fileStamp(full);
+      if (stamp && setAside.get(full) === stamp) continue;
+      let data: Canvas;
+      try { data = JSON.parse(readFileSync(full, 'utf-8')) as Canvas; } catch { setFileAside(full); continue; } // mid-write
+      if (!data || !data.id || !data.root) { setFileAside(full); continue; } // not a canvas
+      // A copy of a canvas whose own file is still there: not set aside, so it
+      // is adopted if that file goes away.
+      const current = fileById.get(data.id);
+      if (current && existsSync(join(rootDir, current))) continue;
+      setAside.delete(full);
+      data.projectId ??= projectId; // the folder says which project it is in
+      fileById.set(data.id, rel);
+      const m = fileMtime(full);
+      if (m !== null) mtimeById.set(data.id, m);
+      out.push(rehydrateAssets(rootDir, data));
+    }
+  }
+  return out;
 }
 
 /** Read every canvas file across all registered project subdirectories,
