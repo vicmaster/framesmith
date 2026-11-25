@@ -85,6 +85,19 @@ function archiveLink(html: string): { current: boolean; count: number } | null {
   check('archive: a ?canvas= that is not archived falls back to the newest', unknown.includes(`data-canvas-id="${archivedB.id}" aria-current="page"`));
 }
 
+// ---- 2b. A canvas whose project is gone cannot be restored into nowhere --
+{
+  const orphanProject = ws.createProject(acme.id, 'Doomed')!;
+  const orphan = sg.createCanvas('orphan', orphanProject.id);
+  sg.archiveCanvas(orphan.id);
+  ws.deleteProject(orphanProject.id);
+  const html = await viewer.renderArchivePage(3001, orphan.id);
+  check('orphan: grouped under "Unknown project"', html.includes('<span class="tree-label">Unknown project</span>'));
+  check('orphan: no Restore button, a note saying how instead', !html.includes('id="btn-restore"') && html.includes('canvas_move'));
+  check('orphan: Delete permanently still offered', html.includes('id="btn-delete"'));
+  sg.deleteCanvas(orphan.id);
+}
+
 // ---- 3. Archive page empty state (FR-E2) -------------------------------
 {
   sg.unarchiveCanvas(archivedA.id);

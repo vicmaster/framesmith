@@ -66,7 +66,6 @@ async function renderPanel(entry: ArchivedEntry): Promise<string> {
   const { canvas } = entry;
   const { w, h } = artboardSize(canvas);
   const ev = await evalFor(canvas);
-  const restore = entry.projectName ? `Restore to ${entry.projectName}` : 'Restore';
   const props: Array<[string, string]> = [
     ['Project', entry.projectName ?? 'Unknown project'],
     ['Archived', archivedLabel(entry.archivedAt)],
@@ -77,7 +76,10 @@ async function renderPanel(entry: ArchivedEntry): Promise<string> {
         <h2 class="panel-title" title="${esc(canvas.name)}"><a href="/canvas/${esc(canvas.id)}">${esc(canvas.name)}</a></h2>
         ${renderThumb(canvas)}
         <dl class="props">${props.map(([k, v]) => `<div class="prop"><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>
-        <button type="button" class="btn btn--primary btn--block" id="btn-restore">${icon('archive-restore')}<span>${esc(restore)}</span></button>
+        ${entry.projectName
+          ? `<button type="button" class="btn btn--primary btn--block" id="btn-restore">${icon('archive-restore')}<span>${esc(`Restore to ${entry.projectName}`)}</span></button>`
+          // Restored into a project that no longer exists, it would show on no page.
+          : '<p class="panel-note">Its project no longer exists. Have your agent move it to a project with canvas_move, then restore it.</p>'}
         <div class="danger-zone">
           <p>Deleting removes the canvas for good. It cannot be restored.</p>
           <button type="button" class="btn btn--ghost btn--danger-text" id="btn-delete">${icon('trash-2')}<span>Delete permanently</span></button>
@@ -190,9 +192,11 @@ const ARCHIVE_CSS = `
   .danger-zone p { font-size: var(--font-label); font-weight: 500; color: var(--text-secondary); }
   .btn--danger-text, .btn--danger-text svg { color: var(--danger); font-weight: 600; }
   .panel-error { font-size: var(--font-label); color: var(--danger); }
+  .panel-note { font-size: var(--font-label); color: var(--text-secondary); }
 
   .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-sm); padding: 120px var(--space-lg); text-align: center; color: var(--text-secondary); }
   .empty-icon { color: var(--text-secondary); }
   .empty-title { font-size: var(--font-body); font-weight: 600; color: var(--text-primary); }
   .empty-hint { font-size: var(--font-label); font-weight: 500; max-width: 400px; }
+  @media (max-width: 1024px) { .panel { width: 300px; } }
   @media (max-width: 720px) { .panes { flex-direction: column; } .panel { width: auto; border-left: none; border-top: 1px solid var(--border); } .tree-pane { padding: var(--space-md); } }`;

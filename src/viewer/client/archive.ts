@@ -27,7 +27,8 @@ export function archiveScript(selectedId: string | null, nextId: string | null):
         }
       };
       const id = encodeURIComponent(SELECTED);
-      document.getElementById('btn-restore').addEventListener('click', () => run('POST', '/api/canvas/' + id + '/unarchive', 'restore'));
+      const restore = document.getElementById('btn-restore');
+      if (restore) restore.addEventListener('click', () => run('POST', '/api/canvas/' + id + '/unarchive', 'restore'));
       document.getElementById('btn-delete').addEventListener('click', async () => {
         if (await window.fsDialog.open('delete-dialog')) run('DELETE', '/api/canvas/' + id, 'delete');
       });
