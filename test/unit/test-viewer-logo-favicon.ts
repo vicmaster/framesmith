@@ -29,7 +29,7 @@ try {
   const canvas = createCanvas('logo-favicon-test', DEFAULT_PROJECT_ID);
 
   const gallery = (await renderProjectPage(DEFAULT_PROJECT_ID, 3001))!;
-  const archive = renderArchivePage(3001);
+  const archive = await renderArchivePage(3001);
   const detail = await renderDetailPage(canvas, 3001);
 
   // --- Favicon present on every page ---

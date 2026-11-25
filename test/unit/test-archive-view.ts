@@ -1,5 +1,5 @@
-// Smoke for Phase 7 slice 4b: archive surface (route + sidebar entry +
-// per-card restore/delete) and detail-page lifecycle buttons. Drives the
+// Smoke for Phase 7 slice 4b, rebuilt in Phase 33 slice E: archive surface
+// (route + sidebar entry + tree, panel and empty state) and detail-page lifecycle buttons. Drives the
 // underlying functions directly — the API endpoints are thin wrappers over
 // scene-graph.archiveCanvas / unarchiveCanvas / deleteCanvas, already
 // covered by test/unit/test-workspace-mcp-tools.ts.
@@ -53,40 +53,48 @@ function archiveLink(html: string): { current: boolean; count: number } | null {
   check('project page: Archive entry is NOT the current place', archiveLink(html)?.current === false);
 }
 
-// ---- 2. Archive page renders the right canvases -----------------------
+// ---- 2. Archive page: tree, panel, selection (Phase 33 FR-E1) ----------
 {
-  const html = viewer.renderArchivePage(3001);
-  check('archive: title shows "Archived canvases"',
-    /<h1 class="project-title">Archived canvases<\/h1>/.test(html));
-  check('archive: meta shows count across all projects', html.includes('2 canvases across all projects'));
+  // archivedA was archived first; give it the older archivedAt so the order is certain.
+  sg.getCanvas(archivedA.id)!.archivedAt = '2026-11-01T00:00:00.000Z';
+  sg.getCanvas(archivedB.id)!.archivedAt = '2026-11-02T00:00:00.000Z';
+  const html = await viewer.renderArchivePage(3001);
+  check('archive: header title "Archive"', /<h1 class="page-title">Archive<\/h1>/.test(html));
+  check('archive: summary counts and explains', html.includes('2 canvases · hidden from the gallery until restored'));
   check('archive: Archive sidebar entry IS the current place', archiveLink(html)?.current === true);
 
-  check('archive: contains archivedA card', html.includes(`/canvas/${archivedA.id}`));
-  check('archive: contains archivedB card', html.includes(`/canvas/${archivedB.id}`));
-  check('archive: does NOT contain active canvas card', !html.includes(`/canvas/${active.id}`));
+  const rows = [...html.matchAll(/class="tree-row tree-row--canvas" href="\/archive\?canvas=([^"]+)"/g)].map((m) => m[1]);
+  check('archive: one tree row per archived canvas', rows.length === 2 && rows.includes(archivedA.id) && rows.includes(archivedB.id), JSON.stringify(rows));
+  check('archive: no row for the active canvas', !html.includes(`data-canvas-id="${active.id}"`));
+  const groups = [...html.matchAll(/<summary class="tree-row tree-row--project">[\s\S]*?<span class="tree-label">([^<]+)<\/span>/g)].map((m) => m[1]);
+  check('archive: grouped by project, projects by name', JSON.stringify(groups) === '["Brand","Untitled"]', JSON.stringify(groups));
 
-  // Each archived card shows its source project name
-  check('archive: archivedA card shows source project "Untitled"', html.includes('Untitled &middot;'));
-  check('archive: archivedB card shows source project "Brand"', html.includes('Brand &middot;'));
+  const panel = html.slice(html.indexOf('<aside class="panel"'));
+  check('archive: default selection is the most recently archived', panel.includes(`data-canvas-id="${archivedB.id}"`) && html.includes(`data-canvas-id="${archivedB.id}" aria-current="page"`));
+  check('archive: panel shows Project and Archived date', panel.includes('<dt>Project</dt><dd>Brand</dd>') && panel.includes('<dt>Archived</dt><dd>Nov 2, 2026</dd>'));
+  check('archive: panel shows Size and a score for an empty canvas', panel.includes('<dt>Size</dt><dd>1440 × 900</dd>') && panel.includes('<dt>Score</dt><dd>No score yet</dd>'));
+  check('archive: Restore names the project', panel.includes('<span>Restore to Brand</span>'));
+  check('archive: Delete permanently, under the warning', panel.includes('Deleting removes the canvas for good. It cannot be restored.') && panel.includes('id="btn-delete"'));
+  check('archive: delete confirms in the shared dialog', html.includes('id="delete-dialog"') && html.includes('Delete to-archive-b?') && html.includes("fsDialog.open('delete-dialog')"));
+  check('archive: the next canvas is passed to the script', html.includes(`const NEXT = "${archivedA.id}";`));
 
-  // Restore + Delete buttons per card
-  const restoreBtns = (html.match(/data-action="restore"/g) ?? []).length;
-  const deleteBtns = (html.match(/data-action="delete"/g) ?? []).length;
-  check('archive: each archived canvas has a Restore button', restoreBtns === 2);
-  check('archive: each archived canvas has a Delete button', deleteBtns === 2);
+  const picked = await viewer.renderArchivePage(3001, archivedA.id);
+  check('archive: ?canvas= selects that canvas', picked.includes(`data-canvas-id="${archivedA.id}" aria-current="page"`) && picked.includes('<span>Restore to Untitled</span>'));
+  check('archive: …and the next is the one before it', picked.includes(`const NEXT = "${archivedB.id}";`));
+  const unknown = await viewer.renderArchivePage(3001, active.id);
+  check('archive: a ?canvas= that is not archived falls back to the newest', unknown.includes(`data-canvas-id="${archivedB.id}" aria-current="page"`));
 }
 
-// ---- 3. Archive page empty state --------------------------------------
+// ---- 3. Archive page empty state (FR-E2) -------------------------------
 {
-  // Unarchive both → archive should be empty
   sg.unarchiveCanvas(archivedA.id);
   sg.unarchiveCanvas(archivedB.id);
-  const html = viewer.renderArchivePage(3001);
-  check('archive empty: title still "Archived canvases"',
-    /<h1 class="project-title">Archived canvases<\/h1>/.test(html));
-  check('archive empty: meta shows 0 canvases', html.includes('0 canvases across all projects'));
-  check('archive empty: empty-state message present', html.includes('No archived canvases'));
-  check('archive empty: empty-state hint references canvas_archive', html.includes('canvas_archive'));
+  const html = await viewer.renderArchivePage(3001);
+  check('archive empty: title still "Archive"', /<h1 class="page-title">Archive<\/h1>/.test(html));
+  check('archive empty: summary says 0 canvases', html.includes('<span class="summary">0 canvases</span>'));
+  check('archive empty: empty-state title', html.includes('No archived canvases'));
+  check('archive empty: the design\'s hint', html.includes('Archive a canvas from its page, or have your agent call canvas_archive. Archived canvases wait here until you restore or delete them.'));
+  check('archive empty: no panel, no dialog', !html.includes('class="panel"') && !html.includes('id="delete-dialog"'));
   // Re-archive for the next checks
   sg.archiveCanvas(archivedA.id);
 }

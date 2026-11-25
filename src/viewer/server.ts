@@ -206,7 +206,7 @@ export async function startViewer(port: number): Promise<number> {
       // Archive page
       if (path === '/archive') {
         res.setHeader('Content-Type', 'text/html');
-        res.end(renderArchivePage(runningPort ?? 3001));
+        res.end(await renderArchivePage(runningPort ?? 3001, url.searchParams.get('canvas')));
         return;
       }
 

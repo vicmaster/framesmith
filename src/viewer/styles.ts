@@ -45,26 +45,12 @@ export function baseCss(): string {
     --hover: color-mix(in srgb, var(--text-primary) 6%, transparent);
   }
   @media (prefers-color-scheme: dark) { :root { ${themeVars(DARK)} } }
-  ${LEGACY_ALIASES}
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--family-sans); font-size: var(--font-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
   :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   ${STATE_CHIP_CSS}`;
 }
 
-/** The pre-redesign variable names, pointed at the new tokens so page bodies
- * not yet rebuilt (slices B–E) restyle without markup changes. Each later
- * slice stops using them; slice E deletes this block. */
-const LEGACY_ALIASES = `
-  :root {
-    --bg-0: var(--bg-primary); --bg-1: var(--bg-primary);
-    --sidebar: var(--bg-surface); --surface: var(--bg-surface);
-    --surface-hover: var(--bg-elevated); --surface-elevated: var(--bg-elevated);
-    --border-subtle: var(--border); --border-rim: transparent;
-    --text-tertiary: var(--text-secondary); --text-muted: var(--text-secondary);
-    --accent-deep: var(--accent); --accent-soft: var(--accent);
-    --danger-bg: var(--danger-tint); --info: var(--text-secondary);
-  }`;
 
 // Phase 24 slice A — state chips: a screen's designed states (default /
 // empty / loading / …) cross-linking on cards and the detail toolbar.
