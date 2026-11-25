@@ -196,7 +196,7 @@ The response also carries the artboard `width`/`height`, `type`, `typeSource` (`
 
 ### `canvas_list`
 
-List canvases. Excludes archived canvases by default. A row carrying `openFeedback: n` has open point-and-tell comments waiting — read them with `get_feedback` before working on that canvas.
+List canvases. Excludes archived canvases by default. A row carrying `openFeedback: n` has open point-and-tell comments waiting — read them with `get_feedback` before working on that canvas. A listing also loads canvas files added on disk since the server started (a git pull, another session).
 
 | Param | Type | Description |
 |-------|------|-------------|
@@ -1384,7 +1384,7 @@ The standalone viewer:
 - **Fonts** (`/assets/fonts/<file>`) — the viewer's own faces (Inter, Space Grotesk), served from the font cache (`~/.framesmith/fonts/`)
 - **Live auto-refresh** — the canvas page polls every 2 seconds and the project page every 3, so the browser updates as your agent runs `batch_design`; the project page reloads on any edit, rename, genre, type or state change, and the canvas page refreshes its Quality and Design system panels, its Feedback list and its comment counts without a reload
 
-Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and the viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
+Unbound canvases persist to `~/.framesmith/canvases/` as JSON files, and canvases in a bound repo persist to that repo's `.framesmith/` (see [`canvas_bind`](#canvas_bind)). Both survive process restarts, and a running server loads files another session or a git pull adds to either store (on the next listing, or when a tool is given the id). The viewer shows both: the global store plus every repo registered in `~/.framesmith/registry.json`. Set `FRAMESMITH_VIEWER_URL` in the MCP server env to point at a viewer running on a non-default port.
 
 ## Workflow
 
