@@ -80,6 +80,15 @@ function editOnDisk(): { marker: string; width: number; color: string } {
   return { marker, width, color };
 }
 const onDisk = () => readFileSync(fileOf(id)!, 'utf-8');
+/** Rewrite a canvas file by hand and move its mtime on. */
+function patchOnDisk(canvasId: string, patch: (canvas: Record<string, any>) => void, raw?: string): void {
+  n++;
+  const file = fileOf(canvasId)!;
+  if (raw !== undefined) writeFileSync(file, raw);
+  else { const canvas = JSON.parse(readFileSync(file, 'utf-8')); patch(canvas); writeFileSync(file, JSON.stringify(canvas, null, 2)); }
+  const later = new Date(Date.now() + n * 2000);
+  utimesSync(file, later, later);
+}
 
 // ── reads ────────────────────────────────────────────────────────────────────
 let e = editOnDisk();
@@ -101,6 +110,9 @@ check('screenshot_responsive renders the edit', (await image('screenshot_respons
 const diffBefore = await text('canvas_diff', { canvasId1: id, canvasId2: other });
 editOnDisk();
 check('canvas_diff compares the edit', (await text('canvas_diff', { canvasId1: id, canvasId2: other })) !== diffBefore);
+const diffBefore2 = await text('canvas_diff', { canvasId1: id, canvasId2: other });
+patchOnDisk(other, (c) => { c.root.children = [{ id: 'other-card', type: 'frame', name: 'Other', width: 300, height: 300, fill: '#00AA55' }]; });
+check('canvas_diff compares an edit to the second canvas too', (await text('canvas_diff', { canvasId1: id, canvasId2: other })) !== diffBefore2);
 const exportBytes = async () => {
   const out = mkdtempSync(join(tmpdir(), 'framesmith-ext-export-'));
   await text('export', { canvasId: id, format: 'png', outputPath: out, scale: 1 });
@@ -109,6 +121,23 @@ const exportBytes = async () => {
 const exportBefore = await exportBytes();
 editOnDisk();
 check('export renders the edit', (await exportBytes()) !== exportBefore);
+
+// ── listings filter on what is on disk ───────────────────────────────────────
+const projectId = (JSON.parse(await text('canvas_list', {})) as Array<{ id: string; projectId: string }>).find((r) => r.id === id)!.projectId;
+patchOnDisk(id, (c) => { c.archived = true; c.archivedAt = new Date().toISOString(); });
+const evaluated = await text('project_evaluate', { projectId });
+check('project_evaluate leaves out a canvas archived on disk', !evaluated.includes(`"${id}"`), evaluated.slice(0, 200));
+patchOnDisk(id, (c) => { c.archived = false; delete c.archivedAt; });
+
+// ── an unreadable file (merge conflict) is out of reach, then comes back ─────
+const good = onDisk();
+const conflicted = fileOf(id)!; // fileOf can't find it while it doesn't parse
+patchOnDisk(id, () => {}, `<<<<<<< HEAD\n${good}\n=======\n${good}\n>>>>>>> theirs\n`);
+check('a conflicted canvas is not listed', !(await text('canvas_list', {})).includes(`"${id}"`));
+check('…and a read says it is not found, instead of serving the old copy', /not found/i.test(await text('read_nodes', { canvasId: id })));
+writeFileSync(conflicted, good);
+e = editOnDisk();
+check('once the file parses again the listing shows it, edit included', (await text('canvas_list', {})).includes(e.marker));
 
 // ── writes must build on the edit, never write the old copy back ────────────
 e = editOnDisk();

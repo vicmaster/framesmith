@@ -181,11 +181,19 @@ server.resource(
 /** A canvas as it is on disk now. In a bound repo (or the global store) its
  * file can change under the server, by a hand edit, a git pull or the viewer;
  * ensureFresh reloads it first, so a tool never reads, renders or writes back
- * the last copy it saw. Every tool reads canvases through this, never through
- * getCanvas (test/unit/test-fresh-reads-guard.ts holds it). */
+ * the last copy it saw. Every tool reads canvases through this and lists them
+ * through freshListing, never through getCanvas or listCanvases
+ * (test/unit/test-fresh-reads-guard.ts holds it). */
 function freshCanvas(id: string): Canvas | undefined {
   ensureFresh(id);
   return getCanvas(id);
+}
+
+/** listCanvases after refreshing every canvas, for the same reason: rows are
+ * filtered on archived, project and variants, which a pulled file can change. */
+function freshListing(): ReturnType<typeof listCanvases> {
+  ensureAllFresh();
+  return listCanvases();
 }
 
 // --- canvas_create ---
@@ -246,8 +254,7 @@ server.tool(
     includeArchived: z.boolean().optional().describe('Include archived canvases in the result (default false)'),
   },
   async ({ projectId, includeArchived }) => {
-    ensureAllFresh(); // list what is on disk now
-    let canvases = listCanvases();
+    let canvases = freshListing();
     if (projectId) canvases = canvases.filter((c) => c.projectId === projectId);
     if (!includeArchived) canvases = canvases.filter((c) => !c.archived);
     return {
@@ -2039,7 +2046,7 @@ server.tool(
       return { content: [{ type: 'text', text: JSON.stringify({ canvasId, openCount: openFeedbackCount(canvas), entries }, null, 2) }] };
     }
     const perCanvas = [];
-    for (const summary of listCanvases()) {
+    for (const summary of freshListing()) {
       if (summary.archived) continue;
       ensureFresh(summary.id);
       const canvas = freshCanvas(summary.id);
@@ -2125,7 +2132,7 @@ server.tool(
     const profile = surface.device ? deviceProfile(surface.device) : undefined;
     // Variants carry their own surface (copied at canvas_add_variant), so a
     // re-declared base leaves them as they were: name the ones that now differ.
-    const variantsOutOfSync = (listCanvases().find((r) => r.id === canvasId)?.variants ?? [])
+    const variantsOutOfSync = (freshListing().find((r) => r.id === canvasId)?.variants ?? [])
       .map((v) => ({ ...v, type: resolveSurface(freshCanvas(v.canvasId) ?? canvas).type }))
       .filter((v) => v.type !== surface.type);
     const steps: string[] = [];
@@ -2190,7 +2197,7 @@ REPEATED FINDINGS FOLD in this result: three or more warnings or infos sharing a
 
     // Phase 24 slice C — the coverage check needs to know which state
     // variants exist for this canvas (sibling lookup, store-level).
-    const designedStates = listCanvases().find((r) => r.id === canvasId)?.variants?.map((v) => v.state) ?? [];
+    const designedStates = freshListing().find((r) => r.id === canvasId)?.variants?.map((v) => v.state) ?? [];
     // Phase 31 S11 — detailed mode measures layout in the design system's
     // faces, as stress, screenshot and snapshot_layout render them. Fast mode
     // renders nothing, so it stays offline.
@@ -2260,7 +2267,7 @@ server.tool(
     const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
-    const designedStates = listCanvases().find((r) => r.id === canvasId)?.variants?.map((v) => v.state) ?? [];
+    const designedStates = freshListing().find((r) => r.id === canvasId)?.variants?.map((v) => v.state) ?? [];
     const result = await evaluateCanvas(canvas, { mode: 'fast', categories, genre, designedStates });
     const fixes = result.issues
       .filter((issue) => issue.fix)
@@ -2407,7 +2414,7 @@ mode: "llm" adds the FLOW CRITIQUE: up to 8 screens are rendered and judged TOGE
     if (!getProject(projectId)) {
       return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found. Use project_list to see projects.` }], isError: true };
     }
-    const rows = listCanvases().filter((r) => r.projectId === projectId && !r.archived && !r.variant && (!canvasIds || canvasIds.includes(r.id)));
+    const rows = freshListing().filter((r) => r.projectId === projectId && !r.archived && !r.variant && (!canvasIds || canvasIds.includes(r.id)));
     if (rows.length === 0) {
       return { content: [{ type: 'text', text: 'Error: no matching canvases in this project (variants are excluded — pass base canvas ids).' }], isError: true };
     }
@@ -2505,8 +2512,7 @@ server.tool(
     const url = getViewerUrl();
     if (!url) return { content: [{ type: 'text', text: 'Viewer is not running' }], isError: true };
 
-    ensureAllFresh(); // list what is on disk now
-    const canvases = listCanvases();
+    const canvases = freshListing();
     return {
       content: [{
         type: 'text',
@@ -2526,7 +2532,7 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. The files stay editable outside the server: every tool reloads a canvas whose file changed on disk (a git pull, a branch switch, a hand edit) before reading or writing it. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. The files stay editable outside the server: every tool reloads a canvas whose file changed on disk (a git pull, a branch switch, a hand edit) before reading or writing it. A canvas file added on disk after the server started appears only after a restart. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
   {
     workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
@@ -2565,8 +2571,7 @@ server.tool(
     const result = initWorkspace({ dir, workspaceName, projects });
     if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
     // Slice C — surface waiting point-and-tell comments at session start.
-    ensureAllFresh(); // list what is on disk now
-    const openFeedbackTotal = listCanvases().reduce((sum, c) => sum + (c.openFeedback ?? 0), 0);
+    const openFeedbackTotal = freshListing().reduce((sum, c) => sum + (c.openFeedback ?? 0), 0);
     return {
       content: [{
         type: 'text',

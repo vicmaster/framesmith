@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
-import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile } from './repo-store.js';
+import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile, knownCanvasIds, canvasFileExists, forgetCanvasFile } from './repo-store.js';
 import { canvasVersionHash } from './version.js';
 import { migrateProvenance } from './genre.js';
 import { deviceProfile, windowProfile, DEFAULT_DEVICE, DEFAULT_WINDOW, type SurfaceType } from './surfaces.js';
@@ -240,8 +240,13 @@ export function ensureFresh(id: string): void {
     if (fresh) {
       store.set(id, fresh);
       process.stderr.write(`canvas ${id} reloaded from disk (external change detected)\n`);
+    } else if (canvasFileExists(repoDir(), id)) {
+      // Mid-write or a merge conflict: out of reach (no stale copy to read or
+      // write back) until the file parses, retried on every call.
+      if (store.delete(id)) process.stderr.write(`canvas ${id} unavailable: its file can't be read (mid-write or a merge conflict)\n`);
     } else {
       store.delete(id);
+      forgetCanvasFile(id);
       process.stderr.write(`canvas ${id} removed (deleted on disk externally)\n`);
     }
     return;
@@ -298,10 +303,13 @@ export interface CanvasSummary {
   variants?: { state: string; canvasId: string }[];
 }
 
-/** ensureFresh for every canvas the server holds, so a listing shows what is
- * on disk now (a renamed, archived or deleted file), not the last copy read. */
+/** ensureFresh for every canvas the server holds, and in a repo every canvas
+ * file it knows (one unreadable at the last read is retried), so a listing
+ * shows what is on disk now: a renamed, archived or deleted file, not the last
+ * copy read. A file added on disk after startup is not discovered. */
 export function ensureAllFresh(): void {
-  for (const id of [...store.keys()]) ensureFresh(id);
+  const ids = new Set([...store.keys(), ...(isRepoBound() ? knownCanvasIds() : [])]);
+  for (const id of ids) ensureFresh(id);
 }
 
 export function listCanvases(): CanvasSummary[] {
