@@ -2488,7 +2488,7 @@ server.tool(
 // --- viewer_url ---
 server.tool(
   'viewer_url',
-  'Get the URL of the web-based canvas viewer. The viewer runs automatically and shows a gallery of all canvases with live auto-refresh. Share this URL with the user so they can open it in their browser.',
+  'Get the URL of the web-based canvas viewer. The viewer runs automatically and shows a page per project (one card per canvas, with search and type tabs, refreshing live) and an Archive page. Share this URL with the user so they can open it in their browser.',
   {},
   async () => {
     const url = getViewerUrl();

@@ -397,7 +397,7 @@ ${FAVICON_HTML}
   .safe-band span { font-size: 10px; font-weight: 600; line-height: 1; color: var(--accent); background: var(--bg-surface); border-radius: 4px; padding: 3px 6px; font-variant-numeric: tabular-nums; }
   .compare-grid { display: none; gap: 24px; padding: 24px; align-items: flex-start; --scale: 0.35; }
   .compare-cell { display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
-  .bp-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+  .bp-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
   .iframe-wrap { background: transparent; overflow: hidden; border-radius: 6px; border: 1px solid var(--border); width: calc(var(--bp-w) * var(--scale) * 1px); height: calc(var(--bp-h) * var(--scale) * 1px); }
   .iframe-wrap iframe { border: 0; background: transparent; width: calc(var(--bp-w) * 1px); height: calc(var(--bp-h) * 1px); transform: scale(var(--scale)); transform-origin: top left; }
   .json-panel { position: fixed; top: 48px; right: 0; bottom: 0; width: 480px; max-width: 100%; z-index: 300; display: flex; flex-direction: column; background: var(--bg-surface); border-left: 1px solid var(--border); box-shadow: var(--elevation-overlay); }
@@ -405,7 +405,7 @@ ${FAVICON_HTML}
   .json-head { display: flex; align-items: center; justify-content: space-between; padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md); border-bottom: 1px solid var(--border); font-weight: 600; }
   .json-panel pre { flex: 1; overflow: auto; padding: var(--space-md); font-size: var(--font-label); color: var(--text-secondary); font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
   /* Phase 33 slice D — the inspector. */
-  .inspector { width: 380px; flex-shrink: 0; background: var(--bg-surface); border-left: 1px solid var(--border); overflow-y: auto; }
+  .inspector { width: 30%; min-width: 340px; flex-shrink: 0; background: var(--bg-surface); border-left: 1px solid var(--border); overflow-y: auto; }
   .insp-tabs { position: sticky; top: 0; z-index: 2; background: var(--bg-surface); padding: var(--space-xs) var(--space-md) 0; }
   .insp-panel[hidden] { display: none; }
   .insp-section { padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-xs); }
@@ -420,7 +420,7 @@ ${FAVICON_HTML}
   .score-reason { font-size: var(--font-label); color: var(--text-secondary); }
   .score-built, .score-critique { font-size: var(--font-caption); color: var(--text-secondary); }
   .categories { gap: 0; }
-  .category { display: flex; align-items: center; gap: var(--space-sm); height: 28px; }
+  .category { display: flex; align-items: center; gap: var(--space-sm); height: 32px; }
   .category-name { width: 96px; flex-shrink: 0; font-size: var(--font-label); color: var(--text-secondary); }
   .category--below .category-name { color: var(--text-primary); }
   .meter { flex: 1; height: 4px; border-radius: var(--radius-sm); background: var(--neutral-tint); overflow: hidden; }
@@ -496,8 +496,8 @@ ${FAVICON_HTML}
   .comment-pop textarea:focus { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
   .comment-pop-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
   #comment-cancel { color: var(--accent); }
-  @media (max-width: 900px) { .inspector { width: 320px; } }
-  @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
+  @media (max-width: 900px) { .inspector { width: 320px; min-width: 0; } }
+  @media (max-width: 720px) { .detail-main { flex-direction: column; overflow-y: auto; } .viewport { flex: none; min-height: 60vh; } .inspector { width: 100%; min-width: 0; overflow-y: visible; border-left: none; border-top: 1px solid var(--border); } }
   @media (max-width: 1100px) { .compare-grid { --scale: 0.28; gap: 18px; } }
   @media (max-width: 900px) { .compare-grid { --scale: 0.22; gap: 16px; } }
   @media (max-width: 1399px) { .toolbar { grid-template-columns: minmax(0, 1fr) auto auto; } }

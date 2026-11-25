@@ -76,11 +76,11 @@ check('project page: the fit script ships', project.includes("thumb.style.setPro
 check('project page: no hardcoded 1440×900 thumb size left', !project.includes('width: 1440px; height: 900px; border: none'));
 check('project page: cards align to their top', /\.grid \{[^}]*align-items: start/.test(project));
 
-// The archive page builds its cards through the same helper.
+// The archive panel builds its thumbnail through the same helper.
 sg.archiveCanvas(phone.id);
-const archive = viewer.renderArchivePage(3001);
-const archivedCard = cardFor(archive, phone.id);
-check('archive card: 390×844 iframe at 390 / 844', archivedCard.includes('style="width: 390px; height: 844px;"') && archivedCard.includes('aspect-ratio: 390 / 844;'));
+const archive = await viewer.renderArchivePage(3001, phone.id);
+const archivedPanel = archive.slice(archive.indexOf('<aside class="panel"'));
+check('archive panel: 390×844 iframe at 390 / 844', archivedPanel.includes('style="width: 390px; height: 844px;"') && archivedPanel.includes('aspect-ratio: 390 / 844;'));
 check('archive page: the fit script ships', archive.includes("thumb.style.setProperty('--thumb-scale'"));
 sg.unarchiveCanvas(phone.id);
 

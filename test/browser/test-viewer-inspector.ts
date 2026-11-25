@@ -93,7 +93,11 @@ const targetId = await target!.evaluate((el) => {
   const r = el.getBoundingClientRect();
   return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)!.closest('[data-node-id]')!.getAttribute('data-node-id');
 });
-await target!.click();
+// Click where a user would: the preview is scaled to fit, and Puppeteer's own
+// element click ignores the iframe's transform, so map the point through it.
+const box = await target!.evaluate((el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+const frameBox = await page.$eval('#frame', (f) => { const r = f.getBoundingClientRect(); return { left: r.left, top: r.top, scale: r.width / (f as HTMLIFrameElement).offsetWidth }; });
+await page.mouse.click(frameBox.left + box.x * frameBox.scale, frameBox.top + box.y * frameBox.scale);
 await pause(200);
 const chips = await page.$$eval('#fb-chips .fb-chip', (cs) => cs.map((c) => `${c.textContent}${c.getAttribute('aria-pressed') === 'true' ? '*' : ''}`));
 check('clicking an element pins the comment and lists its ancestors', chips.length >= 2 && chips[0].endsWith('*') && chips[chips.length - 1] === 'whole page', JSON.stringify(chips));

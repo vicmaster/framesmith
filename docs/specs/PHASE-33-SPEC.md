@@ -160,6 +160,13 @@ Its design system is the project's: seed `#B45309`, personality `technical`, 14p
 
 **Slice E — archive, docs, acceptance.** `pages/archive.ts` (FR-E1, FR-E2), docs and screenshots (FR-E3), and the side-by-side acceptance (FR-E4). Tests rewritten: `test-archive-view.ts` (archive page half). `test/manual/test-viewer.ts` and `test-viewer-navbar.ts` follow the new markup. New: `test/browser/test-viewer-archive.ts`.
 
+**Slice E — as built.**
+- **E1: project rows fold.** Each project in the archive tree is a `<details open>` whose summary carries the chevron and folder, so it collapses with no script; canvas rows are links to `?canvas=<id>`. The panel's name links to the canvas's detail page.
+- **E2: "next" is computed on the server.** The page passes the id after the selected one in tree order (else the one before) to its script, and Restore and Delete go to `/archive?canvas=<next>`. A `?canvas=` that is not an archived canvas falls back to the most recently archived. A canvas with no score shows "No score yet"; a canvas whose project is gone groups under "Unknown project" and has no Restore button, since restoring it would show it on no page; a note says to move it with `canvas_move` first. Below 1024px the panel narrows to 300px so the tree keeps room beside the sidebar.
+- **E3: the old aliases are gone.** `LEGACY_ALIASES` is deleted; the archive page was its last user, plus one compare label on the detail page.
+- **E4: two inspector fixes found by FR-E4.** The inspector is 30% wide, as the design's is (432px at 1440), with a 340px floor; it was a fixed 380px. Category rows are 32px, the design's property-row height; they were 28px.
+- **E5: one script makes every image.** `scripts/build-viewer-shots.ts` seeds the fixture store, warms the viewer's fonts into it, and writes the three README screenshots; with `--acceptance <dir>` it also writes FR-E4's fourteen side-by-sides, committed in `docs/viewer-redesign/acceptance/` so the PR can show them. The feedback screenshot shows a comment selected in the Feedback tab with its node outlined, not the open popover, because the popover sits over the list.
+
 Tests that read data, not markup, are untouched: `test-viewer-perf.ts`, `test-dual-theme.ts`, `test-viewer-resolves-workspace-tokens.ts`, `test-skeleton.ts`, `test-viewer-repo-aggregation.ts`, `test-viewer-repo-lifecycle.ts`, `test-viewer-watch.ts`. Each slice PR states that `test-viewer-perf.ts` still holds its 4x-store bound, since the gallery now renders more per card.
 
 ---
