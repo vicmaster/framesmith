@@ -298,6 +298,12 @@ export interface CanvasSummary {
   variants?: { state: string; canvasId: string }[];
 }
 
+/** ensureFresh for every canvas the server holds, so a listing shows what is
+ * on disk now (a renamed, archived or deleted file), not the last copy read. */
+export function ensureAllFresh(): void {
+  for (const id of [...store.keys()]) ensureFresh(id);
+}
+
 export function listCanvases(): CanvasSummary[] {
   // Roll designed states up onto their base rows so one listing answers
   // "which states exist for this screen" (FR-A2).

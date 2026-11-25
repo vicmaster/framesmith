@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, setCanvasType, addVariant } from './scene-graph.js';
+import { createCanvas, getCanvas, listCanvases, findNode, touchCanvas, loadPersistedCanvases, archiveCanvas, unarchiveCanvas, moveCanvas, deleteCanvas, countCanvasesInProject, ensureFresh, ensureAllFresh, collectMatchingNodes, replaceMatchingProperties, findNodesDetailed, setCanvasGenre, setCanvasType, addVariant } from './scene-graph.js';
 import { deviceProfile, windowProfile, resolveSurface, surfaceFor, usableSafeArea, type SurfaceType } from './surfaces.js';
 import { canvasVersionHash, checkVersionHash } from './version.js';
 import { loadPersistedWorkspaces, ensureDefaultWorkspaceAndProject, createWorkspace, listWorkspaces, renameWorkspace, deleteWorkspace, createProject, getProject, getWorkspace, listProjects, renameProject, deleteProject, setWorkspaceDesignSystem, getWorkspaceDesignSystem, setProjectDesignSystem, getProjectDesignSystem, getCanvasTokens, getInheritedTokens, loadRepoWorkspace } from './workspaces.js';
@@ -178,6 +178,16 @@ server.resource(
   })
 );
 
+/** A canvas as it is on disk now. In a bound repo (or the global store) its
+ * file can change under the server, by a hand edit, a git pull or the viewer;
+ * ensureFresh reloads it first, so a tool never reads, renders or writes back
+ * the last copy it saw. Every tool reads canvases through this, never through
+ * getCanvas (test/unit/test-fresh-reads-guard.ts holds it). */
+function freshCanvas(id: string): Canvas | undefined {
+  ensureFresh(id);
+  return getCanvas(id);
+}
+
 // --- canvas_create ---
 server.tool(
   'canvas_create',
@@ -236,6 +246,7 @@ server.tool(
     includeArchived: z.boolean().optional().describe('Include archived canvases in the result (default false)'),
   },
   async ({ projectId, includeArchived }) => {
+    ensureAllFresh(); // list what is on disk now
     let canvases = listCanvases();
     if (projectId) canvases = canvases.filter((c) => c.projectId === projectId);
     if (!includeArchived) canvases = canvases.filter((c) => !c.archived);
@@ -289,7 +300,7 @@ server.tool(
     projectId: z.string().describe('Target project. Must already exist (use project_list / project_create).'),
   },
   async ({ canvasId, projectId }) => {
-    if (!getCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    if (!freshCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
     if (!getProject(projectId)) return { content: [{ type: 'text', text: `Error: Project "${projectId}" not found` }], isError: true };
     const moved = moveCanvas(canvasId, projectId)!;
     return { content: [{ type: 'text', text: JSON.stringify({ canvasId, projectId: moved.projectId }, null, 2) }] };
@@ -326,7 +337,7 @@ server.tool(
   'Permanently delete a canvas — removes both the in-memory entry and the on-disk JSON file. Irreversible; use canvas_archive for soft deletion.',
   { canvasId: z.string().describe('Canvas to permanently delete') },
   async ({ canvasId }) => {
-    if (!getCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
+    if (!freshCanvas(canvasId)) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId}" not found` }], isError: true };
     deleteCanvas(canvasId);
     return { content: [{ type: 'text', text: JSON.stringify({ canvasId, deleted: true }, null, 2) }] };
   }
@@ -629,7 +640,7 @@ Read the framesmith://guidelines resource for common patterns (pricing tiers, tw
   },
   async ({ canvasId, operations }) => {
     ensureFresh(canvasId); // reload if the file changed on disk (git pull / hand-edit) before we mutate
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const results = parseAndExecute(canvas.root, operations, canvas);
@@ -678,7 +689,7 @@ Use it before targeted edits ("which node holds $1.52M?" → find_nodes({ text: 
       return { content: [{ type: 'text', text: 'Error: provide at least one of match / text / name / type — an unfiltered query is just read_nodes.' }], isError: true };
     }
     ensureFresh(canvasId); // viewer/hand edits may have landed since the last read
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     try {
       const found = findNodesDetailed(canvas.root, { match, text, name, scopeId: scope, type: type as SceneNode['type'] | undefined });
@@ -714,7 +725,7 @@ ALWAYS preview with dryRun: true first when the match value could be common (wid
       return { content: [{ type: 'text', text: 'Error: `set` must be non-empty (nothing to write). Use dryRun: true to only preview matches.' }], isError: true };
     }
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
@@ -758,7 +769,7 @@ Use this the moment the same chunk exists (or is about to exist) twice — app s
   },
   async ({ canvasId, nodeId, name }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     try {
       const result = promoteToComponent(canvas, nodeId, name);
@@ -791,9 +802,9 @@ The shared-app-shell workflow: build the shell once, create_component it, then c
   async ({ fromCanvasId, nodeIds, toCanvasId, parentId, index }) => {
     ensureFresh(fromCanvasId);
     if (toCanvasId !== fromCanvasId) ensureFresh(toCanvasId);
-    const source = getCanvas(fromCanvasId);
+    const source = freshCanvas(fromCanvasId);
     if (!source) return { content: [{ type: 'text', text: `Error: Source canvas "${fromCanvasId}" not found` }], isError: true };
-    const target = getCanvas(toCanvasId);
+    const target = freshCanvas(toCanvasId);
     if (!target) return { content: [{ type: 'text', text: `Error: Target canvas "${toCanvasId}" not found` }], isError: true };
     try {
       const result = copyNodesAcross(source, target, nodeIds, parentId, index);
@@ -855,7 +866,7 @@ server.tool(
     theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors/dark.elevation overrides); default light. No-op when no dark layer exists.'),
   },
   async ({ canvasId, nodeId, width, height, scale, theme, fullPage }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas, theme);
@@ -887,7 +898,7 @@ server.tool(
     maxDepth: z.number().optional().describe('Max depth to traverse children (default 5)'),
   },
   async ({ canvasId, nodeIds, maxDepth = 5 }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     if (!nodeIds?.length) {
@@ -915,7 +926,7 @@ server.tool(
     maxDepth: z.number().optional().describe('Max depth to traverse (default 10)'),
   },
   async ({ canvasId, nodeId, maxDepth }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     // Fonts go through the backstop here too — a custom face changes glyph
@@ -936,7 +947,7 @@ server.tool(
   'Get design variables (tokens) for a canvas: its own layer, without the old scaffold seeds that count as unset (an exact #152A47 accent-tint and the other retired tint and danger seeds).',
   { canvasId: z.string().describe('Canvas ID') },
   async ({ canvasId }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     return { content: [{ type: 'text', text: JSON.stringify(withoutRetiredSeeds(getVariables(canvas)), null, 2) }] };
   }
@@ -985,7 +996,7 @@ server.tool(
   },
   async ({ canvasId, variables }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = setVariables(canvas, variables);
     touchCanvas(canvasId);
@@ -1029,7 +1040,7 @@ Merges into the target layer like set_variables (existing token names are overwr
       let wroteTo: Record<string, string>;
       if (canvasId) {
         ensureFresh(canvasId);
-        const canvas = getCanvas(canvasId);
+        const canvas = freshCanvas(canvasId);
         if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
         existing = canvas.variables;
         setVariables(canvas, { typography, spacing });
@@ -1097,7 +1108,7 @@ Phase 31 adds two CONTROL colors, each at 3:1 or more (WCAG 1.4.11) in both them
       let wroteTo: Record<string, string>;
       if (canvasId) {
         ensureFresh(canvasId);
-        const canvas = getCanvas(canvasId);
+        const canvas = freshCanvas(canvasId);
         if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
         overwrote = Object.keys(colors).filter((k) => withoutRetiredSeeds(canvas.variables).colors?.[k] !== undefined);
         const merge = applyPresetTokens(canvas, { colors }, getInheritedTokens(canvas), { preserveInherited });
@@ -1198,7 +1209,7 @@ The typography layer ships ROLE tokens the structures speak — $display / $head
       // Phase 30 slice B — a mobile canvas gets the device body size as its
       // pivot (canvas scope only: a project/workspace has no type).
       if (canvasId) ensureFresh(canvasId);
-      const target = canvasId ? getCanvas(canvasId) : undefined;
+      const target = canvasId ? freshCanvas(canvasId) : undefined;
       const declared = target ? resolveSurface(target) : undefined;
       const typeOpts = { baseSize, ratio, surface: declared?.type, device: declared?.device ?? undefined };
       const system = generateDesignSystem(seed, personality as PersonalityName, typeOpts);
@@ -1209,7 +1220,7 @@ The typography layer ships ROLE tokens the structures speak — $display / $head
       let wroteTo: Record<string, string>;
       if (canvasId) {
         ensureFresh(canvasId);
-        const canvas = getCanvas(canvasId);
+        const canvas = freshCanvas(canvasId);
         if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
         const merge = applyPresetTokens(canvas, { colors: vars.colors, spacing: vars.spacing, radius: vars.radius, typography: vars.typography }, getInheritedTokens(canvas), { preserveInherited });
         preserved = merge.preserved;
@@ -1266,7 +1277,7 @@ The typography layer ships ROLE tokens the structures speak — $display / $head
       // Report what the canvas ACTUALLY resolves, not what was generated — the
       // two diverge exactly when preservation fired, which is when an agent
       // most needs the truth.
-      const resolvedRoles = (canvasId ? getCanvasTokens(getCanvas(canvasId)!).typography : vars.typography) ?? {};
+      const resolvedRoles = (canvasId ? getCanvasTokens(freshCanvas(canvasId)!).typography : vars.typography) ?? {};
 
       return { content: [
         { type: 'text', text: JSON.stringify({
@@ -1302,7 +1313,7 @@ server.tool(
   'Get the custom font face declarations attached to a canvas.',
   { canvasId: z.string().describe('Canvas ID') },
   async ({ canvasId }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     return { content: [{ type: 'text', text: JSON.stringify(canvas.fonts ?? [], null, 2) }] };
   }
@@ -1328,7 +1339,7 @@ Fonts named in typography tokens load automatically at render time — you only 
   },
   async ({ canvasId, fonts, families }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     if (!fonts && !families?.length) return { content: [{ type: 'text', text: 'Error: Pass `fonts` (declarations) and/or `families` (names to resolve).' }], isError: true };
     const unsafeFamily = /["';{}\n\r<>]/;
@@ -1394,7 +1405,7 @@ server.tool(
     fullPage: z.boolean().optional().describe('Capture the whole design rather than one viewport — the same option screenshot takes. A canvas taller than its artboard is otherwise cut off at the artboard height. Default false, so existing exports are unchanged. Ignored for PDF (which paginates) and when nodeIds are given.'),
   },
   async ({ canvasId, format, outputPath, nodeIds, width, height, scale, theme, fullPage }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas, theme);
@@ -1435,7 +1446,7 @@ server.tool(
     theme: z.enum(['light', 'dark']).optional().describe('Render theme — "dark" applies the design system\'s dark token layer (dark.colors/dark.elevation overrides); default light. No-op when no dark layer exists.'),
   },
   async ({ canvasId, breakpoints, scale, theme }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const { resolved, renderOpts, fontWarnings } = await prepareRender(canvas, theme);
@@ -1480,9 +1491,9 @@ server.tool(
     scale: z.number().optional().describe('Device scale factor (default 1 for diff accuracy)'),
   },
   async ({ canvasId1, canvasId2, width, height, scale }) => {
-    const canvas1 = getCanvas(canvasId1);
+    const canvas1 = freshCanvas(canvasId1);
     if (!canvas1) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId1}" not found` }], isError: true };
-    const canvas2 = getCanvas(canvasId2);
+    const canvas2 = freshCanvas(canvasId2);
     if (!canvas2) return { content: [{ type: 'text', text: `Error: Canvas "${canvasId2}" not found` }], isError: true };
 
     const w = width ?? (typeof canvas1.root.width === 'number' ? canvas1.root.width : 1440);
@@ -1547,7 +1558,7 @@ Distinct from presets: structures define layout skeleton, presets define color/t
     let listType: SurfaceType = type ?? 'web';
     if (canvasId !== undefined) {
       ensureFresh(canvasId);
-      const canvas = getCanvas(canvasId);
+      const canvas = freshCanvas(canvasId);
       if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
       listType = resolveSurface(canvas).type;
     }
@@ -1579,7 +1590,7 @@ Scaffolds reference $space-*/$radius-*/$elevation.*/type-role tokens ($display/$
   },
   async ({ canvasId, structure, replace, targetId, realisation }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
@@ -1624,7 +1635,7 @@ server.tool(
   },
   async ({ canvasId, preset }) => {
     ensureFresh(canvasId); // stamp on top of what's on disk — a stale copy would drop a pulled genre
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const p = getPreset(preset);
@@ -1839,7 +1850,7 @@ The design-of-record becomes a living contract: run this after deploys, or wire 
     }).optional().describe('Credentials for gated pages — throwaway context, never persisted'),
   },
   async ({ canvasId, url, viewport, selector, waitFor, auth }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
@@ -1899,7 +1910,7 @@ Run this when PICKING UP a canvas that describes a shipped view — designing on
   },
   async ({ canvasId, url, viewport, selector, waitFor, auth }) => {
     ensureFresh(canvasId); // compare what's on disk, not a stale in-memory copy
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
@@ -1940,7 +1951,7 @@ Legacy hashes: older approvals carry sha256:<16 hex>, which covered only the can
   },
   async ({ canvasId, expectedHash }) => {
     ensureFresh(canvasId); // hash what's on disk, not a stale in-memory copy
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const versionHash = canvasVersionHash(canvas);
     const check = expectedHash !== undefined ? checkVersionHash(canvas, expectedHash) : undefined;
@@ -2022,7 +2033,7 @@ server.tool(
   async ({ canvasId, includeResolved }) => {
     if (canvasId) {
       ensureFresh(canvasId); // the comment may have just arrived from the viewer
-      const canvas = getCanvas(canvasId);
+      const canvas = freshCanvas(canvasId);
       if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
       const entries = listFeedback(canvas, { includeResolved });
       return { content: [{ type: 'text', text: JSON.stringify({ canvasId, openCount: openFeedbackCount(canvas), entries }, null, 2) }] };
@@ -2031,7 +2042,7 @@ server.tool(
     for (const summary of listCanvases()) {
       if (summary.archived) continue;
       ensureFresh(summary.id);
-      const canvas = getCanvas(summary.id);
+      const canvas = freshCanvas(summary.id);
       if (!canvas) continue;
       const entries = listFeedback(canvas, { includeResolved });
       if (entries.length > 0) perCanvas.push({ canvasId: canvas.id, name: canvas.name, openCount: openFeedbackCount(canvas), entries });
@@ -2051,7 +2062,7 @@ server.tool(
   },
   async ({ canvasId, feedbackIds, note }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
     const result = resolveFeedback(canvas, feedbackIds, 'agent', note);
     if (result.resolved.length > 0) touchCanvas(canvasId);
@@ -2074,7 +2085,7 @@ Stamping a genre does NOT move the canvas's versionHash (the hash covers design 
   async ({ canvasId, genre }) => {
     const result = setCanvasGenre(canvasId, genre);
     if (!result) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
-    const stamp = describeGenreStamp(genre, getCanvas(canvasId)?.metadata?.provenance?.preset);
+    const stamp = describeGenreStamp(genre, freshCanvas(canvasId)?.metadata?.provenance?.preset);
     const unknown = genre !== null && stamp.relaxes.length === 0;
     return {
       content: [{ type: 'text', text: JSON.stringify({
@@ -2108,14 +2119,14 @@ server.tool(
     if (declared && 'error' in declared) return { content: [{ type: 'text', text: `Error: ${declared.error}` }], isError: true };
     const result = setCanvasType(canvasId, declared ? declared.surface : null);
     if (!result) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
-    const canvas = getCanvas(canvasId)!;
+    const canvas = freshCanvas(canvasId)!;
     const surface = resolveSurface(canvas);
     const artboard = { width: canvas.root.width, height: canvas.root.height };
     const profile = surface.device ? deviceProfile(surface.device) : undefined;
     // Variants carry their own surface (copied at canvas_add_variant), so a
     // re-declared base leaves them as they were: name the ones that now differ.
     const variantsOutOfSync = (listCanvases().find((r) => r.id === canvasId)?.variants ?? [])
-      .map((v) => ({ ...v, type: resolveSurface(getCanvas(v.canvasId) ?? canvas).type }))
+      .map((v) => ({ ...v, type: resolveSurface(freshCanvas(v.canvasId) ?? canvas).type }))
       .filter((v) => v.type !== surface.type);
     const steps: string[] = [];
     const insets = usableSafeArea(canvas.root.safeArea);
@@ -2174,7 +2185,7 @@ REPEATED FINDINGS FOLD in this result: three or more warnings or infos sharing a
   },
   async ({ canvasId, mode, categories, genre, floor }) => {
     ensureFresh(canvasId); // a point-and-tell comment may have just arrived from the viewer
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     // Phase 24 slice C — the coverage check needs to know which state
@@ -2246,7 +2257,7 @@ server.tool(
   },
   async ({ canvasId, categories, genre, apply }) => {
     ensureFresh(canvasId); // pick up external edits first — the proposals and the genre/surface reports must describe what's on disk
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const designedStates = listCanvases().find((r) => r.id === canvasId)?.variants?.map((v) => v.state) ?? [];
@@ -2314,7 +2325,7 @@ Finding kinds: clip (content cut off — INFO when a designed text-overflow elli
   },
   async ({ canvasId, perturbations, screenshots }) => {
     ensureFresh(canvasId);
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     try {
@@ -2403,7 +2414,7 @@ mode: "llm" adds the FLOW CRITIQUE: up to 8 screens are rendered and judged TOGE
     const canvases: Canvas[] = [];
     for (const r of rows) {
       ensureFresh(r.id);
-      const c = getCanvas(r.id);
+      const c = freshCanvas(r.id);
       if (c) canvases.push(c);
     }
     const statesByCanvas = new Map(rows.map((r) => [r.id, r.variants?.map((v) => v.state) ?? []]));
@@ -2461,7 +2472,7 @@ server.tool(
     provider: z.enum(['anthropic', 'openai']).optional().describe('Force an LLM provider; default auto-detect from env.'),
   },
   async ({ canvasId, maxIterations, floor, provider }) => {
-    const canvas = getCanvas(canvasId);
+    const canvas = freshCanvas(canvasId);
     if (!canvas) return { content: [{ type: 'text', text: 'Error: Canvas not found' }], isError: true };
 
     const render = async () => {
@@ -2494,6 +2505,7 @@ server.tool(
     const url = getViewerUrl();
     if (!url) return { content: [{ type: 'text', text: 'Viewer is not running' }], isError: true };
 
+    ensureAllFresh(); // list what is on disk now
     const canvases = listCanvases();
     return {
       content: [{
@@ -2514,7 +2526,7 @@ server.tool(
 // --- canvas_bind (Phase 10) ---
 server.tool(
   'canvas_bind',
-  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
+  "Bind a workspace to the current project directory so its canvases live in the repo as open JSON — a `.framesmith/` directory checked in alongside the code, instead of the global ~/.framesmith store. Creates `.framesmith/workspace.json` (binding + design system) and one subdirectory per project holding one slug-named file per canvas, migrates the workspace's projects + canvases in, and makes the repo the source of truth for the rest of the session. Heads up: binding RE-KEYS the workspace and every project ID to repo-* form, so workspace/project IDs captured before the bind stop resolving — the result's idMap ({ workspace: { old: new }, projects: { old: new } }) gives the new ones, so retarget from it instead of re-listing. Canvas IDs survive the bind unchanged. (The `init` tool binds too and returns the full fresh project list.) Run once per repo; afterwards the server auto-detects `.framesmith/` on startup. The files stay editable outside the server: every tool reloads a canvas whose file changed on disk (a git pull, a branch switch, a hand edit) before reading or writing it. Commit the `.framesmith/` directory so designs travel with the code and diff in review.",
   {
     workspaceId: z.string().optional().describe('Workspace whose projects + canvases migrate into the repo. Defaults to the built-in Personal workspace. Use workspace_list to see available workspaces.'),
     dir: z.string().optional().describe('Directory to bind. Defaults to the nearest git repo root above the server working directory.'),
@@ -2553,6 +2565,7 @@ server.tool(
     const result = initWorkspace({ dir, workspaceName, projects });
     if (!result.ok) return { content: [{ type: 'text', text: `Error: ${result.error}` }], isError: true };
     // Slice C — surface waiting point-and-tell comments at session start.
+    ensureAllFresh(); // list what is on disk now
     const openFeedbackTotal = listCanvases().reduce((sum, c) => sum + (c.openFeedback ?? 0), 0);
     return {
       content: [{
