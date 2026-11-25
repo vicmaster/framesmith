@@ -17,6 +17,7 @@ import { renderArchivePage } from './pages/archive.js';
 import { renderDetailPage, renderInspectorParts } from './pages/detail.js';
 import { feedbackKey } from './feedback-key.js';
 import { VIEWER_FONT_FAMILIES } from './tokens.js';
+import { refusalReason } from './origin.js';
 
 let runningPort: number | null = null;
 let externalViewerUrl: string | null = null;
@@ -93,8 +94,9 @@ export async function startViewer(port: number): Promise<number> {
     const url = new URL(req.url ?? '/', `http://localhost:${runningPort ?? port}`);
     const path = url.pathname;
 
-    // CORS headers for API routes
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // No CORS header: only the viewer's own pages read and write it.
+    const refused = refusalReason(req);
+    if (refused) { res.writeHead(403, { 'Content-Type': 'text/plain' }); res.end(`Forbidden: ${refused}`); return; }
 
     try {
       // Phase 33 — the design system's fonts, from the font cache by file name.
