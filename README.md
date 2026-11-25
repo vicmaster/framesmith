@@ -1371,6 +1371,7 @@ The standalone viewer:
 - **Shared across projects** — multiple MCP sessions (from different projects) all use the same viewer
 - **Auto-detects new canvases** — watches `~/.framesmith/canvases/` and every registered repo's `.framesmith/` for changes and picks them up immediately
 - **Auto-detected by MCP** — when the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
+- **Yours only** — it listens on 127.0.0.1 and sends no CORS header, so other sites open in your browser can't read your canvases. Archiving, deleting and commenting are accepted only from the viewer's own pages (or from a script with no `Origin`, such as `curl`), and a request whose `Host` is not `127.0.0.1`, `localhost` or `[::1]` is refused, which blocks DNS rebinding
 
 ### Routes & API
 
