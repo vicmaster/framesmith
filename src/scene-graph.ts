@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, readdirSync, unlinkSync, exists
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { DEFAULT_PROJECT_ID, type Canvas, type SceneNode } from './types.js';
-import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile, knownCanvasIds, canvasFileExists, forgetCanvasFile } from './repo-store.js';
+import { isRepoBound, repoDir, writeCanvasToDir, removeCanvasFromDir, loadCanvasesFromDir, externallyModified, readCanvasFile, knownCanvasIds, canvasFileExists, forgetCanvasFile, discoverCanvasFiles } from './repo-store.js';
 import { canvasVersionHash } from './version.js';
 import { migrateProvenance } from './genre.js';
 import { deviceProfile, windowProfile, DEFAULT_DEVICE, DEFAULT_WINDOW, type SurfaceType } from './surfaces.js';
@@ -304,12 +304,44 @@ export interface CanvasSummary {
 }
 
 /** ensureFresh for every canvas the server holds, and in a repo every canvas
- * file it knows (one unreadable at the last read is retried), so a listing
- * shows what is on disk now: a renamed, archived or deleted file, not the last
- * copy read. A file added on disk after startup is not discovered. */
+ * file it knows (one unreadable at the last read is retried); then load the
+ * canvas files nobody has loaded yet. A listing then shows what is on disk
+ * now: renamed, archived, deleted, moved and added files alike. */
 export function ensureAllFresh(): void {
   const ids = new Set([...store.keys(), ...(isRepoBound() ? knownCanvasIds() : [])]);
   for (const id of ids) ensureFresh(id);
+  discoverCanvases();
+}
+
+/** Load canvas files that appeared on disk after startup: a git pull or a
+ * hand-made file in a bound repo, or another session's canvas in the global
+ * store. Returns how many it found. */
+export function discoverCanvases(): number {
+  const found = isRepoBound() ? discoverCanvasFiles(repoDir()) : discoverGlobalFiles();
+  for (const c of found) {
+    store.set(c.id, c);
+    process.stderr.write(`canvas ${c.id} loaded from disk (added externally)\n`);
+  }
+  return found.length;
+}
+
+function discoverGlobalFiles(): Canvas[] {
+  let files: string[];
+  try { files = readdirSync(canvasDir()).filter((f) => f.endsWith('.json')); } catch { return []; }
+  const out: Canvas[] = [];
+  for (const file of files) {
+    const id = file.slice(0, -'.json'.length);
+    if (store.has(id)) continue;
+    try {
+      const data = JSON.parse(readFileSync(join(canvasDir(), file), 'utf-8')) as Canvas;
+      if (data.id !== id || !data.root) continue;
+      data.projectId ??= DEFAULT_PROJECT_ID;
+      const m = globalFileMtime(id);
+      if (m !== null) globalMtimeById.set(id, m);
+      out.push(data);
+    } catch { /* mid-write: looked at again next time */ }
+  }
+  return out;
 }
 
 export function listCanvases(): CanvasSummary[] {

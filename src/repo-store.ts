@@ -292,6 +292,37 @@ export function forgetCanvasFile(id: string): void {
   mtimeById.delete(id);
 }
 
+/** Canvas files in the registered project folders that the server has not
+ * loaded: added by a git pull, a branch switch or by hand, or moved from
+ * another folder. Each is registered (path and mtime) and returned. A file
+ * that does not parse yet, or repeats an id whose file is still on disk, is
+ * skipped and looked at again next time. */
+export function discoverCanvasFiles(rootDir: string): Canvas[] {
+  const knownPaths = new Set(fileById.values());
+  const out: Canvas[] = [];
+  for (const projectDir of projectDirById.values()) {
+    const abs = join(rootDir, projectDir);
+    let files: string[];
+    try { files = readdirSync(abs).filter((f) => f.endsWith('.json')); } catch { continue; }
+    for (const file of files) {
+      const rel = join(projectDir, file);
+      if (knownPaths.has(rel)) continue;
+      const full = join(rootDir, rel);
+      try {
+        const data = JSON.parse(readFileSync(full, 'utf-8')) as Canvas;
+        if (!data.id || !data.root) continue;
+        const current = fileById.get(data.id);
+        if (current && existsSync(join(rootDir, current))) continue; // a copy of a canvas already loaded
+        fileById.set(data.id, rel);
+        const m = fileMtime(full);
+        if (m !== null) mtimeById.set(data.id, m);
+        out.push(rehydrateAssets(rootDir, data));
+      } catch { /* mid-write or not a canvas */ }
+    }
+  }
+  return out;
+}
+
 /** Read every canvas file across all registered project subdirectories,
  * rebuilding the id → relative-path map. `projectDirById` must already be
  * populated (from `workspace.json`) before this is called. */

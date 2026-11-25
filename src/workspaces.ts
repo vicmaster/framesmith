@@ -130,6 +130,12 @@ function ensureWorkspaceFresh(intent: 'read' | 'write' = 'read'): void {
   process.stderr.write(`workspace.json reloaded from disk (external change detected)\n`);
 }
 
+/** Reload workspace.json if it changed on disk, so a project a git pull
+ * added has its folder registered before its canvas files are looked for. */
+export function refreshWorkspace(): void {
+  ensureWorkspaceFresh();
+}
+
 /**
  * Additively merge a repo's virtual workspace + projects into the in-memory
  * maps without clearing them or touching backend state (Slice 2). Used by the
