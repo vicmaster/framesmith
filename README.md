@@ -1371,7 +1371,7 @@ The standalone viewer:
 - **Shared across projects** — multiple MCP sessions (from different projects) all use the same viewer
 - **Auto-detects new canvases** — watches `~/.framesmith/canvases/` and every registered repo's `.framesmith/` for changes and picks them up immediately
 - **Auto-detected by MCP** — when the MCP server starts, it probes for a running standalone viewer and uses it instead of starting its own
-- **Yours only** — it listens on 127.0.0.1 and sends no CORS header, so other sites open in your browser can't read your canvases. Archiving, deleting and commenting are accepted only from the viewer's own pages (or from a script with no `Origin`, such as `curl`), and a request whose `Host` is not `127.0.0.1`, `localhost` or `[::1]` is refused, which blocks DNS rebinding
+- **Yours only** — it listens on 127.0.0.1 and sends no CORS header, so other sites open in your browser can't read your canvases. Archiving, deleting and commenting are accepted only from the viewer's own pages (or from a script with no `Origin`, such as `curl`), and a request whose `Host` is not `127.0.0.1`, `localhost` or `[::1]` gets a 403, reads included, which blocks DNS rebinding
 
 ### Routes & API
 
@@ -1380,7 +1380,7 @@ The standalone viewer:
 - **Archive** (`/archive`) — archived canvases as a tree grouped by project (newest archived first); `?canvas=<id>` selects one, shown with its preview, project, archived date, score and size, a **Restore to <project>** button and **Delete permanently** (asks in a dialog)
 - **Canvas detail** (`/canvas/:id`) — the rendered design, fitted to the pane with zoom (50–200%) and Fit buttons, breakpoint tabs (Mobile / Tablet / Desktop / Compare; a `desktop-app` canvas gets its window widths, the artboard and Compare), a **More** menu (View JSON, Copy canvas ID, Archive / Restore, Delete canvas) and a caption naming type, size and states; a canvas declared `mobile` opens 1:1 in a device frame with a **Show safe area** tool button instead of the tabs and zoom
 - **Raw HTML** (`/canvas/:id/html`) — the rendered HTML for embedding or inspection
-- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`, `/canvas/:id/inspector`) — programmatic access; each `/api/canvases` row carries the canvas's resolved `type` and `genre`, `/meta` carries a `contentKey` and a `feedbackKey`, and `/canvas/:id/inspector` returns `{ quality, design, nodeIndex }`
+- **JSON API** (`/api/canvases`, `/api/canvas/:id/meta`, `/canvas/:id/inspector`) — programmatic access from `curl` or a local script (no CORS header, so not from a page on another site); each `/api/canvases` row carries the canvas's resolved `type` and `genre`, `/meta` carries a `contentKey` and a `feedbackKey`, and `/canvas/:id/inspector` returns `{ quality, design, nodeIndex }`
 - **Fonts** (`/assets/fonts/<file>`) — the viewer's own faces (Inter, Space Grotesk), served from the font cache (`~/.framesmith/fonts/`)
 - **Live auto-refresh** — the canvas page polls every 2 seconds and the project page every 3, so the browser updates as your agent runs `batch_design`; the project page reloads on any edit, rename, genre, type or state change, and the canvas page refreshes its Quality and Design system panels, its Feedback list and its comment counts without a reload
 
@@ -1429,7 +1429,7 @@ The runner gives each test its own temp folder (`TMPDIR`) and removes it when th
 
 | Variable | Purpose |
 |----------|---------|
-| `FRAMESMITH_VIEWER_URL` | Point the MCP server at an external viewer (skips starting an embedded one). |
+| `FRAMESMITH_VIEWER_URL` | Point the MCP server at an external viewer (skips starting an embedded one). Use a loopback URL (`localhost` or `127.0.0.1`): the viewer refuses any other host name, so a proxy or tunnel that rewrites the host gets a 403. |
 | `FRAMESMITH_VIEWER_PORT` | Override the standalone viewer's port. |
 | `FRAMESMITH_CHROME_PATH` | Chrome binary for screenshots/exports (falls back to `PUPPETEER_EXECUTABLE_PATH`, then the Puppeteer-managed Chrome). Set it in the MCP server's env config — clients often launch servers with a minimal env. |
 

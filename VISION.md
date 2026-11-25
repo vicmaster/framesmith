@@ -607,7 +607,7 @@ Phase 31 rebuilt the viewer as canvases and left the code alone. A design pass o
 - [x] Follow-up — the viewer sent `Access-Control-Allow-Origin: *` on every response, so any page open in the same browser could read every canvas and its comments, and send a simple cross-origin POST or DELETE (archive, delete, add or resolve a comment) with no preflight. The header is gone from every route; a write is refused when its `Origin` is not the viewer's own or its `Sec-Fetch-Site` is not same-origin; and any request naming a host other than 127.0.0.1, localhost or [::1] is refused, which blocks DNS rebinding. Tested with raw requests and with a real page on another origin
 - [ ] Follow-up — the MCP server's read tools serve the in-memory canvas after its repo file is edited outside the server: only mutating tools call `ensureFresh`, so `screenshot` was seen returning the old design after a hand edit (`export`, `read_nodes` and `canvas_evaluate` read the same memory, inferred, not observed). Call `ensureFresh` from them too, with a test that edits the file and then reads
 
-_Full spec-driven breakdown in [`docs/specs/PHASE-33-SPEC.md`](docs/specs/PHASE-33-SPEC.md). Deliberately out of scope: a bundler or framework, a theme toggle, static thumbnails, a mirror marker, the Import tab's content, and the CORS policy on mutating routes (its own change)._
+_Full spec-driven breakdown in [`docs/specs/PHASE-33-SPEC.md`](docs/specs/PHASE-33-SPEC.md). Deliberately out of scope: a bundler or framework, a theme toggle, static thumbnails, a mirror marker, and the Import tab's content. The CORS policy on mutating routes was its own change, now done (above)._
 
 ### Continuous integration (infrastructure)
 
