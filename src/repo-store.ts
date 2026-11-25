@@ -274,6 +274,24 @@ export function removeCanvasFromDir(rootDir: string, id: string): void {
   mtimeById.delete(id);
 }
 
+/** The ids of every canvas file the server knows in the repo, including one
+ * whose last read failed (mid-write, merge conflict), so a refresh retries it. */
+export function knownCanvasIds(): string[] {
+  return [...fileById.keys()];
+}
+
+/** Whether a known canvas's file is still on disk (false for an unknown id). */
+export function canvasFileExists(rootDir: string, id: string): boolean {
+  const rel = fileById.get(id);
+  return !!rel && existsSync(join(rootDir, rel));
+}
+
+/** Forget a canvas whose file was deleted outside the server. */
+export function forgetCanvasFile(id: string): void {
+  fileById.delete(id);
+  mtimeById.delete(id);
+}
+
 /** Read every canvas file across all registered project subdirectories,
  * rebuilding the id → relative-path map. `projectDirById` must already be
  * populated (from `workspace.json`) before this is called. */

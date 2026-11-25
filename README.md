@@ -265,7 +265,7 @@ It creates `.framesmith/workspace.json` (the binding plus the design system, so 
     login-form.json
 ```
 
-It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both.
+It migrates the workspace's projects + canvases in and makes the repo the source of truth for the rest of the session. A canvas is either repo-bound or global, never both. The files stay editable outside the server: after a `git pull`, a branch switch or a hand edit, every tool reloads a canvas whose file changed (or drops one whose file is gone) before it reads or writes it, so a screenshot shows the pulled design and an edit builds on it. While a canvas file can't be parsed (a merge conflict), tools treat it as not found instead of using an old copy, and pick it up again once it parses. A canvas file added on disk after the server started appears only after a restart.
 
 **Binding re-keys the workspace and project IDs.** Both become `repo-*` IDs (`repo-ws-…`, `repo-proj-…`), and the old ones stop resolving. Canvas IDs are kept, and each canvas's `projectId` is updated to its new project. The result carries the mapping, so you can retarget without re-listing:
 
